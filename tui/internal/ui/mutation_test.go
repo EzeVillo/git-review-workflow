@@ -201,7 +201,14 @@ func TestBeginSetRemoteIsInertWithNoRemotes(t *testing.T) {
 
 func TestBeginFinishOffersTheTwoDestinationsAndPicksOntoSource(t *testing.T) {
 	m := Model{Panel: reviewPanel()}
-	m2, _ := m.beginFinish()
+	_, probe := m.beginFinish()
+	if probe == nil {
+		t.Fatal("finish must query destinations")
+	}
+	m2, _ := m.finishDestinationPicker(finishDestinationsMsg{
+		reply:  host.Result{Stdout: "finish-destination\tseparate\nfinish-destination\tsource\tequal\n"},
+		source: m.Panel.Source, token: currentStateToken(m.Panel),
+	})
 	got := m2
 	if got.selectOverlay == nil {
 		t.Fatal("beginFinish must open the destination picker")

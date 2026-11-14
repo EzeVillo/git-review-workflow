@@ -93,7 +93,9 @@ public static class StartWizard
             range = UserCopy.RangeLabels[rangeIdx].Range;
         }
 
-        var offersResult = await LoadOffersAsync(cli, cwd, branch, source, range, ct).ConfigureAwait(true);
+        OffersResult offersResult;
+        using (source == ReviewSource.Offline ? null : host.Progress?.Invoke(UserCopy.FetchingReviewRevisions))
+            offersResult = await LoadOffersAsync(cli, cwd, branch, source, range, ct).ConfigureAwait(true);
         if (!offersResult.Ok)
         {
             GitReviewDialogs.CliError(offersResult.Stderr, UserCopy.CouldNotReadOffers, offersResult.Stdout);
@@ -110,9 +112,16 @@ public static class StartWizard
             Source: source,
             Range: range,
             Base: porcelain.Config.Base,
-            Deltas: offersResult.Deltas ?? deltas);
+            Deltas: offersResult.Deltas ?? deltas,
+            Prepared: offersResult.Prepared,
+            Offers: offersResult.Offers);
 
-        return await LayoutStepAsync(context, offersResult.Offers, ct).ConfigureAwait(true);
+        try { return await LayoutStepAsync(context, offersResult.Offers, ct).ConfigureAwait(true); }
+        finally
+        {
+            if (context.Prepared is not null)
+                await cli.InvokeAsync("start", new[] { "--release", "--", context.Prepared }, cwd).ConfigureAwait(true);
+        }
     }
 
     /// <summary>
@@ -130,7 +139,9 @@ public static class StartWizard
         ReviewSource Source,
         ReviewRange Range,
         string? Base,
-        IReadOnlyList<DeltaRecord>? Deltas);
+        IReadOnlyList<DeltaRecord>? Deltas,
+        string? Prepared = null,
+        IReadOnlyList<ReadingOffer>? Offers = null);
 
     /// <summary>
     /// Reading-order step. Separate — and re-entered — because a reviewer who enters the
@@ -209,9 +220,7 @@ public static class StartWizard
                     if (back.Error is not null) GitReviewDialogs.Error(back.Error);
                     // With the offers up to date: if the draft was created, the offer to
                     // write one is now the offer to continue it.
-                    var offers = await LoadOffersAsync(
-                        ctx.Cli, ctx.Cwd, ctx.Branch, ctx.Source, ctx.Range, ct).ConfigureAwait(true);
-                    return await LayoutStepAsync(ctx, offers.Offers, ct).ConfigureAwait(true);
+                    return await LayoutStepAsync(ctx, ctx.Offers, ct).ConfigureAwait(true);
                 }
 
                 default:
@@ -234,9 +243,11 @@ public static class StartWizard
         CancellationToken ct)
     {
         using var reporting = ctx.Host.Progress?.Invoke(UserCopy.DraftProgress(ctx.Branch, build));
+        var args = ReviewIntentLogic.DraftArgs(ctx.Branch, ctx.Source, ctx.Range, build, force);
+        if (ctx.Prepared is not null) args = new[] { "--start-prepared=" + ctx.Prepared }.Concat(args).ToArray();
         var result = await ctx.Mutations.RunArgvAsync(
             "walkthrough",
-            ReviewIntentLogic.DraftArgs(ctx.Branch, ctx.Source, ctx.Range, build, force),
+            args,
             ct: ct).ConfigureAwait(true);
         if (result is null) return new DraftOutcome(false, MutationLock.DiscardReason);
         var ok = result.ExitCode == 0 && !result.TimedOut;
@@ -265,7 +276,8 @@ public static class StartWizard
         IReadOnlyList<DeltaRecord>? Deltas,
         IReadOnlyList<DraftRecord>? Drafts = null,
         string Stderr = "",
-        string Stdout = "");
+        string Stdout = "",
+        string? Prepared = null);
 
     /// <summary>Reading offers for a resolved (branch, origin, range).</summary>
     private static async Task<OffersResult> LoadOffersAsync(
@@ -281,17 +293,21 @@ public static class StartWizard
         args.Add("--");
         args.Add(branch);
         var result = await cli.InvokeAsync(
-            "config",
-            args,
+            "start",
+            new[] { "--prepare" }.Concat(args.Skip(1)).ToArray(),
             cwd,
-            network: source == ReviewSource.Remote,
+            network: source != ReviewSource.Offline,
             cancellationToken: ct).ConfigureAwait(true);
+        if (result.ExitCode != 0 && result.Stderr.Contains("unknown option --prepare"))
+            result = await cli.InvokeAsync("config", args, cwd, network: false, cancellationToken: ct).ConfigureAwait(true);
         if (result.ExitCode != 0 || result.TimedOut)
             return new OffersResult(false, null, null, null, result.Stderr, result.Stdout);
         try
         {
             var parsed = ConfigPorcelain.ParseConfigPorcelain(result.Stdout);
-            return new OffersResult(true, parsed.Offers, parsed.Deltas, parsed.Drafts);
+            const string marker = "start-prepared\t";
+            var prepared = result.Stdout.Split('\n').FirstOrDefault(line => line.StartsWith(marker, StringComparison.Ordinal))?.Substring(marker.Length).TrimEnd('\r');
+            return new OffersResult(true, parsed.Offers, parsed.Deltas, parsed.Drafts, Prepared: prepared);
         }
         catch
         {
@@ -309,7 +325,7 @@ public static class StartWizard
     {
         var result = await cli.InvokeAsync(
             "config",
-            new[] { "--porcelain", "--", branch },
+            new[] { "--porcelain", "--deltas-only", "--", branch },
             cwd,
             cancellationToken: ct).ConfigureAwait(true);
         if (result.ExitCode != 0) return null;
@@ -380,12 +396,15 @@ public static class StartWizard
         // back in the same report, which is what validates an incremental range.
         var layout = ReviewLayout.Walk;
         IReadOnlyList<DeltaRecord>? deltas = null;
+        var draftArgs = ReviewIntentLogic.DraftConfigArgs(draft.Src, source, range);
         var report = await cli.InvokeAsync(
             "config",
-            ReviewIntentLogic.DraftConfigArgs(draft.Src, source, range),
+            source == ReviewSource.Compare ? draftArgs : new[] { "--from-draft" }.Concat(draftArgs).ToArray(),
             cwd,
             network: false,
             cancellationToken: ct).ConfigureAwait(true);
+        if (report.Stderr.Contains("unknown option --from-draft"))
+            report = await cli.InvokeAsync("config", draftArgs, cwd, cancellationToken: ct).ConfigureAwait(true);
         if (report.ExitCode == 0)
         {
             ConfigPorcelainResult? parsed = null;
@@ -419,7 +438,8 @@ public static class StartWizard
             source,
             range,
             stateManager.Current.Config?.Base,
-            deltas);
+            deltas,
+            report.Stdout.Split('\n').Any(line => line.TrimEnd('\r') == "start-draft-range\t1") ? "draft" : null);
         return await RunStartAsync(ctx, layout, ct).ConfigureAwait(true);
     }
 
@@ -480,7 +500,10 @@ public static class StartWizard
         // A start fetches, so it is the longest wait this client has -- and the wizard
         // it was configured in is gone by now, leaving nothing on screen that says so.
         using var reporting = ctx.Host.Progress?.Invoke(UserCopy.StartingProgress(ctx.Branch));
-        var result = await ctx.Mutations.RunActionAsync(
+        var result = ctx.Prepared is not null
+            ? await ctx.Mutations.RunArgvAsync("start", new[] { ctx.Prepared == "draft" ? "--from-draft" : "--prepared=" + ctx.Prepared }.Concat(args).ToArray(),
+                network: false, expected: token, ct: ct).ConfigureAwait(true)
+            : await ctx.Mutations.RunActionAsync(
             "startReview",
             new ActionParams.Start(intent, ctx.Branch),
             network: ctx.Source != ReviewSource.Compare,

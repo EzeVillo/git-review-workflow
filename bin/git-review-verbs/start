@@ -16,6 +16,8 @@ prog="git review start"
 usage() {
 	cat <<EOF
 usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk | --keys] [--local | --offline]
+       $prog --prepare [--local | --offline] [--delta] -- <branch>
+       $prog --release -- <token>
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 With no <branch>, review the branch you currently have checked out.
@@ -55,6 +57,10 @@ no_walk=0
 keys_only=0
 local_mode=0
 offline_mode=0
+prepare=0
+prepared=''
+release=0
+use_draft=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -66,6 +72,10 @@ while [ $# -gt 0 ]; do
 	--no-walk) no_walk=1 ;;
 	--keys) keys_only=1 ;;
 	--local) local_mode=1 ;;
+	--prepare) prepare=1 ;;
+	--prepared=*) prepared=${1#--prepared=} ;;
+	--release) release=1 ;;
+	--from-draft) use_draft=1 ;;
 	--offline)
 		local_mode=1
 		offline_mode=1
@@ -152,6 +162,20 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+if [ "$release" -eq 1 ]; then
+	if [ "$prepare$use_draft$delta$step$no_walk$keys_only$local_mode$offline_mode" != 00000000 ] || [ -n "$base$from$prepared" ]; then
+		die '--release takes just a prepared review token'
+	fi
+	git update-ref -d "$(start_prepared_ref "$src")"
+	exit
+fi
+if [ "$use_draft" -eq 1 ] && [ -n "$prepared" ]; then die 'choose --from-draft or --prepared'; fi
+if [ "$prepare" -eq 1 ] && [ "$step$no_walk$keys_only" != 000 ]; then die '--prepare takes range options only'; fi
+if [ "$offline_mode" -eq 1 ]; then
+	GIT_NO_LAZY_FETCH=1
+	export GIT_NO_LAZY_FETCH
+fi
+
 # With no <branch>, review the branch checked out — git's own default (push,
 # status, log, rebase all do this). Only resolves the name; --local vs remote is
 # still chosen by flags. Guards against review/*, review-saved/* and
@@ -175,7 +199,11 @@ if [ -z "$base" ]; then
 	base="$(git config reviewworkflow.base || true)"
 fi
 
-require_clean_work_tree
+if [ "$prepare" -eq 0 ]; then require_clean_work_tree; fi
+case "$src" in
+	review/*|review-saved/*|review-fixes/*) die "refusing to review a review branch ($src)" ;;
+esac
+git check-ref-format "refs/heads/$src" || die "invalid branch: $src"
 
 # --local reviews your local <branch> directly; the default reviews the remote's.
 # The base is a separate concern — the shared merge target — so it still resolves
@@ -185,15 +213,12 @@ require_clean_work_tree
 # live in their own config section (reviewworkflowlocal.*), not a
 # reviewworkflow.<src>.local.reviewed key, which would be ambiguous for a branch
 # literally named "<src>.local".
-if [ "$offline_mode" -eq 0 ]; then
-	git fetch --quiet "$remote" || die "could not update from $remote"
-fi
 if [ "$local_mode" -eq 1 ]; then
 	srcref="refs/heads/$src"
 	srclabel="$src"
 	markerkey="reviewworkflowlocal.$src.reviewed"
 else
-	srcref="refs/remotes/$remote/$src"
+	srcref=""
 	srclabel="$remote/$src"
 	markerkey="reviewworkflow.$src.reviewed"
 fi
@@ -206,24 +231,120 @@ fi
 # a no-op for delta/from folding.
 baseref=""
 baselabel="$base"
-if [ -n "$base" ]; then
-	if [ "$offline_mode" -eq 1 ]; then
-		if git rev-parse --verify --quiet "refs/heads/$base^{commit}" >/dev/null; then
-			baseref="refs/heads/$base"
-		fi
-	else
-		if git rev-parse --verify --quiet "refs/remotes/$remote/$base^{commit}" >/dev/null; then
-			baseref="refs/remotes/$remote/$base"
-			baselabel="$remote/$base"
-		fi
+_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$delta$local_mode$offline_mode")
+_rs_pack=''
+_rs_prepared=0
+_rs_tmp=''
+_rs_fetch_base=0
+_rs_base_label=local
+_rs_cleanup() {
+	if [ -n "$_rs_tmp" ]; then
+		if [ "$local_mode" -eq 0 ]; then git update-ref -d "$_rs_tmp-tip" || true; fi
+		if [ "$_rs_fetch_base" -eq 1 ]; then git update-ref -d "$_rs_tmp-base" || true; fi
+		if [ "$_rs_prepared" -eq 0 ]; then git update-ref -d "$_rs_tmp" || true; fi
+		if [ "${_rs_lease_started:-0}" -eq 1 ]; then git update-ref -d "$_rs_tmp-lease" || true; fi
 	fi
-	if [ -z "$baseref" ]; then
-		bcommit="$(git rev-parse --verify --quiet "$base^{commit}" || true)"
-		if [ -n "$bcommit" ]; then
-			baseref="$bcommit"
-		fi
+}
+if [ -n "$prepared" ] || [ "$use_draft" -eq 1 ]; then
+	[ "$prepare" -eq 0 ] || die 'choose --prepare or --prepared'
+	if [ "$use_draft" -eq 1 ]; then
+		_rs_saved_range=$(start_draft_ref "$src")
+		git show-ref --verify --quiet "$_rs_saved_range" || die 'prepared draft range is unavailable'
+	else
+		_rs_saved_range=$(start_prepared_ref "$prepared")
+	fi
+	if [ -n "$_rs_saved_range" ]; then
+		start_read_range "$_rs_saved_range" "$_rs_identity"
+		srcref=$_rs_tip
+		baseref=$_rs_base
 	fi
 fi
+if [ -z "${_rs_saved_range:-}" ]; then
+	if [ "$offline_mode" -eq 0 ] || [ "$prepare" -eq 1 ]; then
+		walk_gitdir_init
+		_rs_nonce=$(mktemp "$_walk_gitdir/start.XXXXXX")
+		_rs_token=$(printf '%s\n%s\n' "$_rs_nonce" "$$" | git hash-object --stdin)
+		rm -f "$_rs_nonce"
+		_rs_tmp=$(start_prepared_ref "$_rs_token")
+		trap _rs_cleanup 0
+		trap 'exit 130' INT
+		trap 'exit 143' TERM
+	fi
+	if [ -n "$base" ]; then
+		if [ "$offline_mode" -eq 1 ]; then
+			baseref=$(git rev-parse --verify --quiet "refs/heads/$base^{commit}" || true)
+		else
+			_rs_remote_base=$base
+			_rs_explicit_remote=0
+			case "$base" in
+			"refs/remotes/$remote/"*) _rs_remote_base=${base#"refs/remotes/$remote/"}; _rs_explicit_remote=1 ;;
+			"$remote/"*)
+				if ! git show-ref --verify --quiet "refs/heads/$base"; then
+					_rs_remote_base=${base#"$remote/"}
+					_rs_explicit_remote=1
+				fi ;;
+			esac
+			if git check-ref-format "refs/heads/$_rs_remote_base"; then _rs_fetch_base=1; fi
+		fi
+		if [ -z "$baseref" ] && [ "${_rs_explicit_remote:-0}" -eq 0 ]; then
+			baseref=$(git rev-parse --verify --quiet "$base^{commit}" || true)
+		fi
+	fi
+	if [ "$local_mode" -eq 0 ] || [ "$_rs_fetch_base" -eq 1 ]; then
+		_rs_lease=$(compare_lease_commit 'Prepare start review' </dev/null)
+		git update-ref "$_rs_tmp-lease" "$_rs_lease"
+		_rs_lease_started=1
+	fi
+	set --
+	if [ "$local_mode" -eq 0 ]; then
+		set -- "refs/heads/$src:$_rs_tmp-tip"
+	fi
+	if [ "$_rs_fetch_base" -eq 1 ]; then
+		if [ "$local_mode" -eq 0 ] && [ "$_rs_remote_base" = "$src" ]; then
+			_rs_fetch_base=0
+			_rs_base_label=remote
+			baseref="$_rs_tmp-tip"
+		else
+			_rs_refspec="refs/heads/$_rs_remote_base:$_rs_tmp-base"
+			_rs_output=''
+			if ! _rs_output=$(review_fetch_isolated "$remote" "$@" "$_rs_refspec" 2>&1); then
+				# The base can be a local branch or a literal revision. Only
+				# fall back when the server confirms that the branch is absent.
+				_rs_probe=0
+				git ls-remote --exit-code --heads -- "$remote" "refs/heads/$_rs_remote_base" >/dev/null || _rs_probe=$?
+				if [ "$_rs_probe" -eq 0 ] && [ "$local_mode" -eq 0 ]; then
+					_rs_src_probe=0
+					git ls-remote --exit-code --heads -- "$remote" "refs/heads/$src" >/dev/null || _rs_src_probe=$?
+					if [ "$_rs_src_probe" -eq 2 ]; then die "$srclabel not found"; fi
+				fi
+				if [ "$_rs_probe" -ne 2 ]; then printf '%s\n' "$_rs_output" >&2; die "could not update from $remote"; fi
+			else
+				set --
+				baseref="$_rs_tmp-base"
+				_rs_base_label=remote
+			fi
+		fi
+	fi
+	if [ "$#" -gt 0 ]; then
+		_rs_output=''
+		if ! _rs_output=$(review_fetch_isolated "$remote" "$@" 2>&1); then
+			_rs_probe=0
+			git ls-remote --exit-code --heads -- "$remote" "refs/heads/$src" >/dev/null || _rs_probe=$?
+			if [ "$_rs_probe" -eq 2 ]; then die "$srclabel not found"; fi
+			printf '%s\n' "$_rs_output" >&2
+			die "could not update from $remote"
+		fi
+	fi
+	if [ "$local_mode" -eq 0 ]; then srcref="$_rs_tmp-tip"; fi
+fi
+if [ "$_rs_base_label" = remote ]; then
+	case "$base" in
+	"refs/remotes/$remote/"*) baselabel=${base#refs/remotes/} ;;
+	"$remote/"*) baselabel=$base ;;
+	*) baselabel="$remote/$base" ;;
+	esac
+fi
+if [ -n "$baseref" ]; then baseref=$(git rev-parse --verify "$baseref^{commit}"); fi
 
 git rev-parse --verify --quiet "$srcref" >/dev/null ||
 	die "$srclabel not found"
@@ -234,8 +355,11 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 git rev-parse --verify --quiet "refs/heads/review-saved/$src" >/dev/null &&
 	die "you have a saved review of $src; resume it with git review continue $src or discard it with git review forget --saved $src"
 
-tip="$(git rev-parse "$srcref")"
+tip="$(git rev-parse --verify "$srcref^{commit}")"
 prev="$(git config "$markerkey" || true)"
+if [ -n "${_rs_saved_range:-}" ] && [ "$delta" -eq 1 ] && [ "$prev" != "$_rs_previous" ]; then
+	die 'last review point changed; prepare the review again'
+fi
 
 # A remote review targets the remote's copy, never your local branch (which start
 # never updates). If a local branch of the same name points elsewhere, you'd be
@@ -289,6 +413,37 @@ fi
 # every decision from here on describes the same walkthrough.
 walk_use_draft "$src"
 
+if [ "$prepare" -eq 1 ]; then
+	# The manifest pins tip, base and delta separately, even when two are equal.
+	set -- -p "$tip"
+	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
+	if [ "$delta" -eq 1 ] && [ "$prev" != "$baseref" ] && [ "$prev" != "$tip" ]; then set -- "$@" -p "$prev"; fi
+	_rs_pack=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--}" "$@" </dev/null)
+	git update-ref "$_rs_tmp" "$_rs_pack"
+	_ero_branch=$src
+	_ero_tip=$tip
+	_ero_lower=$(resolve_lower_bound "$start" "$baseref" "$tip")
+	emit_range_reading_offers
+	if [ -n "$prev" ]; then
+		if [ "$local_mode" -eq 1 ]; then _rs_origin=local; else _rs_origin=remote; fi
+		porcelain_row delta "$src" "$prev" "$_rs_origin"
+	fi
+	porcelain_row start-prepared "$_rs_token"
+	_rs_prepared=1
+	exit 0
+fi
+
+start_keep_range() {
+	if [ "$offline_mode" -eq 1 ] && [ -z "${_rs_saved_range:-}" ]; then return 0; fi
+	set -- -p "$tip"
+	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
+	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && [ "$prev" != "$baseref" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
+		set -- "$@" -p "$prev"
+	fi
+	_rs_session=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--}" "$@" </dev/null)
+	git update-ref "refs/worktree/review-start/session/$src" "$_rs_session"
+}
+
 # draft_command: the git review walkthrough draft invocation for this review,
 # flags and all. Built once — three messages below suggest it — with this
 # review's own origin and range, since drafting against a different range would
@@ -335,6 +490,7 @@ if [ "$step" -eq 1 ]; then
 	git reset --soft HEAD^
 	git config "branch.$rb.reviewsource" "$src"
 	git config "branch.$rb.reviewbase" "$base"
+	if [ -n "$baseref" ]; then git config "branch.$rb.reviewbasecommit" "$baseref"; fi
 	git config "branch.$rb.reviewtip" "$tip"
 	git config "branch.$rb.reviewstart" "$start"
 	git config "branch.$rb.reviewmode" "step"
@@ -350,7 +506,8 @@ if [ "$step" -eq 1 ]; then
 	if [ "$local_mode" -eq 1 ]; then
 		git config "branch.$rb.reviewlocal" "1"
 	fi
-	git config "$markerkey" "$tip"
+	start_keep_range
+	review_set_delta "$markerkey" "$tip"
 	if [ -n "$returnbranch" ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
 	fi
@@ -424,6 +581,7 @@ git reset -q --soft "$lower"
 
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
+if [ -n "$baseref" ]; then git config "branch.$rb.reviewbasecommit" "$baseref"; fi
 git config "branch.$rb.reviewtip" "$tip"
 # The name this review's walkthrough draft lives under, read back by
 # walk_review_draft_src. Recorded whether or not a draft exists yet, and in every
@@ -437,7 +595,8 @@ fi
 if [ "$local_mode" -eq 1 ]; then
 	git config "branch.$rb.reviewlocal" "1"
 fi
-git config "$markerkey" "$tip"
+start_keep_range
+review_set_delta "$markerkey" "$tip"
 if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
 fi

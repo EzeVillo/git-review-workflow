@@ -35,7 +35,7 @@ import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {classifyStartFailure, quoteForTerminal} from "../review/startFailure";
 import {ReviewStateManager} from "../review/state";
 import {setBase} from "./setBase";
-import {STALE, draftUpdated, startLayoutTitle} from "../review/userCopy";
+import {FETCHING_REVIEW_REVISIONS, STALE, START_LOCAL_DETAIL, START_REMOTE_DETAIL, draftUpdated, startLayoutTitle} from "../review/userCopy";
 import {PanelRevealer, revealPanel} from "../views/reveal";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que continueReview.ts). */
@@ -69,12 +69,12 @@ interface RangeItem extends vscode.QuickPickItem {
 const SOURCE_ITEMS: SourceItem[] = [
     {
         label: "Remote",
-        description: "fetch and review the remote tip of the branch",
+        description: START_REMOTE_DETAIL,
         source: "remote",
     },
     {
         label: "Local",
-        description: "review the local branch without fetching; base may still use the remote",
+        description: START_LOCAL_DETAIL,
         source: "local",
     },
     {
@@ -205,14 +205,18 @@ async function loadBranchContext(
     offers: ReadingOffer[] | undefined;
     /** Los del namespace activo, para saber en qué estado está el de esta rama. */
     drafts: DraftRecord[] | undefined;
+    prepared?: string;
     error?: string
 }> {
     const flags = offerConfigFlags(source, range);
-    const report = await invokeGitReview(
-        "config",
-        ["--porcelain", ...flags, "--", branch.name],
-        {...options, network: false}
+    const args = [...flags, "--", branch.name];
+    const prepare = () => invokeGitReview("start", ["--prepare", ...args], {...options, network: source !== "offline"});
+    let report = source === "offline" ? await prepare() : await vscode.window.withProgress(
+        {location: vscode.ProgressLocation.Notification, title: FETCHING_REVIEW_REVISIONS}, prepare
     );
+    if (report.exitCode !== 0 && report.stderr.includes("unknown option --prepare")) {
+        report = await invokeGitReview("config", ["--porcelain", ...args], {...options, network: false});
+    }
     if (report.errorCode || report.exitCode !== 0) {
         const text = flatten(report.stderr);
         return {
@@ -223,7 +227,8 @@ async function loadBranchContext(
         };
     }
     const parsed = parseConfigPorcelain(report.stdout);
-    return {deltas: parsed.deltas, offers: parsed.offers, drafts: parsed.drafts};
+    const prepared = report.stdout.match(/^start-prepared\t([0-9a-f]+)\r?$/m)?.[1];
+    return {deltas: parsed.deltas, offers: parsed.offers, drafts: parsed.drafts, prepared};
 }
 
 /**
@@ -239,7 +244,8 @@ async function invokeDraft(
     range: ReviewRange,
     options: InvokeOptions,
     force: boolean,
-    update: boolean
+    update: boolean,
+    prepared?: string
 ): Promise<{ ok: boolean; text: string }> {
     const result = await lock.run(async () =>
         vscode.window.withProgress(
@@ -250,7 +256,7 @@ async function invokeDraft(
             async () => {
                 const invocation = await invokeGitReview(
                     "walkthrough",
-                    draftArgs(branch, source, range, false, force),
+                    [...(prepared ? [`--start-prepared=${prepared}`] : []), ...draftArgs(branch, source, range, false, force)],
                     {...options, network: false}
                 );
                 // Refrescar acá pase lo que pase, como en start: dice dónde quedó
@@ -304,7 +310,8 @@ async function runDraftFlow(
     lock: MutationLock,
     stateManager: ReviewStateManager,
     options: InvokeOptions,
-    reveal: PanelRevealer
+    reveal: PanelRevealer,
+    prepared?: string
 ): Promise<{ kind: "done" } | { kind: "back"; error?: string }> {
     let state: DraftFlowState = initialDraftFlowState(step);
 
@@ -312,7 +319,7 @@ async function runDraftFlow(
         switch (state.kind) {
             case "create": {
                 const outcome = await invokeDraft(
-                    lock, stateManager, branch.name, source, range, options, state.force, state.update
+                    lock, stateManager, branch.name, source, range, options, state.force, state.update, prepared
                 );
                 // Sólo lo que el panel no dice (ver `invokeDraft`): en `create`
                 // el refresco ya dibujó la fila y no hay nada que agregar en texto.
@@ -424,7 +431,7 @@ export async function startReview(
     // con el contexto completo (source + range).
     const deltaProbe = await invokeGitReview(
         "config",
-        ["--porcelain", "--", branch.name],
+        ["--porcelain", "--deltas-only", "--", branch.name],
         {...options, network: false}
     );
     let deltas: DeltaRecord[] | undefined;
@@ -444,149 +451,162 @@ export async function startReview(
 
     const ctx = await loadBranchContext(branch, source, range, options);
     if (ctx.error !== undefined) {
-        void vscode.window.showErrorMessage(ctx.error);
+        const action = classifyStartFailure(ctx.error) === "network"
+            ? await vscode.window.showErrorMessage(ctx.error, "Run in Terminal")
+            : await vscode.window.showErrorMessage(ctx.error);
+        if (action === "Run in Terminal") runInTerminal(offerConfigFlags(source, range).concat(["--", branch.name]), options);
         return;
     }
-    // Prefer deltas from the contextual call when present (same markers).
-    if (ctx.deltas !== undefined) {
-        deltas = ctx.deltas;
-    }
-
-    // Forma de lectura. El paso se repite —y sólo por eso es un bucle— cuando
-    // el revisor entra al armado del borrador y vuelve: sale de ahí con el
-    // borrador intacto y la oferta ya recalculada por la CLI, así que lo honesto
-    // es devolverlo a este mismo paso con las ofertas al día.
-    let offers = ctx.offers;
-    let layout: ReviewLayout;
-    for (; ;) {
-        const picked = await pickLayout(offers, branch.name);
-        if (!picked) {
-            return;
-        }
-        if (picked.draft === undefined) {
-            layout = picked.layout;
-            break;
+    let prepared = ctx.prepared;
+    const release = async () => {
+        if (prepared) await invokeGitReview("start", ["--release", "--", prepared], {...options, network: false});
+    };
+    try {
+        // Prefer deltas from the contextual call when present (same markers).
+        if (ctx.deltas !== undefined) {
+            deltas = ctx.deltas;
         }
 
-        // Sin preguntar nada: cuál de los tres caminos del borrador corresponde
-        // ya lo decidió la CLI al elegir qué oferta emitir, que es la única que
-        // puede —la pregunta es si el orden sigue cubriendo el rango, y para eso
-        // hacen falta los dos tips.
-        const outcome = await runDraftFlow(
-            picked.draft, branch, source, range, lock, stateManager, options, reveal
-        );
-        if (outcome.kind === "done") {
-            // El asistente termina acá: no arranca ninguna review y no deja
-            // ningún aviso abierto. El refresco que invokeDraft ya hizo dejó la
-            // fila del borrador en el panel, con su ruta, y la continuación
-            // vive ahí (Open / Validate and start).
-            return;
-        }
-        // Falló la creación: se dice por qué y se vuelve a ESTE paso, sin
-        // rehacer la elección de rama, con las ofertas al día.
-        if (outcome.error !== undefined) {
-            void vscode.window.showErrorMessage(outcome.error);
-        }
-        const reloaded = await loadBranchContext(branch, source, range, options);
-        if (reloaded.error === undefined) {
-            offers = reloaded.offers;
-        }
-    }
-
-    const intent: ReviewIntent = {branch: branch.name, layout, range, source};
-    const check = validateIntent(intent, {delta: deltaForSource(deltas, source)});
-    if (!check.ok) {
-        // Defensa en profundidad: la UI no ofrece delta sin registro del
-        // origin del source, pero si algo se desfasó no mandamos un intent
-        // ilegal a la CLI.
-        void vscode.window.showErrorMessage(check.reason);
-        return;
-    }
-
-    const args = intentToArgs(intent, branch.name);
-
-    // Capturado antes del spawn. El asistente pudo estar abierto un rato: el
-    // check externo evita el progreso cuando el estado ya quedó obsoleto, y el
-    // de adentro del lock cierra la ventana entre este punto y el spawn (otro
-    // proceso arrancó una review, HEAD cambió, watcher refresh).
-    const token = captureToken(stateManager.state);
-    if (!tokenStillValid(token, stateManager.state)) {
-        void vscode.window.showInformationMessage(
-            STALE
-        );
-        return;
-    }
-
-    await lock.run(async () => {
-        let stale = false;
-        const result = await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: `Starting the review of ${branch.name}…`
-            },
-            async () => {
-                // Re-check situation inside the lock: empty-state tokens only
-                // carry situation (no branch/tip), so a concurrent start of
-                // another review still invalidates via situation change.
-                if (!tokenStillValid(token, stateManager.state)) {
-                    stale = true;
-                    return undefined;
-                }
-                const situation = stateManager.state.situation;
-                if (situation !== "no-review" && situation !== "finish-pending") {
-                    stale = true;
-                    return undefined;
-                }
-                const invocation = await invokeGitReview("start", args, {
-                    ...options,
-                    network: true
-                });
-                // Refrescar pase lo que pase (ver continueReview.ts), aunque
-                // start falle: la salida humana no se parsea nunca.
-                await stateManager.refreshPrimary();
-                return invocation;
+        // Forma de lectura. El paso se repite —y sólo por eso es un bucle— cuando
+        // el revisor entra al armado del borrador y vuelve: sale de ahí con el
+        // borrador intacto y la oferta ya recalculada por la CLI, así que lo honesto
+        // es devolverlo a este mismo paso con las ofertas al día.
+        let offers = ctx.offers;
+        let layout: ReviewLayout;
+        for (; ;) {
+            const picked = await pickLayout(offers, branch.name);
+            if (!picked) {
+                return;
             }
-        );
+            if (picked.draft === undefined) {
+                layout = picked.layout;
+                break;
+            }
 
-        if (stale) {
+            // Sin preguntar nada: cuál de los tres caminos del borrador corresponde
+            // ya lo decidió la CLI al elegir qué oferta emitir, que es la única que
+            // puede —la pregunta es si el orden sigue cubriendo el rango, y para eso
+            // hacen falta los dos tips.
+            const outcome = await runDraftFlow(
+                picked.draft, branch, source, range, lock, stateManager, options, reveal, prepared
+            );
+            if (outcome.kind === "done") {
+                // El asistente termina acá: no arranca ninguna review y no deja
+                // ningún aviso abierto. El refresco que invokeDraft ya hizo dejó la
+                // fila del borrador en el panel, con su ruta, y la continuación
+                // vive ahí (Open / Validate and start).
+                return;
+            }
+            // Falló la creación: se dice por qué y se vuelve a ESTE paso, sin
+            // rehacer la elección de rama, con las ofertas al día.
+            if (outcome.error !== undefined) {
+                void vscode.window.showErrorMessage(outcome.error);
+            }
+            const reloaded = await loadBranchContext(branch, source, range, options);
+            if (reloaded.error === undefined) {
+                await release();
+                prepared = reloaded.prepared;
+                offers = reloaded.offers;
+            }
+        }
+
+        const intent: ReviewIntent = {branch: branch.name, layout, range, source};
+        const check = validateIntent(intent, {delta: deltaForSource(deltas, source)});
+        if (!check.ok) {
+            // Defensa en profundidad: la UI no ofrece delta sin registro del
+            // origin del source, pero si algo se desfasó no mandamos un intent
+            // ilegal a la CLI.
+            void vscode.window.showErrorMessage(check.reason);
+            return;
+        }
+
+        const args = [...(prepared ? [`--prepared=${prepared}`] : []), ...intentToArgs(intent, branch.name)];
+
+        // Capturado antes del spawn. El asistente pudo estar abierto un rato: el
+        // check externo evita el progreso cuando el estado ya quedó obsoleto, y el
+        // de adentro del lock cierra la ventana entre este punto y el spawn (otro
+        // proceso arrancó una review, HEAD cambió, watcher refresh).
+        const token = captureToken(stateManager.state);
+        if (!tokenStillValid(token, stateManager.state)) {
             void vscode.window.showInformationMessage(
                 STALE
             );
             return;
         }
 
-        if (!result || result.exitCode !== 0) {
-            const text = flatten(result?.stderr ?? "");
-            if (result && classifyStartFailure(result.stderr) === "network") {
-                const action = await vscode.window.showErrorMessage(
-                    text.length > 0 ? text : "Could not start the review.",
-                    "Run in Terminal"
-                );
-                if (action === "Run in Terminal") {
-                    runInTerminal(args, options);
+        await lock.run(async () => {
+            let stale = false;
+            const result = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Starting the review of ${branch.name}…`
+                },
+                async () => {
+                    // Re-check situation inside the lock: empty-state tokens only
+                    // carry situation (no branch/tip), so a concurrent start of
+                    // another review still invalidates via situation change.
+                    if (!tokenStillValid(token, stateManager.state)) {
+                        stale = true;
+                        return undefined;
+                    }
+                    const situation = stateManager.state.situation;
+                    if (situation !== "no-review" && situation !== "finish-pending") {
+                        stale = true;
+                        return undefined;
+                    }
+                    const invocation = await invokeGitReview("start", args, {
+                        ...options,
+                        network: !prepared && source !== "offline"
+                    });
+                    // Refrescar pase lo que pase (ver continueReview.ts), aunque
+                    // start falle: la salida humana no se parsea nunca.
+                    await stateManager.refreshPrimary();
+                    return invocation;
                 }
-            } else {
-                // Mismo fallback que el camino de red: exit ≠ 0 sin stderr
-                // (CLI matada / rota) no debe ser un fallo silencioso.
-                void vscode.window.showErrorMessage(
-                    text.length > 0 ? text : "Could not start the review."
+            );
+
+            if (stale) {
+                void vscode.window.showInformationMessage(
+                    STALE
                 );
+                return;
             }
-            return;
-        }
 
-        // El acuse es el panel: se revela sólo en verde y después del refresco
-        // (panel ya redibujado), nunca antes — mismo motivo que el reveal del
-        // borrador más arriba.
-        revealPanel("startReview", reveal);
+            if (!result || result.exitCode !== 0) {
+                const text = flatten(result?.stderr ?? "");
+                if (result && classifyStartFailure(result.stderr) === "network") {
+                    const action = await vscode.window.showErrorMessage(
+                        text.length > 0 ? text : "Could not start the review.",
+                        "Run in Terminal"
+                    );
+                    if (action === "Run in Terminal") {
+                        runInTerminal(args, options);
+                    }
+                } else {
+                    // Mismo fallback que el camino de red: exit ≠ 0 sin stderr
+                    // (CLI matada / rota) no debe ser un fallo silencioso.
+                    void vscode.window.showErrorMessage(
+                        text.length > 0 ? text : "Could not start the review."
+                    );
+                }
+                return;
+            }
 
-        // start emite notas a stderr en invocaciones EXITOSAS (rama local
-        // desactualizada, review previa con commits nuevos): se muestran aunque
-        // el exit sea 0 — descartarlas sería tirar información que la CLI
-        // decidió dar.
-        const note = flatten(result.stderr);
-        if (note.length > 0) {
-            void vscode.window.showInformationMessage(note);
-        }
-    });
+            // El acuse es el panel: se revela sólo en verde y después del refresco
+            // (panel ya redibujado), nunca antes — mismo motivo que el reveal del
+            // borrador más arriba.
+            revealPanel("startReview", reveal);
+
+            // start emite notas a stderr en invocaciones EXITOSAS (rama local
+            // desactualizada, review previa con commits nuevos): se muestran aunque
+            // el exit sea 0 — descartarlas sería tirar información que la CLI
+            // decidió dar.
+            const note = flatten(result.stderr);
+            if (note.length > 0) {
+                void vscode.window.showInformationMessage(note);
+            }
+        });
+    } finally {
+        await release();
+    }
 }

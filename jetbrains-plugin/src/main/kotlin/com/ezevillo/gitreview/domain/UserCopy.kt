@@ -7,6 +7,11 @@ package com.ezevillo.gitreview.domain
  * housekeeping confirm copy so both clients read the same language.
  */
 object UserCopy {
+    const val FINISH_DESTINATIONS_PROMPT = "Choose a destination for your review changes"
+    const val FINISH_DESTINATIONS_FAILED = "Could not read the available finish destinations."
+    const val FINISH_LOCATION_CREATE = "Create PR branch and apply changes"
+    const val FINISH_LOCATION_UPDATE = "Update PR branch and apply changes"
+    const val FETCHING_REVIEW_REVISIONS = "Fetching review revisions…"
     const val PRODUCT_TITLE = "git review"
     const val SUPPORT_TITLE = "Support"
     const val SUPPORT_STAR = "Star on GitHub"
@@ -185,9 +190,9 @@ object UserCopy {
     )
 
     val SOURCE_LABELS: List<Pair<ReviewSource, String>> = listOf(
-        ReviewSource.REMOTE to "Remote — fetch and review the remote tip of the branch",
+        ReviewSource.REMOTE to "Remote — Fetch the PR branch and base for this review.",
         ReviewSource.LOCAL to
-            "Local — review the local branch without fetching; base may still use the remote",
+            "Local — Review the local branch and fetch the remote base.",
         ReviewSource.OFFLINE to
             "Offline — review the local branch with no network; base is resolved locally",
     )

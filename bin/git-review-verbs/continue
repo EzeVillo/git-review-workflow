@@ -227,6 +227,7 @@ fi
 
 restore_meta reviewsource
 restore_meta reviewbase
+restore_meta reviewbasecommit
 restore_meta reviewtip
 restore_meta reviewprevreviewed
 restore_meta reviewlocal

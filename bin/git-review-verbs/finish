@@ -16,14 +16,18 @@ set -eu
 
 prog="git review finish"
 
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
 usage() {
 	cat <<EOF
-usage: $prog [--onto-source] [--resume | --abort [--force]]
+usage: $prog [--onto-source | --update-source] [--resume | --abort [--force]]
+       $prog --destinations --porcelain
 
 Extract your review edits from the current review/* branch.
 
   (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
   --onto-source    instead, stage your edits on the PR branch itself
+  --update-source  fast-forward the local PR branch to the reviewed tip, then stage
   --resume         continue after resolving conflicts from a commit-by-commit replay
   --abort          undo the last finish and return to editing the review
   --force          with --abort, discard changes made to the finish branch since
@@ -31,6 +35,9 @@ EOF
 }
 
 onto=0
+update_source=0
+destinations=0
+porcelain=0
 resume=0
 abort=0
 force=0
@@ -41,6 +48,9 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--onto-source) onto=1 ;;
+	--update-source) onto=1; update_source=1 ;;
+	--destinations) destinations=1 ;;
+	--porcelain) porcelain=1 ;;
 	--resume) resume=1 ;;
 	--abort) abort=1 ;;
 	--force) force=1 ;;
@@ -61,6 +71,15 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+if [ "$destinations" -eq 1 ]; then
+	[ "$onto$resume$abort$force$porcelain" = 00001 ] || die 'use --destinations with --porcelain alone'
+	finish_destinations "$cur"
+	exit
+fi
+if [ "$porcelain" -eq 1 ] || { [ "$resume" -eq 1 ] && [ "$update_source" -eq 1 ]; }; then
+	die 'invalid finish options'
+fi
 
 # worktree_tree: the tree of the current working tree captured with `git add -A`
 # (so brand-new untracked files count too), via a throwaway index that leaves the
@@ -301,6 +320,18 @@ do_abort() {
 	# branch, so --abort there discards the resolution, like git rebase --abort.
 	outhead="$(git config "branch.$rb.reviewundoouthead" || true)"
 	outtree="$(git config "branch.$rb.reviewundoouttree" || true)"
+	source_before="$(git config "branch.$rb.reviewundosourcebefore" || true)"
+	source_target="$(git config "branch.$rb.reviewtip" || true)"
+	source_move="$(git config "branch.$rb.reviewundosourcemove" || true)"
+	source_now=''
+	if [ -n "$source_before" ] && [ "$source_move" = 1 ]; then
+		source_now="$(git rev-parse --verify --quiet "refs/heads/$asrc" || true)"
+		if [ "$source_now" != "$source_before" ] && [ "$source_now" != "$source_target" ] && [ "$force" -eq 0 ] && [ "$cur" = "$asrc" ]; then
+			die "$asrc has changes since the finish; aborting would discard them. Use --force to discard."
+		fi
+		if [ -z "$source_now" ] && [ -n "$outhead" ]; then die "the PR branch $asrc was deleted after finish"; fi
+		if [ "$source_now" = "$source_target" ] || [ -n "$outhead" ]; then finish_require_source_worktree "$asrc"; fi
+	fi
 	if [ "$force" -eq 0 ] && [ -n "$outhead" ]; then
 		if [ "$kind" = "onto-source" ]; then
 			outbranch="$asrc"
@@ -362,6 +393,10 @@ do_abort() {
 		if [ "$srccreated" = "1" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
 			git branch -D "$asrc" >/dev/null
+		elif [ -n "$source_before" ] && [ "$source_move" = 1 ]; then
+			if [ "$source_now" = "$source_target" ] || { [ "$force" -eq 1 ] && [ -n "$outhead" ]; }; then
+				git update-ref "refs/heads/$asrc" "$source_before" "$source_now"
+			fi
 		elif [ -n "$outhead" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
 			git update-ref "refs/heads/$asrc" "$outhead"
@@ -375,7 +410,7 @@ do_abort() {
 	# whole undo record.
 	git config --unset "branch.$rb.reviewresume" 2>/dev/null || true
 	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
+		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree reviewundosourcebefore reviewundosourcemove; do
 		git config --unset "branch.$rb.$k" 2>/dev/null || true
 	done
 	git for-each-ref --format='%(refname)' "refs/review-undo/$asrc/" |
@@ -502,6 +537,10 @@ record_undo() {
 	git config "branch.$cur.reviewundohead" "$orig"
 	if [ "$onto" -eq 1 ]; then
 		git config "branch.$cur.reviewundokind" "onto-source"
+		if [ "$update_source" -eq 1 ]; then
+			git config "branch.$cur.reviewundosourcebefore" "$finish_source_head"
+			git update-ref "refs/review-undo/$src/source-before" "$finish_source_head"
+		fi
 		# Remember whether the PR branch already existed, so --abort only deletes
 		# it when finish was the one that created it.
 		if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
@@ -557,6 +596,9 @@ if [ "$resume" -eq 0 ] && [ "$onto" -eq 0 ]; then
 		echo "error: review-fixes/$src already exists; remove it first" >&2
 		exit 1
 	fi
+fi
+if [ "$resume" -eq 0 ] && [ "$onto" -eq 1 ]; then
+	finish_check_source "$src" "$tip" "$update_source"
 fi
 
 # Only a fresh finish records an undo point; --resume continues the same finish
@@ -627,6 +669,14 @@ elif [ "$resume" -eq 1 ]; then
 		exit 1
 		;;
 	esac
+	if [ "$onto" -eq 1 ]; then
+		_expected_source=$(git config "branch.$cur.reviewundosourcebefore" || true)
+		if [ -n "$_expected_source" ]; then update_source=1; fi
+		finish_check_source "$src" "$tip" "$update_source"
+		if [ "$update_source" -eq 1 ] && [ "$finish_source_head" != "$_expected_source" ]; then
+			die "local $src changed during finish"
+		fi
+	fi
 	stage_finish_resolution || exit 1
 	git config --unset "branch.$cur.reviewresume" || true
 fi
@@ -649,8 +699,26 @@ else
 fi
 
 if [ "$onto" -eq 1 ]; then
-	if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
-		if [ "$(git rev-parse "$src")" != "$tip" ]; then
+	if [ "$update_source" -eq 1 ]; then
+		# Comparing the old OID prevents overwriting a concurrent local commit.
+		finish_require_source_worktree "$src"
+		# Preflight may have preceded a long step replay. Recheck before moving
+		# the local branch and preserve the undo point if the checkout fails.
+		git config "branch.$cur.reviewundosourcemove" 1
+		if ! git update-ref -m 'git review finish: fast-forward PR branch' "refs/heads/$src" "$tip" "$finish_source_head"; then
+			git config --unset "branch.$cur.reviewundosourcemove" || true
+			die "local $src changed during finish; recover with git review finish --abort"
+		fi
+		if ! git switch -q "$src"; then
+			if finish_source_worktree_available "$src"; then
+				if git update-ref -m 'git review finish: restore after checkout failure' "refs/heads/$src" "$finish_source_head" "$tip"; then
+					git config --unset "branch.$cur.reviewundosourcemove" || true
+				fi
+			fi
+			die "could not switch to $src; recover with git review finish --abort"
+		fi
+	elif git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
+		if [ "$(git rev-parse --verify "refs/heads/$src")" != "$tip" ]; then
 			echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
 			echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 			exit 1

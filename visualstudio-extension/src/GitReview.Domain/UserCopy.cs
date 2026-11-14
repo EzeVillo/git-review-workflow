@@ -8,6 +8,11 @@ public sealed record UnopenedDraft(string? File);
 /// </summary>
 public static class UserCopy
 {
+    public const string FinishDestinationsPrompt = "Choose a destination for your review changes";
+    public const string FinishDestinationsFailed = "Could not read the available finish destinations.";
+    public const string FinishLocationCreate = "Create PR branch and apply changes";
+    public const string FinishLocationUpdate = "Update PR branch and apply changes";
+    public const string FetchingReviewRevisions = "Fetching review revisions…";
     public const string ProductTitle = "git review";
     public const string SupportTitle = "Support";
     public const string SupportStar = "Star on GitHub";
@@ -195,9 +200,9 @@ public static class UserCopy
 
     public static readonly IReadOnlyList<(ReviewSource Source, string Label)> SourceLabels = new[]
     {
-        (ReviewSource.Remote, "Remote — fetch and review the remote tip of the branch"),
+        (ReviewSource.Remote, "Remote — Fetch the PR branch and base for this review."),
         (ReviewSource.Local,
-            "Local — review the local branch without fetching; base may still use the remote"),
+            "Local — Review the local branch and fetch the remote base."),
         (ReviewSource.Offline,
             "Offline — review the local branch with no network; base is resolved locally"),
     };

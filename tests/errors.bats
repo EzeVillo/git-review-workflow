@@ -386,6 +386,134 @@ step_review_two_with_edits() {
 	run git review finish --onto-source
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not at the reviewed tip"* ]]
+	[ -z "$(git for-each-ref refs/review-undo/feature/x/)" ]
+	[ "$(git branch --show-current)" = review/feature/x ]
+}
+
+@test "finish offers an explicit fast-forward and undo restores the old local PR tip" {
+	push_pr2
+	git branch -f feature/x origin/feature/x~1
+	before=$(git rev-parse refs/heads/feature/x)
+	git review start feature/x
+	tip=$(git config branch.review/feature/x.reviewtip)
+	printf 'a\nB\nc\nd\ne\nfix\n' >app.txt
+	run git review finish --destinations --porcelain
+	[ "$status" -eq 0 ]
+	[ "$output" = "$(printf 'finish-destination\tseparate\nfinish-destination\tupdate-source')" ]
+	run git review finish --update-source
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = feature/x ]
+	[ "$(git rev-parse HEAD)" = "$tip" ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = review/feature/x ]
+	[ "$(git rev-parse refs/heads/feature/x)" = "$before" ]
+	[ "$(tail -n 1 app.txt)" = fix ]
+}
+
+@test "finish offers only a separate branch when the local PR branch has other commits" {
+	git review start feature/x
+	tip=$(git config branch.review/feature/x.reviewtip)
+	ahead=$(git commit-tree "$tip^{tree}" -p "$tip" -m 'local work')
+	git update-ref refs/heads/feature/x "$ahead"
+	run git review finish --destinations --porcelain
+	[ "$status" -eq 0 ]
+	[ "$output" = "$(printf 'finish-destination\tseparate')" ]
+	run git review finish --update-source
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"not at the reviewed tip"* ]]
+	[ -z "$(git for-each-ref refs/review-undo/feature/x/)" ]
+	[ "$(git rev-parse refs/heads/feature/x)" = "$ahead" ]
+}
+
+@test "prepared start pins the fetched tip without updating tracking refs" {
+	cached=$(git rev-parse refs/remotes/origin/feature/x)
+	local_base=$(git rev-parse refs/remotes/origin/develop)
+	push_pr2
+	fresh=$(git rev-parse refs/remotes/origin/feature/x)
+	git update-ref refs/remotes/origin/feature/x "$cached"
+	run git review start --prepare -- feature/x
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
+	[ "$(git rev-parse refs/remotes/origin/develop)" = "$local_base" ]
+	[ "$(git branch --show-current)" = develop ]
+	git switch -q feature/x
+	git commit -q --allow-empty -m 'advance after preparation'
+	git push -q origin feature/x
+	git switch -q develop
+	git update-ref refs/remotes/origin/feature/x "$cached"
+	run git review start "--prepared=$token" --no-walk -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewtip)" = "$fresh" ]
+	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
+	run git review start --release -- "$token"
+	[ "$status" -eq 0 ]
+	run git review finish
+	[ "$status" -eq 0 ]
+	run git review clean --keep-fixes feature/x
+	[ "$status" -eq 0 ]
+	[ -z "$(git for-each-ref refs/worktree/review-start/)" ]
+	[ "$(git for-each-ref --format='%(objectname)' refs/review-delta/)" = "$fresh" ]
+	run git review forget --delta feature/x
+	[ "$status" -eq 0 ]
+	[ -z "$(git for-each-ref refs/review-delta/)" ]
+}
+
+@test "review draft created from a prepared start retains its selected range" {
+	cached=$(git rev-parse refs/remotes/origin/feature/x)
+	push_pr2
+	fresh=$(git rev-parse refs/remotes/origin/feature/x)
+	git update-ref refs/remotes/origin/feature/x "$cached"
+	run git review start --prepare -- feature/x
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	run git review walkthrough draft --porcelain "--start-prepared=$token" -- feature/x
+	[ "$status" -eq 0 ]
+	run git review start --release -- "$token"
+	[ "$status" -eq 0 ]
+	run git review config --porcelain --from-draft -- feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'start-draft-range\t1'* ]]
+	run git review start --from-draft --no-walk -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewtip)" = "$fresh" ]
+	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
+}
+
+@test "finish update refuses undo after committing the correction" {
+	push_pr2
+	git branch -f feature/x origin/feature/x~1
+	git review start feature/x
+	printf 'a\nB\nc\nd\ne\nfix\n' >app.txt
+	git review finish --update-source
+	git commit -qm 'publishable correction'
+	correction=$(git rev-parse HEAD)
+	run git review finish --abort
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	[ "$(git branch --show-current)" = feature/x ]
+	[ "$(git rev-parse HEAD)" = "$correction" ]
+	git show-ref --verify --quiet refs/review-undo/feature/x/source-before
+}
+
+@test "finish leaves a PR branch checked out in another worktree alone" {
+	push_pr2
+	git branch -f feature/x origin/feature/x~1
+	before=$(git rev-parse refs/heads/feature/x)
+	git worktree add -q "$TMP/other" feature/x
+	git review start feature/x
+	run git review finish --destinations --porcelain
+	[ "$status" -eq 0 ]
+	[ "$output" = "$(printf 'finish-destination\tseparate')" ]
+	run git review finish --update-source
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"checked out in another worktree"* ]]
+	[ -z "$(git for-each-ref refs/review-undo/feature/x/)" ]
+	[ "$(git -C "$TMP/other" rev-parse HEAD)" = "$before" ]
+	[ -z "$(git -C "$TMP/other" status --porcelain)" ]
 }
 
 # ── review clean behaviours ───────────────────────────────────────────────────

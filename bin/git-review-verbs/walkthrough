@@ -100,6 +100,7 @@ branch=""
 compare_target=""
 compare_mode=0
 compare_prepared=''
+start_prepared=''
 compare_seed=""
 base=""
 base_explicit=0
@@ -147,6 +148,7 @@ while [ $# -gt 0 ]; do
 		;;
 	--compare) compare_mode=1 ;;
 	--prepared=*) compare_prepared=${1#--prepared=} ;;
+	--start-prepared=*) start_prepared=${1#--start-prepared=} ;;
 	--force) force=1 ;;
 	--check) check=1 ;;
 	--build) build_draft=1 ;;
@@ -211,6 +213,9 @@ if [ "$compare_mode" -eq 1 ]; then
 	[ -n "$branch" ] || die "--compare requires two revisions or a comparison draft"
 fi
 [ -z "$compare_prepared" ] || { [ "$compare_mode$build_draft" = 10 ] && [ -n "$compare_target" ]; } || die '--prepared requires a comparison draft with two revisions'
+if [ -n "$start_prepared" ] && { [ "$sub" != draft ] || [ "$compare_mode" -eq 1 ]; }; then
+	die '--start-prepared requires a review draft'
+fi
 
 [ "$compare_mode" -eq 1 ] || [ -z "$compare_target" ] || die "unexpected argument $compare_target"
 
@@ -509,6 +514,7 @@ if [ "$sub" = draft ]; then
 	# the review the reviewer is standing in — a name they typed themselves is
 	# theirs to be told is missing, which "$srclabel not found" already says.
 	if [ "$from_review" -eq 1 ] &&
+		[ "$(git config "branch.$rb.reviewreadonly" || true)" = 1 ] &&
 		! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
 		! git rev-parse --verify --quiet "refs/remotes/$remote/$branch" >/dev/null; then
 		die "this review compares $branch, which is not a branch; a walkthrough draft belongs to one, so name it: git review walkthrough draft <branch>"
@@ -521,6 +527,27 @@ if [ "$sub" = draft ]; then
 		srcref="refs/remotes/$remote/$branch"
 		srclabel="$remote/$branch"
 		markerkey="reviewworkflow.$branch.reviewed"
+	fi
+	_start_draft_anchor=''
+	if [ -n "$start_prepared" ]; then
+		_start_draft_anchor=$(start_prepared_ref "$start_prepared")
+	elif [ "$build_draft" -eq 1 ] && git show-ref --verify --quiet "$(start_draft_ref "$branch")"; then
+		_start_draft_anchor=$(start_draft_ref "$branch")
+	fi
+	_start_draft_pack=''
+	if [ -n "$_start_draft_anchor" ]; then
+		start_read_range "$_start_draft_anchor" "$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$local_only$offline")"
+		srcref=$_rs_tip
+		_start_draft_pack=$_rs_pack
+	elif [ "$from_review" -eq 1 ]; then
+		srcref="$(git config "branch.$rb.reviewtip" || printf '%s' "$srcref")"
+		_start_session_anchor="refs/worktree/review-start/session/${rb#review/}"
+		_start_session_pack=$(git show-ref --hash --verify "$_start_session_anchor" 2>/dev/null || true)
+		if [ -n "$_start_session_pack" ]; then
+			_start_draft_identity=$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$local_only$offline")
+			_start_session_identity=$(git log -1 --format='%s' "$_start_session_pack" --)
+			if [ "${_start_session_identity%% *}" = "$_start_draft_identity" ]; then _start_draft_pack=$_start_session_pack; fi
+		fi
 	fi
 	# No fetch, ever: like config --porcelain, this reads the refs already in the
 	# clone. A missing tip is an actionable error, not an implicit network call.
@@ -542,10 +569,15 @@ if [ "$sub" = draft ]; then
 	if [ -z "$baseref" ]; then
 		baseref="$(git rev-parse --verify --quiet "$base^{commit}" || true)"
 	fi
+	if [ -n "$_start_draft_anchor" ]; then baseref=$_rs_base; fi
+	if [ "$from_review" -eq 1 ] && [ -z "$_start_draft_anchor" ]; then
+		baseref="$(git config "branch.$rb.reviewbasecommit" || printf '%s' "$baseref")"
+	fi
 	[ -n "$baseref" ] || die "base $base not found"
 
 	if [ "$delta_mode" -eq 1 ]; then
 		prev="$(git config "$markerkey" || true)"
+		if [ -n "$_start_draft_anchor" ] && [ "$prev" != "$_rs_previous" ]; then die 'last review point changed; prepare the review again'; fi
 		[ -n "$prev" ] ||
 			die "no previous review of $branch recorded for this origin; run a full review first"
 		[ "$prev" != "$tip" ] ||
@@ -1183,6 +1215,11 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			die "$targetrel exists and is not a file; move it out of the way first"
 		fi
 		emit_skeleton >"$tmp"
+		if [ -n "${_start_draft_pack:-}" ]; then
+			git update-ref "$(start_draft_ref "$branch")" "$_start_draft_pack"
+		elif [ "$compare_mode" -eq 0 ]; then
+			start_drop_draft "$branch"
+		fi
 		if [ "$compare_mode" -eq 1 ]; then compare_keep_draft; fi
 		mv "$tmp" "$targetpath"
 		trap - EXIT INT TERM

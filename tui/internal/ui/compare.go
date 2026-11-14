@@ -115,7 +115,7 @@ func compareLayoutFlags(layout string) []string {
 
 func compareProbe(args []string, advance func(string) selectResult) tea.Cmd {
 	return func() tea.Msg {
-		return assistantStepMsg{result: host.InvokeReview(context.Background(), "compare", args), compareAdvance: advance}
+		return assistantStepMsg{result: host.InvokeReview(context.Background(), "compare", args), rawAdvance: advance, compareProbe: true}
 	}
 }
 

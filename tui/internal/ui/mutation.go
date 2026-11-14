@@ -29,6 +29,7 @@ import (
 // bookkeeping either way.
 type mutationRequest struct {
 	comparePrepared       string
+	startPrepared         string
 	stateGuard            string
 	saveState             bool
 	continueState         bool
@@ -82,6 +83,7 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 			result = host.InvokeReviewGuarded(context.Background(), argv.Verb, argv.Args, req.stateGuard)
 		}
 		releasePreparedComparison(req.comparePrepared)
+		releaseStart(req.startPrepared)
 		var reply *host.ReadResult
 		if req.navigationState && !mutationFailed(result) {
 			if primary, notice, ok := host.ReadNavigationReply(result.Stdout); ok {
@@ -136,12 +138,12 @@ func currentStateToken(p domain.PanelModel) domain.StateToken {
 func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Model, tea.Cmd) {
 	if !m.lock.Begin() {
 		m.statusLine = domain.MutationDiscardedNotice
-		return m, releasePreparedComparisonCmd(req.comparePrepared)
+		return m, tea.Batch(releasePreparedComparisonCmd(req.comparePrepared), releaseStartCmd(req.startPrepared))
 	}
 	if !token.Matches(currentStateToken(m.Panel)) {
 		m.lock.Cancel()
 		m.statusLine = domain.StaleNotice
-		return m, releasePreparedComparisonCmd(req.comparePrepared)
+		return m, tea.Batch(releasePreparedComparisonCmd(req.comparePrepared), releaseStartCmd(req.startPrepared))
 	}
 	if req.action != "" && (req.argv == nil || req.argv.Verb != "comments") {
 		req.stateGuard = token.Guard
@@ -305,7 +307,14 @@ type draftConfigDoneMsg struct {
 
 func draftConfigCmd(intent domain.ReviewIntent) tea.Cmd {
 	return func() tea.Msg {
-		result := host.InvokeReview(context.Background(), "config", domain.DraftConfigArgs(intent))
+		args := domain.DraftConfigArgs(intent)
+		if intent.Source != "compare" {
+			args = append([]string{"--from-draft"}, args...)
+		}
+		result := host.InvokeReview(context.Background(), "config", args)
+		if strings.Contains(result.Stderr, "unknown option --from-draft") {
+			result = host.InvokeReview(context.Background(), "config", domain.DraftConfigArgs(intent))
+		}
 		return draftConfigDoneMsg{intent: intent, result: result}
 	}
 }
@@ -611,16 +620,60 @@ func (m Model) beginFinish() (Model, tea.Cmd) {
 	if m.Panel.Situation != domain.SituationReview || m.Panel.Readonly {
 		return m, nil
 	}
-	source := m.Panel.Source
+	source, token := m.Panel.Source, currentStateToken(m.Panel)
+	m.progressOverlay = &ProgressOverlay{Text: domain.FinishDestinationsPrompt}
+	return m, func() tea.Msg {
+		reply := host.InvokeReview(context.Background(), "finish", []string{"--destinations", "--porcelain"})
+		return finishDestinationsMsg{reply: reply, source: source, token: token}
+	}
+}
+
+type finishDestinationsMsg struct {
+	reply  host.Result
+	source string
+	token  domain.StateToken
+}
+
+func (m Model) finishDestinationPicker(msg finishDestinationsMsg) (Model, tea.Cmd) {
+	m.progressOverlay = nil
+	if !msg.token.Matches(currentStateToken(m.Panel)) {
+		m.statusLine = domain.StaleNotice
+		return m, nil
+	}
+	stdout := msg.reply.Stdout
+	if mutationFailed(msg.reply) {
+		if !strings.Contains(msg.reply.Stderr, "unknown option --destinations") {
+			m.statusLine = flattenStderr(msg.reply.Stderr)
+			if m.statusLine == "" {
+				m.statusLine = domain.FinishDestinationsFailed
+			}
+			return m, nil
+		}
+		stdout = "finish-destination\tseparate\nfinish-destination\tsource\tequal"
+	}
+	items := []SelectItem{}
+	for _, line := range strings.Split(stdout, "\n") {
+		switch strings.TrimSuffix(line, "\r") {
+		case "finish-destination\tseparate":
+			items = append(items, SelectItem{Label: domain.FinishDestinationBranchLabel, Detail: domain.FinishDestinationBranchDetail, Value: "fixes"})
+		case "finish-destination\tsource\tequal":
+			items = append(items, SelectItem{Label: domain.FinishDestinationOntoLabel, Detail: domain.FinishDestinationOntoDetail, Value: "onto"})
+		case "finish-destination\tsource\tmissing":
+			items = append(items, SelectItem{Label: domain.FinishDestinationCreate, Value: "onto"})
+		case "finish-destination\tupdate-source":
+			items = append(items, SelectItem{Label: domain.FinishDestinationUpdate, Value: "update"})
+		}
+	}
+	if len(items) == 0 {
+		m.statusLine = domain.FinishDestinationsFailed
+		return m, nil
+	}
 	overlay := SelectOverlay{
 		Title: domain.FinishDestinationTitle,
-		Items: []SelectItem{
-			{Label: domain.FinishDestinationBranchLabel, Detail: domain.FinishDestinationBranchDetail, Value: "fixes"},
-			{Label: domain.FinishDestinationOntoLabel, Detail: domain.FinishDestinationOntoDetail, Value: "onto"},
-		},
+		Items: items,
 		OnPick: func(v string) selectResult {
-			req := mutationRequest{action: "finishReview", params: domain.ActionParams{OntoSource: v == "onto", Source: source}}
-			return selectResult{done: &req}
+			req := mutationRequest{action: "finishReview", params: domain.ActionParams{OntoSource: v != "fixes", UpdateSource: v == "update", Source: msg.source}}
+			return selectResult{done: &req, expected: &msg.token}
 		},
 	}
 	m.selectOverlay = &overlay
@@ -702,7 +755,14 @@ func (m Model) handleDraftConfigDone(msg draftConfigDoneMsg) (Model, tea.Cmd) {
 	}
 
 	request := func(layout string) mutationRequest {
-		return startFromDraftRequest(draft, layout)
+		req := startFromDraftRequest(draft, layout)
+		for _, line := range strings.Split(msg.result.Stdout, "\n") {
+			if strings.TrimSpace(line) == "start-draft-range\t1" {
+				req.argv.Args = append([]string{"--from-draft"}, req.argv.Args...)
+				break
+			}
+		}
+		return req
 	}
 	if !mutationFailed(msg.result) {
 		cfg := domain.ParseConfigPorcelain(msg.result.Stdout)

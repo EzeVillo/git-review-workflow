@@ -297,6 +297,20 @@ case "$command" in
 				compare_keep_comment_revisions "$cm_dir/local.md" "$_retained_ref" || exit 1
 			fi
 		fi
+		if [ "$cm_scope" = result ] && [ "$cm_kind" = review ]; then
+			_retained_ref="refs/worktree/review-start/comments/$cm_context"
+			if git show-ref --verify --quiet "$_retained_ref"; then
+				_prior_result=$(comments_field "$cm_dir/manifest" previous_result) || exit 1
+				_result_session=$(comments_field "$cm_dir/manifest" session) || exit 1
+				_prior_dir=''
+				if [ -n "$_result_session" ] && comments_require_token "$_result_session" &&
+					[ -d "$cm_root/sessions/$_result_session" ] && [ -n "$_prior_result" ] && [ "$_prior_result" != absent ]; then
+					comments_require_token "$_prior_result" || exit 1
+					_prior_dir="$cm_root/results/$cm_context/$_prior_result"
+				fi
+				compare_keep_comment_revisions "$cm_dir/local.md" "$_retained_ref" "$cm_dir/shared.md" "${_prior_dir:+$_prior_dir/local.md}" "${_prior_dir:+$_prior_dir/shared.md}" || exit 1
+			fi
+		fi
 		;;
 	renumber)
 		comments_select_context "$context" || exit 1

@@ -37,7 +37,7 @@ class MutationActions(
     private val project: Project,
     private val service: GitReviewService,
 ) {
-    fun runStart(intent: ReviewIntent, branch: String, onDone: (StartRunResult) -> Unit) {
+    fun runStart(intent: ReviewIntent, branch: String, prepared: String? = null, onDone: (StartRunResult) -> Unit) {
         val cwd = cwdOrNull()
         if (cwd == null) {
             onDone(StartRunResult.NoCwd)
@@ -61,7 +61,12 @@ class MutationActions(
                         return@run StartRunResult.Stale
                     }
                     val argv = actionToArgv("startReview", ActionParams.Start(intent, branch))
-                    val result = service.cliInvoker.invokeWithStateGuard(argv.verb, argv.args, cwd, token.guard, network = argv.network)
+                    val args = when (prepared) {
+                        null -> argv.args
+                        "draft" -> listOf("--from-draft") + argv.args
+                        else -> listOf("--prepared=$prepared") + argv.args
+                    }
+                    val result = service.cliInvoker.invokeWithStateGuard(argv.verb, args, cwd, token.guard, network = prepared == null && argv.network)
                     refreshIdeRepository(project)
                     service.refreshNow()
                     if (result.exitCode == 4) return@run StartRunResult.Stale
@@ -198,7 +203,7 @@ class MutationActions(
      * Finish with VS Code success toasts derived from refreshed state only
      * (never from finish human stdout).
      */
-    fun runFinish(ontoSource: Boolean, expected: StateToken? = null, onDone: (String?) -> Unit) {
+    fun runFinish(ontoSource: Boolean, expected: StateToken? = null, updateSource: Boolean = false, onDone: (String?) -> Unit) {
         val stateRec = service.currentState().state
         if (stateRec == null) {
             onDone(null)
@@ -213,7 +218,7 @@ class MutationActions(
         val source = stateRec.source
         runSimple(
             "finishReview",
-            ActionParams.FinishOnto(ontoSource),
+            ActionParams.FinishOnto(ontoSource, updateSource),
             progressTitle = UserCopy.finishingProgress(source),
             expected = expected,
         ) { done ->

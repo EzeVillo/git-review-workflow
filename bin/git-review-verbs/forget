@@ -181,10 +181,11 @@ if [ "$mode" = saved ]; then
 			markerkey="reviewworkflow.$src.reviewed"
 		fi
 		prevreviewed="$(git config "branch.$saved.reviewprevreviewed" || true)"
-		if [ -n "$prevreviewed" ]; then
-			git config "$markerkey" "$prevreviewed"
-		else
-			git config --unset "$markerkey" 2>/dev/null || true
+		_fso_compare=$(git config "branch.$saved.reviewreadonly" || true)
+		if [ "$_fso_compare" != 1 ]; then
+			if [ -n "$prevreviewed" ]; then review_set_delta "$markerkey" "$prevreviewed"
+			else review_unset_delta "$markerkey"
+			fi
 		fi
 
 		git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
@@ -204,10 +205,12 @@ if [ "$mode" = saved ]; then
 			hadraft=1
 			rm -f "$saveddraft"
 			compare_drop_draft "$draftsrc"
+			start_drop_draft "$draftsrc"
 		fi
-		_fso_compare=$(git config "branch.$saved.reviewreadonly" || true)
 		git branch -D "$saved" >/dev/null
-		if [ "$_fso_compare" = 1 ]; then compare_drop_session "$src" >/dev/null; fi
+		if [ "$_fso_compare" = 1 ]; then compare_drop_session "$src" >/dev/null
+		else review_drop_session "$src" >/dev/null
+		fi
 
 		echo "discarded saved review of $src"
 		# Named, not left to be inferred: the draft is hand-written prose every other
@@ -320,6 +323,7 @@ if [ "$mode" = draft ]; then
 		fi
 		rm -f "$_fd_path"
 		compare_drop_draft "$_fd_src"
+		start_drop_draft "$_fd_src"
 		echo "forgot the walkthrough draft for $_fd_src"
 		# Deleting it under a live review is allowed — going back to the author's
 		# order is a legitimate thing to want — but it changes what that review
@@ -344,7 +348,10 @@ if [ "$mode" = draft ]; then
 			return
 		fi
 		rm -f "$(walk_saved_draft_path "$_fo_src")"
-		if ! walk_has_draft_file "$_fo_src"; then compare_drop_draft "$_fo_src"; fi
+		if ! walk_has_draft_file "$_fo_src"; then
+			compare_drop_draft "$_fo_src"
+			start_drop_draft "$_fo_src"
+		fi
 		echo "forgot the archived walkthrough draft for $_fo_src (no paused review left to restore it)"
 	}
 
@@ -461,7 +468,7 @@ forget_delta() {
 	if [ "$dryrun" -eq 1 ]; then
 		echo "would forget delta marker for $2$3"
 	else
-		git config --unset "$1" || true
+		review_unset_delta "$1"
 		echo "forgot delta marker for $2$3"
 	fi
 }
@@ -486,6 +493,9 @@ if [ "$dryrun" -eq 1 ] && [ "$stale" -ne 1 ]; then
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # Remote whose branches back the markers; defaults to origin, override with
 # reviewworkflow.remote.

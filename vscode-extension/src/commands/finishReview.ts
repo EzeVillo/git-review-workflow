@@ -5,7 +5,7 @@ import {finishOutcome} from "../review/finishOutcome";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
-import {STALE} from "../review/userCopy";
+import {FINISH_DESTINATIONS, STALE} from "../review/userCopy";
 import {confirmMutation} from "../review/confirm";
 import {PanelRevealer, revealPanel} from "../views/reveal";
 
@@ -15,21 +15,21 @@ function message(stderr: string): string {
 }
 
 interface LocationItem extends vscode.QuickPickItem {
-    ontoSource: boolean;
+    destination: "separate" | "source" | "missing" | "update-source";
 }
 
-const LOCATION_ITEMS: LocationItem[] = [
-    {
-        label: "A separate branch",
-        description: "review-fixes/<branch>, staged on top of the PR tip",
-        ontoSource: false,
-    },
-    {
-        label: "Onto the PR branch itself",
-        description: "stage the edits directly on the PR branch",
-        ontoSource: true,
-    },
-];
+function finishLocations(stdout: string): LocationItem[] {
+    const items: LocationItem[] = [];
+    for (const line of stdout.split(/\r?\n/)) {
+        const [record, kind, state] = line.split("\t");
+        if (record !== "finish-destination") continue;
+        const destination = kind === "source" && state === "missing" ? "missing" : kind;
+        if (destination === "separate" || destination === "source" || destination === "missing" || destination === "update-source") {
+            items.push({...FINISH_DESTINATIONS[destination], destination});
+        }
+    }
+    return items;
+}
 
 /**
  * `gitReview.finishReview`: cierra la review activa extrayendo las ediciones a
@@ -77,10 +77,17 @@ export async function finishReview(
     const source = state.state.source;
     const reviewBranch = state.state.branch;
     const token = captureToken(state);
+    const probe = await invokeGitReview("finish", ["--destinations", "--porcelain"], getInvokeOptions());
+    const legacy = probe.stderr.includes("unknown option --destinations");
+    const locations = legacy ? finishLocations("finish-destination\tseparate\nfinish-destination\tsource") : finishLocations(probe.stdout);
+    if ((!legacy && probe.exitCode !== 0) || locations.length === 0) {
+        void vscode.window.showErrorMessage(message(probe.stderr) || FINISH_DESTINATIONS.failed);
+        return;
+    }
 
-    const picked = await vscode.window.showQuickPick(LOCATION_ITEMS, {
+    const picked = await vscode.window.showQuickPick(locations, {
         title: `Finish the review of ${source} — where do your edits go?`,
-        placeHolder: "A separate branch, or onto the PR branch itself",
+        placeHolder: FINISH_DESTINATIONS.prompt,
     });
     if (!picked) {
         return;
@@ -97,7 +104,8 @@ export async function finishReview(
 
     await lock.run(async () => {
         let stale = false;
-        const args = picked.ontoSource ? ["--onto-source"] : [];
+        const ontoSource = picked.destination !== "separate";
+        const args = picked.destination === "update-source" ? ["--update-source"] : ontoSource ? ["--onto-source"] : [];
         const invocation = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
@@ -135,7 +143,7 @@ export async function finishReview(
 
         // Exit 0 always landed on the destination. Toast from refreshed state
         // only (finishOutcome), never from finish stdout/stderr.
-        const destination = picked.ontoSource ? source : `review-fixes/${source}`;
+        const destination = ontoSource ? source : `review-fixes/${source}`;
         // `pending` (caso normal) no se notifica: el banner de finish-pending ya
         // dice lo mismo con más contexto (ver "Lo que el panel muestra no se
         // notifica" en AGENTS.md). `no-edits` sí, porque sin registro pending no

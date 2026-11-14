@@ -64,7 +64,31 @@ func ClassForVerb(verb string, args []string) InvocationClass {
 		}
 		return Read
 	case "start":
+		if len(args) > 0 {
+			switch args[0] {
+			case "--release":
+				return LocalMutation
+			case "--from-draft":
+				return LocalMutation
+			}
+			if len(args[0]) > len("--prepared=") && args[0][:len("--prepared=")] == "--prepared=" {
+				return LocalMutation
+			}
+			for _, arg := range args {
+				if arg == "--" {
+					break
+				}
+				if arg == "--offline" {
+					return LocalMutation
+				}
+			}
+		}
 		return Network
+	case "finish":
+		if len(args) > 0 && args[0] == "--destinations" {
+			return Read
+		}
+		return LocalMutation
 	case "compare":
 		if len(args) > 0 && args[0] == "--prepare" {
 			for _, arg := range args[1:] {

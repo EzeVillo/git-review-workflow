@@ -10,7 +10,7 @@ public abstract record ActionParams
     {
         public static readonly Empty Instance = new();
     }
-    public sealed record FinishOnto(bool OntoSource) : ActionParams;
+    public sealed record FinishOnto(bool OntoSource, bool UpdateSource = false) : ActionParams;
     public sealed record UndoFinish(bool Force) : ActionParams;
     public sealed record ResumeFinish(bool OntoSource) : ActionParams;
     public sealed record Preview(bool Stat) : ActionParams;
@@ -78,9 +78,12 @@ public static class ActionArgvMap
             "abortReview" => new ActionArgv("abort", Array.Empty<string>()),
             "finishReview" => new ActionArgv(
                 "finish",
-                params_ is ActionParams.FinishOnto { OntoSource: true }
-                    ? new[] { "--onto-source" }
-                    : Array.Empty<string>()),
+                params_ switch
+                {
+                    ActionParams.FinishOnto { UpdateSource: true } => new[] { "--update-source" },
+                    ActionParams.FinishOnto { OntoSource: true } => new[] { "--onto-source" },
+                    _ => Array.Empty<string>(),
+                }),
             "undoFinish" => new ActionArgv(
                 "finish",
                 params_ is ActionParams.UndoFinish { Force: true }

@@ -137,6 +137,8 @@ Comparisons offer Local comments only and retain them automatically when closed.
 
 In **Compare revisions**, choose each branch by name, then choose the version to use. Fetching a version for Compare leaves local and remote-tracking branches in place.
 
+**Start a review** also fetches the revisions it needs without moving local or remote-tracking branches. If your local PR branch is behind, Finish offers an explicit fast-forward before applying review changes.
+
 Local notes stay private; Shared comments are prepared for the PR. Both documents
 coexist, and the destination only applies to the new comment. If asked whether to
 continue a previous review, choose whether to restore its Local notes or keep them

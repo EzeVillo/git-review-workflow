@@ -478,7 +478,8 @@ comments_state() {
 	elif [ -n "$cm_target" ]; then
 		# Start passes the exact base it resolved (remote, local or commit-ish).
 		# A stale local branch must not replace the fetched remote base here.
-		_cm_base_ref=${1:-$cm_target}
+		review_config_read "branch.$cm_branch.reviewbasecommit"
+		_cm_base_ref=${1:-${_review_config_value:-$cm_target}}
 		if ! git rev-parse --verify --quiet "$_cm_base_ref^{commit}" >/dev/null; then
 			_cm_remote=$(git config reviewworkflow.remote || true)
 			_cm_base_ref=${_cm_remote:-origin}/$cm_target
@@ -1366,11 +1367,13 @@ comments_publish() {
 		fi
 	done
 	if ! mv "$_cp_temporary" "$_cp_destination"; then comments_error 'could not publish comments generation'; return 1; fi
-	if [ "${compare_retain_objects:-0}" -eq 1 ]; then
-		_cp_retained_ref="refs/worktree/review-compare/comments/$_cp_context"
+	if [ "${compare_retain_objects:-0}" -eq 1 ] || [ "${review_retain_objects:-0}" -eq 1 ]; then
+		_cp_retention=review-compare
+		if [ "${review_retain_objects:-0}" -eq 1 ]; then _cp_retention=review-start; fi
+		_cp_retained_ref="refs/worktree/$_cp_retention/comments/$_cp_context"
 		# Preserve the previous generation until the new pointer is committed.
 		_cp_prior_compare=$(comments_result_dir "$_cp_context") || return 1
-		compare_keep_comment_revisions "$_cp_destination/local.md" "$_cp_retained_ref" "${_cp_prior_compare:+$_cp_prior_compare/local.md}" || return 1
+		compare_keep_comment_revisions "$_cp_destination/local.md" "$_cp_retained_ref" "${_cp_prior_compare:+$_cp_prior_compare/local.md}" "$_cp_destination/shared.md" "${_cp_prior_compare:+$_cp_prior_compare/shared.md}" || return 1
 	fi
 	_cp_pointer=$(mktemp "$_cp_parent/current.candidate.XXXXXX") || { comments_error 'could not create comments generation pointer'; return 1; }
 	if ! printf '%s\n' "$_cp_generation" >"$_cp_pointer"; then comments_error 'could not write comments generation pointer'; return 1; fi
@@ -1384,8 +1387,9 @@ comments_publish() {
 		printf 'error: comments result is stale; candidate preserved at %s\n' "$_cp_pointer" >&2; return 4
 	fi
 	if ! mv "$_cp_pointer" "$_cp_parent/current"; then comments_error 'could not publish comments generation pointer'; return 1; fi
-	if [ -n "$_cp_retained_ref" ] && [ -n "$_cp_prior_compare" ] && git show-ref --verify --quiet "$_cp_retained_ref"; then
-		compare_keep_comment_revisions "$_cp_destination/local.md" "$_cp_retained_ref" || comments_error 'could not release superseded comparison revisions'
+	if [ "${review_retain_objects:-0}" -eq 0 ] && [ -n "$_cp_retained_ref" ] && [ -n "$_cp_prior_compare" ] &&
+		git show-ref --verify --quiet "$_cp_retained_ref"; then
+		compare_keep_comment_revisions "$_cp_destination/local.md" "$_cp_retained_ref" "$_cp_destination/shared.md" || comments_error 'could not release superseded review revisions'
 	fi
 }
 
@@ -2381,6 +2385,8 @@ comments_finish_complete() {
 	_cfc_review=$1 _cfc_output=$2
 	comments_preflight_branch "$_cfc_review" || return 1
 	if [ -z "$cc_session" ] || [ -z "$cc_context" ]; then return 0; fi
+	review_retain_objects=0
+	if git show-ref --verify --quiet "refs/worktree/review-start/session/${_cfc_review#*/}"; then review_retain_objects=1; fi
 	cm_context=$cc_context cm_dir=$cc_dir
 	_cfc_failed=0 _cfc_publish_failed=0
 	cm_delivery_branch=$_cfc_output cm_delivery_source=$_cfc_review
@@ -2662,10 +2668,66 @@ comments_remove_custody() (
 		# for undo. Never replace those edits with the stale session copy.
 		_crc_session=''
 		if [ -n "$_crc_result" ]; then _crc_session=$(comments_field "$_crc_result/manifest" session) || exit 1; fi
-		if [ -z "$_crc_result" ] || [ "$_crc_session" != "$cc_session" ]; then comments_publish "$cc_context" "$cc_dir" || exit 1; fi
+		_crc_retained_ref="refs/worktree/review-start/comments/$cc_context"
+		review_retain_objects=0
+		if git show-ref --verify --quiet "refs/worktree/review-start/session/${_crc_branch#*/}"; then review_retain_objects=1; fi
+		if [ -z "$_crc_result" ] || [ "$_crc_session" != "$cc_session" ]; then
+			comments_publish "$cc_context" "$cc_dir" || exit 1
+			_crc_result=$(comments_result_dir "$cc_context") || exit 1
+		fi
+		if [ -n "$_crc_result" ] && git show-ref --verify --quiet "$_crc_retained_ref"; then
+			compare_keep_comment_revisions "$_crc_result/local.md" "$_crc_retained_ref" "$_crc_result/shared.md" || exit 1
+		fi
 	fi
 	comments_discard_branch "$_crc_branch"
 )
+
+# Finish resolves the exact local ref, even if a tag shares its name.
+finish_source_state() {
+	finish_source_head=$(git show-ref --hash --verify "refs/heads/$1" 2>/dev/null || true)
+	if [ -z "$finish_source_head" ]; then finish_source_state=missing
+	elif [ "$finish_source_head" = "$2" ]; then finish_source_state=equal
+	elif git merge-base --is-ancestor "$finish_source_head" "$2"; then finish_source_state=behind
+	else finish_source_state=diverged
+	fi
+	if [ "$finish_source_state" != missing ] && ! finish_source_worktree_available "$1"; then
+		finish_source_state=occupied
+	fi
+}
+
+finish_source_worktree_available() {
+	_fsw_worktrees=$(git worktree list --porcelain) || return 1
+	! printf '%s\n' "$_fsw_worktrees" | grep -Fxq -e "branch refs/heads/$1"
+}
+
+finish_require_source_worktree() {
+	[ "$(git symbolic-ref -q HEAD || true)" = "refs/heads/$1" ] || finish_source_worktree_available "$1" ||
+		die "local $1 is checked out in another worktree; choose Separate branch"
+}
+
+finish_check_source() {
+	finish_source_state "$1" "$2"
+	case "$finish_source_state:$3" in
+	equal:0|missing:0|behind:1) ;;
+	behind:0) die "local $1 is not at the reviewed tip; use --update-source to fast-forward it, or finish on a separate branch" ;;
+	occupied:*) die "local $1 is checked out in another worktree; finish on a separate branch" ;;
+	*) die "local $1 is not at the reviewed tip; finish on a separate branch" ;;
+	esac
+}
+
+finish_destinations() {
+	case "$1" in review/*) ;; *) die 'not on a review branch' ;; esac
+	_fd_source=$(review_config_get "branch.$1.reviewsource" || true)
+	_fd_tip=$(review_config_get "branch.$1.reviewtip" || true)
+	if [ -z "$_fd_source" ] || [ -z "$_fd_tip" ]; then die 'missing review metadata'; fi
+	[ "$(review_config_get "branch.$1.reviewreadonly" || true)" != 1 ] || die 'comparison is read-only'
+	porcelain_row finish-destination separate
+	finish_source_state "$_fd_source" "$_fd_tip"
+	case "$finish_source_state" in
+	equal|missing) porcelain_row finish-destination source "$finish_source_state" ;;
+	behind) porcelain_row finish-destination update-source ;;
+	esac
+}
 
 # ── Advice: lo que quien tiene el porcelain no necesita ──────────────────────
 
@@ -4250,6 +4312,16 @@ emit_reading_offers() {
 		_ero_srclabel="$_ero_remote/$_ero_branch"
 		_ero_markerkey="reviewworkflow.$_ero_branch.reviewed"
 	fi
+	_ero_draft_range=''
+	if [ "${from_draft:-0}" -eq 1 ]; then
+		_ero_anchor=$(start_draft_ref "$_ero_branch")
+		if git show-ref --verify --quiet "$_ero_anchor"; then
+			start_read_range "$_ero_anchor" "$(start_range_identity "$_ero_remote" "$_ero_branch" "$_ero_base" '' "$_ero_delta$_ero_local$_ero_offline")"
+			_ero_draft_range=1
+			_ero_srcref=$_rs_tip
+		fi
+		porcelain_row start-draft-range "${_ero_draft_range:-0}"
+	fi
 
 	# Tip missing is a hard error for every origin (remote default, local,
 	# offline, delta): silently returning zero offer rows would look to a client
@@ -4282,7 +4354,11 @@ emit_reading_offers() {
 	fi
 
 	_ero_prev="$(git config "$_ero_markerkey" || true)"
+	if [ -n "$_ero_draft_range" ]; then _ero_baseref=$_rs_base; fi
 	if [ "$_ero_delta" -eq 1 ]; then
+		if [ -n "$_ero_draft_range" ] && [ "$_ero_prev" != "$_rs_previous" ]; then
+			die 'last review point changed; prepare the review again'
+		fi
 		[ -n "$_ero_prev" ] || {
 			echo "error: no previous review of $_ero_branch recorded for this origin; run a full review first" >&2
 			return 1
@@ -5123,6 +5199,70 @@ compare_lease_commit() {
 		commit-tree "$_compare_lease_tree" "$@" -m "$_compare_lease_message"
 }
 
+# Shared by the two reading flows. Restrict the mapping to the private
+# destinations supplied by the caller and leave all tracking refs alone.
+review_fetch_isolated() {
+	_rfi_head=''
+	if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then _rfi_head='--no-write-fetch-head'; fi
+	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags --no-recurse-submodules ${_rfi_head:+"$_rfi_head"} -- "$@"
+}
+
+start_prepared_ref() {
+	case "$1" in ''|*[!0-9a-f]*) die 'invalid prepared review token' ;; esac
+	case ${#1} in 40|64) ;; *) die 'invalid prepared review token' ;; esac
+	printf 'refs/worktree/review-start/pending/%s\n' "$1"
+}
+
+start_range_identity() {
+	printf '%s\n' "$@" | git hash-object --stdin
+}
+
+start_read_range() {
+	_rs_pack=$(git show-ref --hash --verify "$1" 2>/dev/null) || die 'prepared review is unavailable'
+	_rs_range=$(git --no-replace-objects log -1 --format='%s' "$_rs_pack" --)
+	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous <<EOF
+$_rs_range
+EOF
+	[ "$_rs_received" = "$2" ] || die 'prepared review does not match the selected branch and range'
+	case "$_rs_base_label" in local|remote) ;; *) die 'invalid prepared review base' ;; esac
+	if [ "$_rs_base" = '-' ]; then _rs_base=''; fi
+	if [ "$_rs_previous" = '-' ]; then _rs_previous=''; fi
+	for _rs_commit in "$_rs_tip" "${_rs_base:-$_rs_tip}"; do
+		case "$_rs_commit" in ''|*[!0-9a-f]*) die 'invalid prepared review commit' ;; esac
+		[ "${#_rs_commit}" -eq "${#_rs_pack}" ] || die 'invalid prepared review commit'
+	done
+}
+
+review_delta_ref() {
+	printf 'refs/review-delta/%s\n' "$(printf '%s' "$1" | git hash-object --stdin)"
+}
+
+review_set_delta() {
+	_rsd_ref=$(review_delta_ref "$1")
+	if git cat-file -e "$2^{commit}" 2>/dev/null; then
+		git update-ref "$_rsd_ref" "$2" || return 1
+	elif git show-ref --verify --quiet "$_rsd_ref"; then
+		git update-ref -d "$_rsd_ref" || return 1
+	fi
+	git config "$1" "$2"
+}
+
+review_unset_delta() {
+	_rud_ref=$(review_delta_ref "$1") || return 1
+	git config --unset "$1" 2>/dev/null || true
+	if git show-ref --verify --quiet "$_rud_ref"; then git update-ref -d "$_rud_ref"; fi
+}
+
+review_drop_session() {
+	_rds_ref="refs/worktree/review-start/session/$1"
+	if _rds_oid=$(git show-ref --hash --verify "$_rds_ref" 2>/dev/null) &&
+		! git show-ref --verify --quiet "refs/heads/review/$1" &&
+		! git show-ref --verify --quiet "refs/heads/review-saved/$1"; then
+		git update-ref -d "$_rds_ref" "$_rds_oid" || return 1
+		printf '%s\n' "$1"
+	fi
+}
+
 compare_fetch_spec() {
 	_compare_selector=${1#fetch:}
 	_compare_remote=${_compare_selector%%:*}
@@ -5164,20 +5304,16 @@ compare_prepare() {
 	fi
 	# A private refspec with an empty refmap leaves even the corresponding
 	# tracking branch alone. Ignore configured tag following and submodule fetches.
-	_compare_fetch_head='--no-write-fetch-head'
-	if [ -n "$_compare_a_remote$_compare_b_remote" ] && ! git fetch -h 2>&1 | grep -q 'write-fetch-head'; then
-		_compare_fetch_head=''
-	fi
 	if [ -n "$_compare_a_remote" ] && [ "$_compare_a_remote" = "$_compare_b_remote" ]; then
 		if [ "$_compare_a_branch" = "$_compare_b_branch" ]; then die "$a and $b select the same remote branch; nothing to compare"; fi
-		git fetch -q --refmap= --no-tags --no-recurse-submodules ${_compare_fetch_head:+"$_compare_fetch_head"} -- "$_compare_a_remote" \
+		review_fetch_isolated "$_compare_a_remote" \
 			"refs/heads/$_compare_a_branch:$_compare_pending-base" "refs/heads/$_compare_b_branch:$_compare_pending-target"
 	else
 		if [ -n "$_compare_a_remote" ]; then
-			git fetch -q --refmap= --no-tags --no-recurse-submodules ${_compare_fetch_head:+"$_compare_fetch_head"} -- "$_compare_a_remote" "refs/heads/$_compare_a_branch:$_compare_pending-base"
+			review_fetch_isolated "$_compare_a_remote" "refs/heads/$_compare_a_branch:$_compare_pending-base"
 		fi
 		if [ -n "$_compare_b_remote" ]; then
-			git fetch -q --refmap= --no-tags --no-recurse-submodules ${_compare_fetch_head:+"$_compare_fetch_head"} -- "$_compare_b_remote" "refs/heads/$_compare_b_branch:$_compare_pending-target"
+			review_fetch_isolated "$_compare_b_remote" "refs/heads/$_compare_b_branch:$_compare_pending-target"
 		fi
 	fi
 	if [ -n "$_compare_a_remote" ]; then acommit=$(compare_literal_commit "$_compare_pending-base"); fi
@@ -5192,18 +5328,19 @@ compare_prepare() {
 
 # An IDE can be killed after receiving a token, or during a fetch. Normal
 # cancellation releases immediately; Clean expires abandoned preparations.
-compare_expired_preparations() {
-	_compare_pending_refs=$(git for-each-ref --format='%(objectname) %(refname) %(committerdate:unix)' refs/worktree/review-compare/pending/) || return 1
+review_expired_preparations() {
+	_compare_pending_refs=$(git for-each-ref --format='%(objectname) %(refname) %(committerdate:unix)' refs/worktree/review-compare/pending/ refs/worktree/review-start/pending/) || return 1
 	[ -n "$_compare_pending_refs" ] || return 0
 	_compare_cutoff=$(git rev-parse --since='1 day ago') || return 1
 	printf '%s\n' "$_compare_pending_refs" |
 		while read -r _compare_oid _compare_ref _compare_date; do
-			case "$_compare_ref" in *-base|*-target) continue ;; esac
+			case "$_compare_ref" in *-base|*-target|*-tip) continue ;; esac
 			case "$_compare_date" in ''|*[!0-9]*) continue ;; esac
 			if [ "$_compare_date" -lt "${_compare_cutoff#--max-age=}" ]; then
 				case "$_compare_ref" in *-lease)
 					git update-ref -d "${_compare_ref%-lease}-base" || return 1
 					git update-ref -d "${_compare_ref%-lease}-target" || return 1
+					git update-ref -d "${_compare_ref%-lease}-tip" || return 1
 					;;
 				esac
 				git update-ref -d "$_compare_ref" "$_compare_oid" || return 1
@@ -5233,14 +5370,17 @@ compare_drop_session() {
 }
 
 compare_keep_comment_revisions() {
+	_compare_comment_ref=$2
+	_compare_first_document=$1
+	shift 2
 	_compare_versions=$(
-		for _compare_document in "$1" "${3:-}"; do
+		for _compare_document in "$_compare_first_document" "$@"; do
 			if [ -f "$_compare_document" ]; then walk_normalize <"$_compare_document" | comments_contours entries || exit 1; fi
 		done
 	) || return 1
 	_compare_revisions=$(printf '%s\n' "$_compare_versions" | awk -F '\t' '$1=="comment-version" {if (!seen[$3]++) print $3; if (!seen[$4]++) print $4}')
 	_compare_tree_entries=''
-	set -- "$2"
+	set -- "$_compare_comment_ref"
 	for _compare_oid in $_compare_revisions; do
 		case "$(GIT_NO_LAZY_FETCH=1 git cat-file -t "$_compare_oid" 2>/dev/null || true)" in
 		commit) set -- "$@" -p "$_compare_oid" ;;
@@ -5262,6 +5402,13 @@ compare_keep_draft() {
 		return
 	fi
 	git update-ref "refs/worktree/review-compare/draft/${compare_draft_id#compare/}" "$compare_pack_oid"
+}
+
+start_draft_ref() { printf 'refs/worktree/review-start/draft/%s\n' "$1"; }
+
+start_drop_draft() {
+	_sdd_ref=$(start_draft_ref "$1")
+	if git show-ref --verify --quiet "$_sdd_ref"; then git update-ref -d "$_sdd_ref"; fi
 }
 
 compare_drop_draft() {
@@ -5990,7 +6137,9 @@ review_config_report() {
 		elif [ "$local_mode" -eq 1 ]; then
 			_offer_source=local
 		fi
-		emit_reading_offers "$branch" "$remote_val" "$_offer_source" "$delta_mode" || exit 1
+		if [ "${deltas_only:-0}" -eq 0 ]; then
+			emit_reading_offers "$branch" "$remote_val" "$_offer_source" "$delta_mode" || exit 1
+		fi
 	fi
 }
 

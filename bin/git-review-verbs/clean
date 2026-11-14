@@ -35,6 +35,7 @@ EOF
 restore_delta_if_incomplete() {
 	_rdi_src="$1"
 	_rdi_rb="review/$_rdi_src"
+	[ "$(git config "branch.$_rdi_rb.reviewreadonly" || true)" != 1 ] || return 0
 	# Completed finish: tip was reviewed; keep the marker advanced at start.
 	[ -z "$(git config "branch.$_rdi_rb.reviewundoouthead" || true)" ] || return 0
 	# No tip metadata: not a real review session config; leave markers alone.
@@ -46,9 +47,9 @@ restore_delta_if_incomplete() {
 		_rdi_mk="reviewworkflow.$_rdi_src.reviewed"
 	fi
 	if [ -n "$_rdi_prev" ]; then
-		git config "$_rdi_mk" "$_rdi_prev"
+		review_set_delta "$_rdi_mk" "$_rdi_prev"
 	else
-		git config --unset "$_rdi_mk" 2>/dev/null || true
+		review_unset_delta "$_rdi_mk"
 	fi
 }
 
@@ -208,14 +209,18 @@ fi
 
 if [ -n "$arg" ]; then
 	_compare_cleaned=$(compare_drop_session "$arg")
+	_start_cleaned=$(review_drop_session "$arg")
 else
 	_compare_cleaned=$(git for-each-ref --format='%(refname:lstrip=4)' refs/worktree/review-compare/session/ | while IFS= read -r name; do
 		compare_drop_session "$name"
 	done)
-	_compare_expired=$(compare_expired_preparations)
+	_start_cleaned=$(git for-each-ref --format='%(refname:lstrip=4)' refs/worktree/review-start/session/ | while IFS= read -r name; do
+		review_drop_session "$name"
+	done)
+	_compare_expired=$(review_expired_preparations)
 	if [ -n "$_compare_expired" ]; then cleaned=1; fi
 fi
-[ -z "$_compare_cleaned" ] || cleaned=1
+[ -z "$_compare_cleaned$_start_cleaned" ] || cleaned=1
 
 _undo_refs="$(git for-each-ref --format='%(refname)' "$undons")"
 if [ -n "$_undo_refs" ]; then
@@ -232,7 +237,7 @@ for b in $undobranches; do
 	# reviewresume must die with the undo: otherwise next/prev/save stay blocked
 	# ("mid-conflict") while finish --abort has nothing to restore.
 	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree \
+		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree reviewundosourcebefore reviewundosourcemove \
 		reviewresume; do
 		git config --unset "branch.review/$b.$k" 2>/dev/null || true
 	done

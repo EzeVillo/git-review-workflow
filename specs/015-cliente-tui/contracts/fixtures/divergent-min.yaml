@@ -1063,6 +1063,13 @@ comparison_context:
   base: "Base: {revision} ({oid})"
   target: "Inspect: {revision} ({oid})"
 
+finish_destinations:
+  prompt: "Choose a destination for your review changes"
+  failed: "Could not read the available finish destinations."
+  create: "Create PR branch and apply changes"
+  update: "Update PR branch and apply changes"
+  fetch: "Fetching review revisions…"
+
 compare_flow:
   walkLabel: "Walkthrough"
   keysLabel: "Walkthrough — keys only"

@@ -205,6 +205,19 @@ export const COMPARISON_COPY = {
     target: "Inspect: {revision} ({oid})",
 } as const;
 
+export const FINISH_DESTINATIONS = {
+    separate: {label: "A separate branch", description: "Stage changes on a new branch at the reviewed commit."},
+    source: {label: "Onto the PR branch itself", description: "Stage changes on the local PR branch."},
+    missing: {label: "Create PR branch and apply changes", description: "Create the local PR branch at the reviewed commit."},
+    "update-source": {label: "Update PR branch and apply changes", description: "Fast-forward the local branch to the reviewed commit."},
+    prompt: "Choose a destination for your review changes",
+    failed: "Could not read the available finish destinations.",
+} as const;
+
+export const FETCHING_REVIEW_REVISIONS = "Fetching review revisions…";
+export const START_LOCAL_DETAIL = "Review the local branch and fetch the remote base.";
+export const START_REMOTE_DETAIL = "Fetch the PR branch and base for this review.";
+
 export const COMPARE_COPY = {
     walkLabel: "Walkthrough",
     keysLabel: "Walkthrough — keys only",

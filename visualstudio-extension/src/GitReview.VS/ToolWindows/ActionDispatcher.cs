@@ -560,18 +560,43 @@ public sealed partial class ActionDispatcher
         if (state.State is null) return;
         var source = state.State.Source;
         var reviewBranch = state.State.Branch;
+        var finishToken = _expectation.Current ?? StaleGuard.CaptureToken(state);
 
+        var cwd = Cwd;
+        if (cwd is null) return;
+        var probe = await _panel.Cli.InvokeAsync("finish", new[] { "--destinations", "--porcelain" }, cwd).ConfigureAwait(true);
+        var legacy = probe.ExitCode != 0 && probe.Stderr.Contains("unknown option --destinations");
+        var destinations = (legacy ? "finish-destination\tseparate\nfinish-destination\tsource\tequal" : probe.Stdout)
+            .Split('\n').Select(line => line.TrimEnd('\r') switch
+            {
+                "finish-destination\tseparate" => "separate",
+                "finish-destination\tsource\tequal" => "source",
+                "finish-destination\tsource\tmissing" => "missing",
+                "finish-destination\tupdate-source" => "update-source",
+                _ => "",
+            }).Where(value => value.Length > 0).ToArray();
+        if ((!legacy && (probe.ExitCode != 0 || probe.TimedOut)) || destinations.Length == 0)
+        {
+            GitReviewDialogs.CliError(probe.Stderr, UserCopy.FinishDestinationsFailed, probe.Stdout);
+            return;
+        }
         var idx = GitReviewDialogs.Choose(
             UserCopy.FinishLocationTitle(source),
-            UserCopy.FinishLocationPlaceholder,
-            new[] { UserCopy.FinishLocationSeparate, UserCopy.FinishLocationOnto });
+            UserCopy.FinishDestinationsPrompt,
+            destinations.Select(value => value switch
+            {
+                "source" => UserCopy.FinishLocationOnto,
+                "missing" => UserCopy.FinishLocationCreate,
+                "update-source" => UserCopy.FinishLocationUpdate,
+                _ => UserCopy.FinishLocationSeparate,
+            }).ToArray());
         if (idx < 0) return;
-        var ontoSource = idx == 1;
+        var ontoSource = destinations[idx] != "separate";
 
         var result = await RunAsync(
             "finishReview",
-            new ActionParams.FinishOnto(ontoSource),
-            progress: UserCopy.FinishingProgress(source)).ConfigureAwait(true);
+            new ActionParams.FinishOnto(ontoSource, destinations[idx] == "update-source"),
+            progress: UserCopy.FinishingProgress(source), expected: finishToken).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
 
         // Derived from refreshed state, never from finish's human stdout.
@@ -1279,12 +1304,13 @@ public sealed partial class ActionDispatcher
         ActionParams? params_ = null,
         bool showFailure = true,
         bool network = false,
-        string? progress = null)
+        string? progress = null,
+        StateToken? expected = null)
     {
         using var reporting = progress is not null && _host.Progress is not null
             ? _host.Progress(progress)
             : null;
-        var token = _expectation.Current ?? StaleGuard.CaptureToken(_panel.State.Current);
+        var token = expected ?? _expectation.Current ?? StaleGuard.CaptureToken(_panel.State.Current);
         var fresh = await _panel.State.ReadForMutationAsync(continueAction: action == "continueReview").ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, fresh))
         {

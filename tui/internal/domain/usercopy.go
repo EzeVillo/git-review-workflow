@@ -548,6 +548,8 @@ const (
 	NoBranchesForReview       = "No branches to pick a review from were found."
 
 	SourceRemoteLabel  = "Remote"
+	SourceRemoteDetail = "Fetch the PR branch and base for this review."
+	SourceLocalDetail  = "Review the local branch and fetch the remote base."
 	SourceLocalLabel   = "Local"
 	SourceOfflineLabel = "Offline (local, no fetch)"
 
@@ -576,6 +578,12 @@ const (
 	FinishDestinationBranchDetail = "review-fixes/<branch>, staged on top of the PR tip"
 	FinishDestinationOntoLabel    = "Onto the PR branch itself"
 	FinishDestinationOntoDetail   = "stage the edits directly on the PR branch"
+	FinishDestinationCreate       = "Create PR branch and apply changes"
+	FinishDestinationUpdate       = "Update PR branch and apply changes"
+	FinishDestinationsFailed      = "Could not read the available finish destinations."
+	FinishDestinationsPrompt      = "Choose a destination for your review changes"
+	FetchingReviewRevisions       = "Fetching review revisions…"
+	CouldNotReadStartOptions      = "Could not read reading options for this branch."
 )
 
 const (

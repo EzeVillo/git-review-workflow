@@ -118,7 +118,7 @@ object StartWizard {
         val deltaProbe = Bg.sync(project, "git review config") {
             service.cliInvoker.invoke(
                 "config",
-                listOf("--porcelain", "--", branch),
+                listOf("--porcelain", "--deltas-only", "--", branch),
                 cwd,
             )
         }
@@ -149,8 +149,10 @@ object StartWizard {
         flags.add(0, "--porcelain")
         flags.add("--")
         flags.add(branch)
-        val cfgResult = Bg.sync(project, "git review config") {
-            service.cliInvoker.invoke("config", flags, cwd)
+        val cfgResult = Bg.sync(project, UserCopy.FETCHING_REVIEW_REVISIONS) {
+            val reply = service.cliInvoker.invoke("start", listOf("--prepare") + flags.drop(1), cwd, network = source.id != "offline")
+            if (reply.exitCode != 0 && reply.stderr.contains("unknown option --prepare")) service.cliInvoker.invoke("config", flags, cwd)
+            else reply
         }
         var offers: List<ReadingOffer>? = null
         if (cfgResult.exitCode == 0) {
@@ -177,6 +179,8 @@ object StartWizard {
                 range = range,
                 base = parsed.config.base,
                 deltas = deltas,
+                prepared = cfgResult.stdout.lineSequence().firstOrNull { it.startsWith("start-prepared\t") }?.substringAfter('\t'),
+                offers = offers,
             ),
             offers,
         )
@@ -196,7 +200,18 @@ object StartWizard {
         val range: ReviewRange,
         val base: String?,
         val deltas: List<DeltaRecord>?,
+        val prepared: String? = null,
+        val offers: List<ReadingOffer>? = null,
     )
+
+    private fun release(ctx: WizardContext) {
+        val prepared = ctx.prepared ?: return
+        if (prepared == "draft") return
+        val service = GitReviewService.getInstance(ctx.project)
+        Bg.async(ctx.project, UserCopy.START_LAYOUT_PLACEHOLDER, {
+            service.cliInvoker.invoke("start", listOf("--release", "--", prepared), ctx.cwd)
+        }) {}
+    }
 
     /**
      * Paso de forma de lectura. Se vuelve a él —y sólo por eso es una función
@@ -217,7 +232,10 @@ object StartWizard {
             UserCopy.startLayoutTitle(ctx.branch),
             labels,
         )
-        if (layoutIdx < 0) return
+        if (layoutIdx < 0) {
+            release(ctx)
+            return
+        }
         val picked = items[layoutIdx]
         val draftStep = picked.draft
         if (draftStep == null) {
@@ -271,6 +289,7 @@ object StartWizard {
                     // El refresco post-mutación trae la fila del borrador al
                     // panel, con su ruta. Nada más que hacer acá.
                     service.scheduleRefresh()
+                    release(ctx)
                     return
                 }
 
@@ -280,8 +299,7 @@ object StartWizard {
                     }
                     // Con las ofertas al día: si se creó el borrador, la de
                     // armarlo ya es la de continuarlo.
-                    val reloaded = loadOffers(ctx, service)
-                    layoutStep(ctx, reloaded.offers)
+                    layoutStep(ctx, ctx.offers)
                     return
                 }
             }
@@ -309,7 +327,7 @@ object StartWizard {
             Bg.sync(ctx.project, UserCopy.draftProgress(ctx.branch, build = false)) {
                 service.cliInvoker.invoke(
                     "walkthrough",
-                    draftArgs(ctx.branch, ctx.source, ctx.range, build = false, force = force),
+                    listOfNotNull(ctx.prepared?.let { "--start-prepared=$it" }) + draftArgs(ctx.branch, ctx.source, ctx.range, build = false, force = force),
                     ctx.cwd,
                 )
             }
@@ -336,32 +354,6 @@ object StartWizard {
                     ?: ""
             },
         )
-    }
-
-    /**
-     * Las ofertas para este contexto (misma invocación que el paso 4). Los
-     * borradores no se leen acá: cuál de los tres caminos corresponde ya viene
-     * decidido en la oferta.
-     */
-    private data class OfferContext(
-        val offers: List<ReadingOffer>?,
-    )
-
-    private fun loadOffers(ctx: WizardContext, service: GitReviewService): OfferContext {
-        val flags = offerConfigFlags(ctx.source, ctx.range).toMutableList()
-        flags.add(0, "--porcelain")
-        flags.add("--")
-        flags.add(ctx.branch)
-        val result = Bg.sync(ctx.project, "git review config") {
-            service.cliInvoker.invoke("config", flags, ctx.cwd)
-        }
-        if (result.exitCode != 0) return OfferContext(null)
-        return try {
-            val report = parseConfigPorcelain(result.stdout)
-            OfferContext(report.offers)
-        } catch (_: Exception) {
-            OfferContext(null)
-        }
     }
 
     /**
@@ -424,7 +416,10 @@ object StartWizard {
         var layout = ReviewLayout.WALK
         var deltas: List<DeltaRecord>? = null
         val report = Bg.sync(project, "git review config") {
-            service.cliInvoker.invoke("config", draftConfigArgs(draft.src, source, range), cwd)
+            val args = draftConfigArgs(draft.src, source, range)
+            val reply = service.cliInvoker.invoke("config", listOf("--from-draft") + args, cwd)
+            if (reply.stderr.contains("unknown option --from-draft")) service.cliInvoker.invoke("config", args, cwd)
+            else reply
         }
         if (report.exitCode == 0) {
             val parsed = try {
@@ -455,6 +450,7 @@ object StartWizard {
                 range = range,
                 deltas = deltas,
                 base = service.currentState().config?.base,
+                prepared = if (report.stdout.lineSequence().any { it == "start-draft-range\t1" }) "draft" else null,
             ),
             layout,
             ControlId.START_FROM_DRAFT,
@@ -515,6 +511,7 @@ object StartWizard {
         val validation = validateIntent(intent, IntentValidationContext(delta = delta))
         if (validation is IntentValidationResult.Fail) {
             UiMessages.error(project, validation.reason)
+            release(ctx)
             return
         }
 
@@ -522,7 +519,8 @@ object StartWizard {
         // forma de lectura -- el paso anterior, cuyo titulo nombra la rama -- ES
         // arrancar. Ver UserCopy.startLayoutTitle.
 
-        MutationActions(project, service).runStart(intent, branch) { result ->
+        MutationActions(project, service).runStart(intent, branch, ctx.prepared) { result ->
+            release(ctx)
             when (result) {
                 is StartRunResult.Ok -> {
                     // El acuse es el panel, asi que el panel tiene que estar a

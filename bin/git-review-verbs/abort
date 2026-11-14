@@ -85,10 +85,11 @@ fi
 
 # Cancelled, not completed: restore the tip of your last actual review (or clear
 # the marker) so a later --delta does not skip commits you never reviewed.
-if [ -n "$prevreviewed" ]; then
-	git config "$markerkey" "$prevreviewed"
-else
-	git config --unset "$markerkey" 2>/dev/null || true
+if [ "$_abort_compare" != 1 ]; then
+	if [ -n "$prevreviewed" ]; then review_set_delta "$markerkey" "$prevreviewed"
+	else review_unset_delta "$markerkey"
+	fi
+	review_drop_session "$src" >/dev/null
 fi
 
 git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r ref; do

@@ -37,7 +37,11 @@ type assistantStepMsg struct {
 	result              host.Result
 	build               func(domain.ConfigPorcelainResult) SelectOverlay
 	advance             func(domain.ConfigPorcelainResult) selectResult
-	compareAdvance      func(string) selectResult
+	rawAdvance          func(string) selectResult
+	compareProbe        bool
+	startPrepare        bool
+	startDeltas         bool
+	startFallback       tea.Cmd
 }
 
 // configProbeCmd runs one `config --porcelain <extra...>` probe. Always
@@ -87,10 +91,14 @@ func (m Model) handleAssistantStep(msg assistantStepMsg) (Model, tea.Cmd) {
 	}
 	m.progressOverlay = nil
 	if mutationFailed(msg.result) {
+		if (msg.startPrepare && strings.Contains(msg.result.Stderr, "unknown option --prepare")) ||
+			(msg.startDeltas && strings.Contains(msg.result.Stderr, "unknown option --deltas-only")) {
+			return m.beginAssistantProbe(msg.startFallback)
+		}
 		action := "startReview"
-		if msg.compareAdvance != nil {
+		if msg.compareProbe {
 			if strings.Contains(msg.result.Stderr, "unknown option --sources") {
-				return m.applySelectResult(msg.compareAdvance(""))
+				return m.applySelectResult(msg.rawAdvance(""))
 			}
 			action = "compareReview"
 		}
@@ -98,8 +106,8 @@ func (m Model) handleAssistantStep(msg assistantStepMsg) (Model, tea.Cmd) {
 		m.selectOverlay = nil
 		return m, nil
 	}
-	if msg.compareAdvance != nil {
-		return m.applySelectResult(msg.compareAdvance(msg.result.Stdout))
+	if msg.rawAdvance != nil {
+		return m.applySelectResult(msg.rawAdvance(msg.result.Stdout))
 	}
 	cfg := domain.ParseConfigPorcelain(msg.result.Stdout)
 	if msg.advance != nil {
@@ -160,10 +168,10 @@ func buildSourceStep(branch, preferredSource string, candidates []domain.Candida
 	}
 	var items []SelectItem
 	if hasRemote {
-		items = append(items, SelectItem{Label: domain.SourceRemoteLabel, Value: "remote"})
+		items = append(items, SelectItem{Label: domain.SourceRemoteLabel, Detail: domain.SourceRemoteDetail, Value: "remote"})
 	}
 	if hasLocal {
-		items = append(items, SelectItem{Label: domain.SourceLocalLabel, Value: "local"})
+		items = append(items, SelectItem{Label: domain.SourceLocalLabel, Detail: domain.SourceLocalDetail, Value: "local"})
 		items = append(items, SelectItem{Label: domain.SourceOfflineLabel, Value: "offline"})
 	}
 	cursor := 0
@@ -177,22 +185,21 @@ func buildSourceStep(branch, preferredSource string, candidates []domain.Candida
 		Items:  items,
 		Cursor: cursor,
 		OnPick: func(source string) selectResult {
-			return selectResult{probe: configAdvanceCmd(
-				sourceRangeProbeArgs(source, "full", branch),
-				func(cfg domain.ConfigPorcelainResult) selectResult {
-					return buildRangeResult(branch, source, cfg.Deltas)
-				},
-			)}
+			advance := func(cfg domain.ConfigPorcelainResult) selectResult {
+				return buildRangeResult(branch, source, cfg.Deltas)
+			}
+			return selectResult{probe: func() tea.Msg {
+				reply := host.InvokeReview(context.Background(), "config", []string{"--porcelain", "--deltas-only", "--", branch})
+				return assistantStepMsg{result: reply, advance: advance, startDeltas: true,
+					startFallback: configAdvanceCmd(sourceRangeProbeArgs(source, "full", branch), advance)}
+			}}
 		},
 	}
 }
 
 func buildRangeResult(branch, source string, deltas []domain.DeltaRecord) selectResult {
 	if _, ok := domain.DeltaForSource(deltas, source); !ok {
-		return selectResult{probe: configProbeCmd(
-			sourceRangeProbeArgs(source, "full", branch),
-			buildLayoutStep(branch, source, "full"),
-		)}
+		return startLayoutProbe(branch, source, "full")
 	}
 	return selectResult{next: buildRangeStep(branch, source, deltas)}
 }
@@ -209,13 +216,64 @@ func buildRangeStep(branch, source string, deltas []domain.DeltaRecord) *SelectO
 		Title: domain.StartAssistantRangeTitle,
 		Items: items,
 		OnPick: func(rng string) selectResult {
-			return selectResult{probe: configProbeCmd(
-				sourceRangeProbeArgs(source, rng, branch),
-				buildLayoutStep(branch, source, rng),
-			)}
+			return startLayoutProbe(branch, source, rng)
 		},
 	}
 	return &overlay
+}
+
+func startLayoutProbe(branch, source, rng string) selectResult {
+	args := sourceRangeProbeArgs(source, rng, branch)
+	probe := func() tea.Msg {
+		reply := host.InvokeReview(context.Background(), "start", append([]string{"--prepare"}, args...))
+		return assistantStepMsg{result: reply, startPrepare: true, startFallback: configProbeCmd(args, buildLayoutStep(branch, source, rng)), rawAdvance: func(stdout string) selectResult {
+			for _, line := range strings.Split(stdout, "\n") {
+				if token, ok := strings.CutPrefix(strings.TrimSpace(line), "start-prepared\t"); ok && token != "" {
+					intent := domain.ReviewIntent{Branch: branch, Source: source, Range: rng}
+					overlay := buildLayoutOverlay(intent, domain.ParseConfigPorcelain(stdout).Offers)
+					onPick := overlay.OnPick
+					overlay.onCancel = releaseStartCmd(token)
+					overlay.OnPick = func(value string) selectResult {
+						result := onPick(value)
+						if result.done == nil {
+							result.cmd = releaseStartCmd(token)
+							return result
+						}
+						req := result.done
+						req.startPrepared = token
+						if req.argv != nil {
+							req.argv.Args = append([]string{"--start-prepared=" + token}, req.argv.Args...)
+						} else {
+							argv, _ := domain.BuildArgv(req.action, req.params)
+							argv.Args = append([]string{"--prepared=" + token}, argv.Args...)
+							req.argv = &argv
+						}
+						return result
+					}
+					return selectResult{next: &overlay}
+				}
+			}
+			return selectResult{status: domain.CouldNotReadStartOptions}
+		}}
+	}
+	progress := ""
+	if source != "offline" {
+		progress = domain.FetchingReviewRevisions
+	}
+	return selectResult{probe: probe, probeProgress: progress}
+}
+
+func releaseStart(token string) {
+	if token != "" {
+		host.InvokeReview(context.Background(), "start", []string{"--release", "--", token})
+	}
+}
+
+func releaseStartCmd(token string) tea.Cmd {
+	if token == "" {
+		return nil
+	}
+	return func() tea.Msg { releaseStart(token); return nil }
 }
 
 // sourceRangeProbeArgs builds the branch-scoped probes' flags in config's

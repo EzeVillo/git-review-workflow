@@ -1814,6 +1814,12 @@ El selector agrupa por nombre las ramas conocidas y pide una versión por cada e
 
 La preparación fija ambos commits antes de calcular las ofertas. Su ref es privada del worktree y el token sólo se acepta para los dos selectores originales. Cancelar libera la preparación y Clean elimina las preparaciones abandonadas de más de un día. Cada rama de Compare conserva su propio par a través de Save y Continue. Abort y Clean liberan el par de la sesión retirada, incluidos los huérfanos cuando se borró la rama a mano. Los borradores conservan sus extremos hasta borrarlos y los resultados Local conservan los commits que necesitan sus rangos históricos. Los clientes conservan el flujo literal si la CLI instalada es anterior a esta opción.
 
+### Start: preparación del rango y destino de Finish
+
+Start trae el tip del PR y la base remota a refs privadas. Local sólo trae la base y Offline resuelve ambas revisiones localmente. Los asistentes calculan sus ofertas sobre ese par y entregan el mismo token al abrir o al escribir el borrador. Las refs de sesión conservan el rango durante Save, Continue y Undo. Las refs del último punto revisado mantienen el commit alcanzable hasta reemplazarlo o ejecutar Forget. El resultado de Finish conserva los commits que necesitan los comentarios privados, aun después de Clean.
+
+Finish consulta los destinos antes de tocar el índice. La rama local puede recibir las ediciones si falta o ya apunta al tip revisado. Si está atrasada, actualizarla es una elección explícita que usa un fast-forward con verificación del commit anterior. Una rama adelantada, divergente o en uso en otro worktree deja disponible el destino separado. Undo conserva el tip anterior y verifica el resultado antes de restaurarlo. El push se hace desde Git cuando el revisor decide publicar.
+
 ## 19. Portabilidad de comentarios y duración del CI
 
 Las corridas del 3 de noviembre de 2026 mostraron fallos que una ejecución Linux

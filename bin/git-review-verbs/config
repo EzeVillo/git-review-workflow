@@ -20,6 +20,7 @@ usage() {
 usage: $prog [<key> [<value>]] [--unset <key>] [--porcelain [--local | --offline] [--delta] [<branch>]]
        $prog --porcelain --compare <a> <b>
        $prog --porcelain --compare <comparison-draft>
+       $prog --porcelain [--deltas-only | --from-draft] -- <branch>
 
 Read or write git-review-workflow's own configuration: the base branch a full
 review compares against, and the remote a review is fetched from.
@@ -66,6 +67,8 @@ unset_key=""
 local_mode=0
 offline_mode=0
 delta_mode=0
+deltas_only=0
+from_draft=0
 pos_count=0
 pos1=""
 pos2=""
@@ -91,6 +94,8 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--compare) compare_mode=1 ;;
+	--deltas-only) deltas_only=1 ;;
+	--from-draft) from_draft=1 ;;
 	--porcelain)
 		porcelain=1
 		;;
@@ -159,6 +164,12 @@ fi
 if [ "$compare_mode" -eq 1 ]; then
 	[ "$porcelain" -eq 1 ] || die "--compare requires --porcelain"
 	[ "$local_mode$offline_mode$delta_mode" = 000 ] || die "--compare cannot be combined with --local, --offline or --delta"
+fi
+if [ "$deltas_only" -eq 1 ] && { [ "$porcelain" -ne 1 ] || [ "$pos_count" -ne 1 ] || [ "$compare_mode$delta_mode" != 00 ] || [ -n "$unset_key" ]; }; then
+	die '--deltas-only requires --porcelain and one branch'
+fi
+if [ "$from_draft" -eq 1 ] && { [ "$porcelain" -ne 1 ] || [ "$pos_count" -ne 1 ] || [ "$compare_mode$deltas_only" != 00 ] || [ -n "$unset_key" ]; }; then
+	die '--from-draft requires --porcelain and one branch'
 fi
 
 mode=""

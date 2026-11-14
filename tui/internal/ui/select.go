@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -31,6 +32,7 @@ type selectResult struct {
 	probeProgress string
 	cmd           tea.Cmd
 	done          *mutationRequest
+	expected      *domain.StateToken
 	// status: set the status line directly and close the picker, with no
 	// mutation and nothing further to run — goToEntry's own "no editor is
 	// configured" (T086/T089) is the only user today.
@@ -63,7 +65,11 @@ func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
 		m.statusLine = r.status
 	}
 	if r.done != nil {
-		return m.beginMutation(*r.done, currentStateToken(m.Panel))
+		token := currentStateToken(m.Panel)
+		if r.expected != nil {
+			token = *r.expected
+		}
+		return m.beginMutation(*r.done, token)
 	}
 	if r.probe != nil {
 		next, cmd := m.beginAssistantProbe(r.probe)

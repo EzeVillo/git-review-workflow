@@ -134,7 +134,8 @@ type ActionParams struct {
 	// setBase / setRemote
 	Name string
 	// finishReview / resumeFinish
-	OntoSource bool
+	OntoSource   bool
+	UpdateSource bool
 	// undoFinish
 	Force bool
 	// compareReview
@@ -194,6 +195,9 @@ func BuildArgv(action string, p ActionParams) (Argv, bool) {
 	case "saveReview":
 		return Argv{Verb: "save"}, true
 	case "finishReview":
+		if p.UpdateSource {
+			return Argv{Verb: "finish", Args: []string{"--update-source"}}, true
+		}
 		if p.OntoSource {
 			return Argv{Verb: "finish", Args: []string{"--onto-source"}}, true
 		}

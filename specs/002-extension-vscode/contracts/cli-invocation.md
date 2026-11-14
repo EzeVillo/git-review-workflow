@@ -253,6 +253,12 @@ Al abrir Compare se consulta `config --porcelain` (lectura, sin red) para obtene
 
 Crear/actualizar usa `walkthrough draft --porcelain --compare --prepared=<token> -- <a> <b>`. Retomar sólo revela el bloque de borradores. El registro `draft` admite `source=compare` y `range=full`. `draft-title<TAB>src<TAB>texto` es aditivo, se asocia por `src` sin depender del orden y no reemplaza la identidad. Validate and start usa `walkthrough draft --build --compare -- <src>`, luego el probe del draft y finalmente `compare [--keys] --draft -- <src>`. Nuevos borradores conservan los commits que preparó la CLI. Actualizar informa los números del registro `merged`.
 
+### Preparación de Start y destinos de Finish
+
+El asistente lee `config --porcelain --deltas-only -- <rama>` para el selector de rango y usa `start --prepare [--local | --offline] [--delta] -- <rama>` para las ofertas exactas. La CLI devuelve `start-prepared<TAB>token`. Abrir usa `start --prepared=<token>` y crear o actualizar el borrador usa `walkthrough draft --start-prepared=<token>`, con los flags del rango. El asistente libera el token con `start --release -- <token>`. Al validar un borrador, `config --porcelain --from-draft` consulta el rango guardado y `start --from-draft` lo abre si el registro `start-draft-range` indica que existe.
+
+`finish --destinations --porcelain` reporta `finish-destination<TAB>separate` y, cuando aplica, `source<TAB>equal`, `source<TAB>missing` o `update-source`. La elección de actualización envía `finish --update-source`. La CLI revalida la rama local antes de modificar la revisión y registra su posición anterior para Undo.
+
 ## Respuesta opcional de guardado
 
 Save admite `--porcelain` sólo cuando status anunció `save-state` y hay guard

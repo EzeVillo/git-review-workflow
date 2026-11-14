@@ -151,16 +151,44 @@ class FinishReviewAction : AnAction(), DumbAware {
             return
         }
         val source = state.state?.source ?: return
-        val options = arrayOf(UserCopy.FINISH_LOCATION_SEPARATE, UserCopy.FINISH_LOCATION_ONTO)
+        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        val reply = Bg.sync(project, UserCopy.FINISH_DESTINATIONS_PROMPT) {
+            service.cliInvoker.invoke("finish", listOf("--destinations", "--porcelain"), cwd)
+        }
+        val destinations = if (reply.exitCode != 0 && reply.stderr.contains("unknown option --destinations")) {
+            listOf("separate", "source")
+        } else if (reply.exitCode == 0 && !reply.timedOut) {
+            reply.stdout.lineSequence().mapNotNull { row ->
+                when (row) {
+                    "finish-destination\tseparate" -> "separate"
+                    "finish-destination\tsource\tequal" -> "source"
+                    "finish-destination\tsource\tmissing" -> "missing"
+                    "finish-destination\tupdate-source" -> "update-source"
+                    else -> null
+                }
+            }.toList()
+        } else emptyList()
+        if (destinations.isEmpty()) {
+            UiMessages.error(project, UiMessages.flatten(reply.stderr).ifEmpty { UserCopy.FINISH_DESTINATIONS_FAILED })
+            return
+        }
+        val options = destinations.map {
+            when (it) {
+                "source" -> UserCopy.FINISH_LOCATION_ONTO
+                "missing" -> UserCopy.FINISH_LOCATION_CREATE
+                "update-source" -> UserCopy.FINISH_LOCATION_UPDATE
+                else -> UserCopy.FINISH_LOCATION_SEPARATE
+            }
+        }.toTypedArray()
         val idx = UiMessages.choose(
             project,
-            UserCopy.FINISH_LOCATION_PLACEHOLDER,
+            UserCopy.FINISH_DESTINATIONS_PROMPT,
             UserCopy.finishLocationTitle(source),
             options,
         )
         if (idx < 0) return
-        val onto = idx == 1
-        mutations(e)?.runFinish(onto, expected = captureToken(state)) { msg ->
+        val destination = destinations[idx]
+        mutations(e)?.runFinish(destination != "separate", expected = captureToken(state), updateSource = destination == "update-source") { msg ->
             // El acuse del caso normal es el banner de finish-pending, asi que
             // el panel tiene que estar a la vista: Finish esta en su titulo pero
             // tambien en el menu Tools, donde puede no estarlo.

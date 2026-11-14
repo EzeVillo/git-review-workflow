@@ -214,11 +214,14 @@ export async function startFromDraft(
     // El borrador ya es legible: lo que se relee es si marcó entradas
     // esenciales, y eso sólo lo sabe la CLI.
     let layout: ReviewLayout = "walk";
-    const report = await invokeGitReview(
+    let report = await invokeGitReview(
         "config",
-        draftConfigArgs(draft.src, source, range),
+        [...(source === "compare" ? [] : ["--from-draft"]), ...draftConfigArgs(draft.src, source, range)],
         {...options, network: false}
     );
+    if (report.stderr.includes("unknown option --from-draft")) {
+        report = await invokeGitReview("config", draftConfigArgs(draft.src, source, range), {...options, network: false});
+    }
     if (!report.errorCode && report.exitCode === 0) {
         const offers = parseConfigPorcelain(report.stdout).offers;
         if (offersIncludeKeys(offers)) {
@@ -231,7 +234,7 @@ export async function startFromDraft(
     }
 
     const intent: ReviewIntent = {branch: draft.src, layout, range, source};
-    const args = intentToArgs(intent, draft.src);
+    const args = [...(/^start-draft-range\t1\r?$/m.test(report.stdout) ? ["--from-draft"] : []), ...intentToArgs(intent, draft.src)];
     // Sin confirmación: es la misma que se borró del asistente, y acá sobra
     // todavía más — el botón que trajo hasta acá dice "Validate and start", y
     // el paso de keys (cuando lo hay) ya nombra la rama.

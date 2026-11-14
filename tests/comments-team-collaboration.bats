@@ -115,8 +115,8 @@ check_saved_remote_advance() {
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *'local feature/comments is not at the reviewed tip'* ]]
 	[ "$(git rev-parse feature/comments)" = "$(git rev-parse origin/feature/comments)" ]
-	[ "$(git config branch.review/feature/comments.reviewundohead)" != '' ]
-	team_review finish --abort
+	[ -z "$(git config branch.review/feature/comments.reviewundohead || true)" ]
+	[ -z "$(git for-each-ref refs/review-undo/feature/comments/)" ]
 	comments_snapshot "$TEAM_ROOT/after-refusal"
 	comments_assert_snapshot "$TEAM_ROOT/before-refusal" "$TEAM_ROOT/after-refusal" branch head index staged unstaged worktree
 	comments_refresh_paths

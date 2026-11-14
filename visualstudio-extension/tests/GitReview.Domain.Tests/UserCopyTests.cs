@@ -243,7 +243,7 @@ public class UserCopyTests
     {
         var title = UserCopy.CompareConfirmTitle("a", "b", ReviewLayout.Step);
         Assert.Equal(
-            "Compare a → b commit by commit?",
+            "Review b against a commit by commit?",
             title);
         Assert.Equal("Comparing a → b…", UserCopy.ComparingProgress("a", "b"));
         Assert.Equal("Opens a separate review for reading. Your working tree must be clean.", UserCopy.CompareConfirmDetail);

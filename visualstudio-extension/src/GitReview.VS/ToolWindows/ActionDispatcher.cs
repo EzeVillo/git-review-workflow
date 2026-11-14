@@ -1063,20 +1063,20 @@ public sealed partial class ActionDispatcher
 
     private async Task CompareAsync()
     {
-        // Las candidatas que la CLI ya reportó, más lo que se tipee: compare toma un
-        // commit-ish, así que un tag o un SHA valen — pero mostrar la lista evita que
-        // el caso común (una rama) haya que escribirlo de memoria.
-        var revisions = ConfigPorcelain.CompareRevisionItems(State.Candidates ?? Array.Empty<CandidateBranch>());
-        var candidates = revisions.Select(c => c.Label).ToList();
-        var lower = PickCommitIsh(UserCopy.CompareLowerTitle, UserCopy.CompareBasePrompt + " " + UserCopy.CompareRevisionPrompt, candidates);
-        if (lower is null) return;
-        var lowerRef = revisions.FirstOrDefault(c => c.Label == lower)?.Value ?? lower;
-        var upper = PickCommitIsh(UserCopy.CompareUpperTitle, UserCopy.CompareTargetPromptText(lowerRef) + " " + UserCopy.CompareRevisionPrompt, candidates);
-        if (upper is null) return;
-        var upperRef = revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper;
-
         var cwd = Cwd;
         if (cwd is null) return;
+        var config = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain" }, cwd, network: false).ConfigureAwait(true);
+        var revisions = config.ExitCode == 0 && !config.TimedOut
+            ? ConfigPorcelain.CompareRevisionItems(ConfigPorcelain.ParseConfigPorcelain(config.Stdout).Candidates)
+            : Array.Empty<CompareRevisionItem>();
+        var candidates = revisions.Select(c => c.Label).ToList();
+        var upper = PickCommitIsh(UserCopy.CompareTargetTitle, UserCopy.CompareRevisionPrompt, candidates);
+        if (upper is null) return;
+        var upperRef = revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper;
+        var lower = PickCommitIsh(UserCopy.CompareBaseTitle, UserCopy.CompareBasePromptText(upperRef) + " " + UserCopy.CompareRevisionPrompt, candidates);
+        if (lower is null) return;
+        var lowerRef = revisions.FirstOrDefault(c => c.Label == lower)?.Value ?? lower;
+
         var report = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain", "--compare", "--", lowerRef, upperRef }, cwd, network: false).ConfigureAwait(true);
         if (report.ExitCode != 0 || report.TimedOut)
         {

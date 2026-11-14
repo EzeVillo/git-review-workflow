@@ -56,10 +56,14 @@ func (p *TextPrompt) Render(vp Viewport) string {
 	st := stylesFor(vp.Color)
 	lines := []string{
 		st.heading.Render(p.Title), "",
-		p.Context, "",
-		p.Input.View(), "",
-		st.keybar.Render("enter") + ":next  " + st.keybar.Render("esc") + ":cancel",
 	}
+	if p.Context != "" {
+		lines = append(lines, p.Context, "")
+	}
+	lines = append(lines,
+		p.Input.View(), "",
+		st.keybar.Render("enter")+":next  "+st.keybar.Render("esc")+":cancel",
+	)
 	return capOverlay(lines, vp)
 }
 
@@ -113,16 +117,15 @@ func compareLayoutFlags(layout string) []string {
 // before the eventual spawn, never re-captured at any step in between.
 func (m Model) beginCompareReview() (Model, tea.Cmd) {
 	token := currentStateToken(m.Panel)
-	m.textPrompt = NewTextPrompt(domain.CompareLowerTitle, domain.RevisionPlaceholder, func(lower string) selectResult {
-		prompt := NewTextPrompt(domain.CompareUpperTitle, domain.RevisionPlaceholder, func(upper string) selectResult {
+	m.textPrompt = NewTextPrompt(domain.CompareTargetTitle, domain.CompareRevisionPrompt, func(upper string) selectResult {
+		prompt := NewTextPrompt(domain.CompareBaseTitle, domain.CompareRevisionPrompt, func(lower string) selectResult {
 			return selectResult{probe: configProbeCmd([]string{"--compare", "--", lower, upper}, func(cfg domain.ConfigPorcelainResult) SelectOverlay {
 				return *compareLayoutStep(lower, upper, token, cfg.Offers)
 			})}
 		})
-		prompt.Context = domain.CompareTargetPromptText(lower)
+		prompt.Context = domain.CompareBasePromptText(upper)
 		return selectResult{nextPrompt: prompt}
 	})
-	m.textPrompt.Context = domain.CompareBasePrompt
 	return m, nil
 }
 
@@ -169,7 +172,7 @@ func compareLayoutStep(lower, upper string, token domain.StateToken, offers []do
 				CompareUpper:  upper,
 			}
 			req := mutationRequest{action: "compareReview", params: params}
-			title := interpolate(domain.CompareReviewConfirmTitle, "{lower}", domain.RevisionLabel(lower), "{upper}", domain.RevisionLabel(upper))
+			title := domain.ComparisonSummary(lower, upper) + "?"
 			overlay := ConfirmMutation("compareReview", title, domain.CompareReviewConfirmDetail, domain.CompareRevisionsLabel, token, req)
 			return selectResult{confirmNext: overlay}
 		},

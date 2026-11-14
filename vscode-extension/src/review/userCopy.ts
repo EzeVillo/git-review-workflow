@@ -210,12 +210,11 @@ export const COMPARE_COPY = {
     keysLabel: "Walkthrough — keys only",
     stepLabel: "Commit by commit",
     wholeLabel: "Whole diff",
-    "baseTitle": "Base revision",
-    "basePrompt": "Choose the starting content for the comparison.",
-    "targetTitle": "Revision to inspect",
-    "targetPrompt": "Base: {base}. Choose the revision to inspect.",
+    "targetTitle": "What do you want to review?",
+    "baseTitle": "Compare against what?",
+    "basePrompt": "Reviewing {target}.",
     "revisionPrompt": "Branch, tag or commit",
-    "summary": "Base: {base} → Inspect: {target}",
+    "summary": "Review {target} against {base}",
     "layoutTitle": "How to read the comparison",
     "walkDetail": "Your draft or the author's order; whole diff if neither applies.",
     "keysDetail": "Only entries marked key; requires a draft or walkthrough with keys.",
@@ -236,17 +235,13 @@ export function revisionLabel(value: string): string {
 export function comparisonSummary(base: string, target: string): string {
     return COMPARE_COPY.summary.replace(/\{(base|target)\}/g, (_, role) => revisionLabel(role === "base" ? base : target));
 }
-export function compareTargetPrompt(base: string): string {
-    return COMPARE_COPY.targetPrompt.replace("{base}", () => revisionLabel(base));
+export function compareBasePrompt(target: string): string {
+    return COMPARE_COPY.basePrompt.replace("{target}", () => revisionLabel(target));
 }
 
 export function compareConfirmTitle(base: string, target: string, layout: string): string {
-    return `Compare ${revisionLabel(base)} → ${revisionLabel(target)} ${layout}?`;
+    return `${comparisonSummary(base, target)} ${layout}?`;
 }
 export function comparingProgress(base: string, target: string): string {
     return `Comparing ${revisionLabel(base)} → ${revisionLabel(target)}…`;
-}
-
-export function compareTargetTitle(base: string): string {
-    return `${COMPARE_COPY.targetTitle} (${COMPARE_COPY.baseTitle}: ${revisionLabel(base)})`;
 }

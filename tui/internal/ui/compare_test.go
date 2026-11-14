@@ -8,7 +8,7 @@ import (
 )
 
 // TestBeginCompareReviewChainsToAConfirmWithTheRightArgv is T089's own
-// gate for compareReview: two free-text questions (lower, upper), a fixed
+// gate for compareReview: two free-text questions (target, base), a fixed
 // layout picker from the exact range offers, and
 // the LAST step opens ConfirmMutation with the literal id "compareReview"
 // (gate 2, T067/T085) rather than running the mutation directly the way
@@ -19,24 +19,24 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 	if m2.textPrompt == nil {
 		t.Fatal("beginCompareReview must open the first free-text question")
 	}
-	if m2.textPrompt.Title != domain.CompareLowerTitle {
-		t.Fatalf("first question title = %q, want %q", m2.textPrompt.Title, domain.CompareLowerTitle)
+	if m2.textPrompt.Title != "What do you want to review?" {
+		t.Fatalf("unexpected first question: %q", m2.textPrompt.Title)
 	}
 
-	lowerResult := m2.textPrompt.OnSubmit("develop")
-	if lowerResult.nextPrompt == nil {
-		t.Fatal("submitting the lower revision must open the SECOND free-text question")
+	targetResult := m2.textPrompt.OnSubmit("feature/x")
+	if targetResult.nextPrompt == nil {
+		t.Fatal("submitting the target revision must open the second question")
 	}
-	if lowerResult.nextPrompt.Title != domain.CompareUpperTitle {
-		t.Fatalf("second question title = %q, want %q", lowerResult.nextPrompt.Title, domain.CompareUpperTitle)
+	if targetResult.nextPrompt.Title != "Compare against what?" {
+		t.Fatalf("unexpected second question: %q", targetResult.nextPrompt.Title)
 	}
 
-	if lowerResult.nextPrompt.Context != "Base: develop. Choose the revision to inspect." {
-		t.Fatalf("base context lost: %q", lowerResult.nextPrompt.Context)
+	if targetResult.nextPrompt.Context != "Reviewing feature/x." {
+		t.Fatalf("target context lost: %q", targetResult.nextPrompt.Context)
 	}
-	upperResult := lowerResult.nextPrompt.OnSubmit("feature/x")
-	if upperResult.probe == nil {
-		t.Fatal("submitting the upper revision must query exact comparison offers")
+	baseResult := targetResult.nextPrompt.OnSubmit("develop")
+	if baseResult.probe == nil {
+		t.Fatal("submitting the base revision must query exact comparison offers")
 	}
 	cfg := domain.ConfigPorcelainResult{Offers: []domain.ReadingOffer{
 		{ID: domain.OfferWalk, Rank: "recommended"},
@@ -44,15 +44,15 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 		{ID: domain.OfferStep, Rank: "available"},
 		{ID: domain.OfferWhole, Rank: "available"},
 	}}
-	upperResult.next = compareLayoutStep("develop", "feature/x", currentStateToken(m.Panel), cfg.Offers)
+	offer := compareLayoutStep("develop", "feature/x", currentStateToken(m.Panel), cfg.Offers)
 
-	if upperResult.next.Notice != "Base: develop → Inspect: feature/x" {
-		t.Fatalf("range summary lost: %q", upperResult.next.Notice)
+	if offer.Notice != "Review feature/x against develop" {
+		t.Fatalf("range summary lost: %q", offer.Notice)
 	}
-	if upperResult.next.Items[2].Detail != domain.CompareStepDetail {
+	if offer.Items[2].Detail != domain.CompareStepDetail {
 		t.Fatal("step semantics must be visible")
 	}
-	stepResult := upperResult.next.OnPick("step")
+	stepResult := offer.OnPick("step")
 	if stepResult.confirmNext == nil {
 		t.Fatal("picking a layout must open the SAME confirm gate the body uses, not run directly")
 	}

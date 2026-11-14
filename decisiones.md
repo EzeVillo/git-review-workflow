@@ -1790,8 +1790,10 @@ misma base y el mismo destino incluso si sus refs avanzan después de abrirlos.
 
 ### Compare: roles visibles antes y después de abrir
 
-El selector nombra Base revision y Revision to inspect. La segunda pregunta conserva
-la base elegida, y el paso de lectura muestra ambos extremos. El panel mantiene los
+El selector pregunta primero «What do you want to review?» y después «Compare against what?».
+La segunda pregunta muestra qué se eligió para revisar, y el paso de lectura muestra ambos
+extremos. Los IDE consultan las ramas al abrir Compare porque una rama recién creada puede
+faltar en el estado del panel, aunque Git ya resuelva su nombre escrito. El panel mantiene los
 OID originales y explica la conservación de Local sin anunciar el rechazo de Finish.
 Compare queda accesible antes de configurar la base de Start porque no depende de
 ella. Walkthrough sigue usando el draft del revisor antes que el del autor; Keys

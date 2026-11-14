@@ -569,15 +569,6 @@ const (
 	SetBaseTitle   = "Which branch do pull requests land on?"
 	SetRemoteTitle = "Which remote should reviews fetch from?"
 
-	// CompareLowerTitle / CompareUpperTitle: compareReview's own two free-text
-	// questions (T089/T093) — compare has no `offer` record to pick from
-	// (unlike start's branch step), so the CLI's own rejection of a bad name
-	// is the validation, exactly as compareReview.ts's own comment notes.
-	CompareLowerTitle   = CompareBaseTitle
-	CompareUpperTitle   = CompareTargetTitle
-	RevisionPlaceholder = CompareRevisionPrompt
-
-	CompareReviewConfirmTitle  = "Compare {lower} → {upper}?"
 	CompareReviewConfirmDetail = CompareConfirmDetail
 
 	FinishDestinationTitle        = "Where should your edits go?"
@@ -702,12 +693,11 @@ func ComparisonLines(c *ComparisonRecord) []string {
 }
 
 const (
-	CompareBaseTitle      = "Base revision"
-	CompareBasePrompt     = "Choose the starting content for the comparison."
-	CompareTargetTitle    = "Revision to inspect"
-	CompareTargetPrompt   = "Base: {base}. Choose the revision to inspect."
+	CompareTargetTitle    = "What do you want to review?"
+	CompareBaseTitle      = "Compare against what?"
+	CompareBasePrompt     = "Reviewing {target}."
 	CompareRevisionPrompt = "Branch, tag or commit"
-	CompareSummary        = "Base: {base} → Inspect: {target}"
+	CompareSummary        = "Review {target} against {base}"
 	CompareLayoutTitle    = "How to read the comparison"
 	CompareWalkDetail     = "Your draft or the author's order; whole diff if neither applies."
 	CompareKeysDetail     = "Only entries marked key; requires a draft or walkthrough with keys."
@@ -731,8 +721,8 @@ func RevisionLabel(value string) string {
 func ComparisonSummary(base, target string) string {
 	return strings.NewReplacer("{base}", RevisionLabel(base), "{target}", RevisionLabel(target)).Replace(CompareSummary)
 }
-func CompareTargetPromptText(base string) string {
-	return strings.ReplaceAll(CompareTargetPrompt, "{base}", RevisionLabel(base))
+func CompareBasePromptText(target string) string {
+	return strings.ReplaceAll(CompareBasePrompt, "{target}", RevisionLabel(target))
 }
 
 const (

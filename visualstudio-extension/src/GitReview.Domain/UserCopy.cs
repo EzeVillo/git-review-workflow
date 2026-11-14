@@ -285,8 +285,6 @@ public static class UserCopy
     public const string ResumeProgress = "Resuming the finish…";
     public const string ResumeFailed = "Could not continue the finish.";
 
-    public const string CompareLowerTitle = CompareBaseTitle;
-    public const string CompareUpperTitle = CompareTargetTitle;
     public const string CompareLayoutTitle = "How to read the comparison";
     public const string CompareLayoutPlaceholder =
         "Walkthrough, keys only, commit by commit, or whole diff";
@@ -296,7 +294,7 @@ public static class UserCopy
     public const string CompareFailed = "Could not compare those two revisions.";
 
     public static string CompareConfirmTitle(string lower, string upper, ReviewLayout layout) =>
-        $"Compare {RevisionLabel(lower)} → {RevisionLabel(upper)} {LayoutOffers.LayoutSummary(layout)}?";
+        $"{ComparisonSummary(lower, upper)} {LayoutOffers.LayoutSummary(layout)}?";
 
     public static string ComparingProgress(string lower, string upper) =>
         $"Comparing {RevisionLabel(lower)} → {RevisionLabel(upper)}…";
@@ -417,12 +415,11 @@ public static class UserCopy
     public const string CompareKeysLabel = "Walkthrough — keys only";
     public const string CompareStepLabel = "Commit by commit";
     public const string CompareWholeLabel = "Whole diff";
-    public const string CompareBaseTitle = "Base revision";
-    public const string CompareBasePrompt = "Choose the starting content for the comparison.";
-    public const string CompareTargetTitle = "Revision to inspect";
-    public const string CompareTargetPrompt = "Base: {base}. Choose the revision to inspect.";
+    public const string CompareTargetTitle = "What do you want to review?";
+    public const string CompareBaseTitle = "Compare against what?";
+    public const string CompareBasePrompt = "Reviewing {target}.";
     public const string CompareRevisionPrompt = "Branch, tag or commit";
-    public const string CompareSummary = "Base: {base} → Inspect: {target}";
+    public const string CompareSummary = "Review {target} against {base}";
     public const string CompareWalkDetail = "Your draft or the author's order; whole diff if neither applies.";
     public const string CompareKeysDetail = "Only entries marked key; requires a draft or walkthrough with keys.";
     public const string CompareStepDetail = "Commits unique to the destination; skips merges and side branches.";
@@ -436,7 +433,7 @@ public static class UserCopy
         return prefix is null ? value : value.Substring(prefix.Length);
     }
     public static string ComparisonSummary(string bas, string target) => System.Text.RegularExpressions.Regex.Replace(CompareSummary, @"\{(base|target)\}", match => RevisionLabel(match.Groups[1].Value == "base" ? bas : target));
-    public static string CompareTargetPromptText(string bas) => CompareTargetPrompt.Replace("{base}", RevisionLabel(bas));
+    public static string CompareBasePromptText(string target) => CompareBasePrompt.Replace("{target}", RevisionLabel(target));
 }
 
 public static class CommentsCopy

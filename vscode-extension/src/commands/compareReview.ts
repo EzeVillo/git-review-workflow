@@ -8,7 +8,7 @@ import {confirmMutation} from "../review/confirm";
 import {PanelRevealer, revealPanel} from "../views/reveal";
 import {parseMergedRecord} from "../review/draftFlow";
 import {draftUpdated} from "../review/userCopy";
-import {COMPARE_COPY, comparisonSummary, compareTargetPrompt, compareTargetTitle, compareConfirmTitle, comparingProgress} from "../review/userCopy";
+import {COMPARE_COPY, comparisonSummary, compareBasePrompt, compareConfirmTitle, comparingProgress} from "../review/userCopy";
 
 /**
  * `gitReview.compareReview`: monta `git review compare <a> <b> [--step|--no-walk|--keys]`
@@ -20,17 +20,17 @@ export async function compareReview(
     getInvokeOptions: () => InvokeOptions,
     reveal: PanelRevealer
 ): Promise<void> {
-    const candidates = await loadCandidates(stateManager, getInvokeOptions());
-    const lower = await pickCommitIsh(candidates, COMPARE_COPY.baseTitle, COMPARE_COPY.basePrompt);
-    if (!lower) {
-        return;
-    }
-    const upper = await pickCommitIsh(candidates, compareTargetTitle(lower), compareTargetPrompt(lower));
+    const options = getInvokeOptions();
+    const candidates = await loadCandidates(options);
+    const upper = await pickCommitIsh(candidates, COMPARE_COPY.targetTitle);
     if (!upper) {
         return;
     }
+    const lower = await pickCommitIsh(candidates, COMPARE_COPY.baseTitle, compareBasePrompt(upper));
+    if (!lower) {
+        return;
+    }
 
-    const options = getInvokeOptions();
     const report = await invokeGitReview("config", ["--porcelain", "--compare", "--", lower, upper], {...options, network: false});
     if (report.errorCode || report.exitCode !== 0) {
         void vscode.window.showErrorMessage(report.stderr.trim() || COMPARE_COPY.failed);
@@ -113,14 +113,7 @@ export async function compareReview(
     });
 }
 
-async function loadCandidates(
-    stateManager: ReviewStateManager,
-    options: InvokeOptions
-): Promise<CandidateBranch[]> {
-    const cached = stateManager.state.candidates;
-    if (cached && cached.length > 0) {
-        return cached;
-    }
+async function loadCandidates(options: InvokeOptions): Promise<CandidateBranch[]> {
     const result = await invokeGitReview("config", ["--porcelain"], {...options, network: false});
     if (result.exitCode !== 0) {
         return [];
@@ -140,7 +133,7 @@ async function loadCandidates(
 async function pickCommitIsh(
     candidates: CandidateBranch[],
     title: string,
-    context: string
+    context?: string
 ): Promise<string | undefined> {
     const branches = compareRevisionItems(candidates);
     if (branches.length === 0) {
@@ -150,7 +143,7 @@ async function pickCommitIsh(
     return await new Promise<string | undefined>((resolve) => {
         const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & {value?: string}>();
         quickPick.title = title;
-        quickPick.placeholder = context + " " + COMPARE_COPY.revisionPrompt;
+        quickPick.placeholder = context ? `${context} ${COMPARE_COPY.revisionPrompt}` : COMPARE_COPY.revisionPrompt;
         quickPick.items = branches;
         quickPick.onDidChangeValue((value) => {
             const typed = value.trim();
@@ -162,8 +155,8 @@ async function pickCommitIsh(
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
             const picked = selected?.value ?? selected?.label ?? quickPick.value.trim();
-            quickPick.hide();
             resolve(picked === "" ? undefined : picked);
+            quickPick.hide();
         });
         // Cancelar (Esc, o el foco afuera) también pasa por acá; el resolve de
         // onDidAccept ya ganó la carrera, así que este solo cubre el descarte.
@@ -175,7 +168,7 @@ async function pickCommitIsh(
     });
 }
 
-async function inputCommitIsh(title: string, context: string): Promise<string | undefined> {
+async function inputCommitIsh(title: string, context?: string): Promise<string | undefined> {
     const typed = await vscode.window.showInputBox({
         title,
         prompt: context,

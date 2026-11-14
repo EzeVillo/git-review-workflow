@@ -29,13 +29,13 @@ describe("Comparison context", () => {
     });
 });
 
-import {COMPARE_COPY, comparisonSummary, compareTargetPrompt} from "../../src/review/userCopy";
+import {COMPARE_COPY, comparisonSummary, compareBasePrompt} from "../../src/review/userCopy";
 describe("Compare UX", () => {
-    it("preserves the base and keeps literal ref names literal", () => {
-        assert.strictEqual(compareTargetPrompt("refs/heads/main"), "Base: main. Choose the revision to inspect.");
-        assert.strictEqual(comparisonSummary("refs/heads/{target}$&", "refs/remotes/upstream/f"), "Base: {target}$& → Inspect: upstream/f");
-        assert.strictEqual(COMPARE_COPY.baseTitle, "Base revision");
-        assert.strictEqual(COMPARE_COPY.targetTitle, "Revision to inspect");
+    it("keeps the selected revision visible and ref names literal", () => {
+        assert.strictEqual(compareBasePrompt("refs/heads/{target}$&"), "Reviewing {target}$&.");
+        assert.strictEqual(comparisonSummary("refs/heads/main", "refs/remotes/upstream/f"), "Review upstream/f against main");
+        assert.strictEqual(COMPARE_COPY.targetTitle, "What do you want to review?");
+        assert.strictEqual(COMPARE_COPY.baseTitle, "Compare against what?");
     });
     it("keeps Compare accessible before base configuration", () => {
         const html = panelHtml("test");

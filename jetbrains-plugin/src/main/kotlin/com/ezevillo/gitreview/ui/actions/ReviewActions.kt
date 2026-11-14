@@ -578,21 +578,23 @@ private fun preview(e: AnActionEvent, stat: Boolean) {
 class CompareReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        // Las candidatas que la CLI ya reportó, más lo que se tipee: compare toma un
-        // commit-ish, así que un tag o un SHA valen — pero mostrar la lista evita que
-        // el caso común (una rama) haya que escribirlo de memoria.
-        val revisions = com.ezevillo.gitreview.domain.compareRevisionItems(service(e)?.currentState()?.candidates.orEmpty())
-        val candidates = revisions.map { it.label }.toTypedArray()
-        val lower = UiMessages.chooseOrType(
-            project, UserCopy.COMPARE_BASE_PROMPT + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_LOWER_TITLE, candidates,
-        ) ?: return
-        val lowerRef = revisions.find { it.label == lower }?.value ?: lower
-        val upper = UiMessages.chooseOrType(
-            project, UserCopy.compareTargetPrompt(lowerRef) + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_UPPER_TITLE, candidates,
-        ) ?: return
-        val upperRef = revisions.find { it.label == upper }?.value ?: upper
         val service = GitReviewService.getInstance(project)
         val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        val config = Bg.sync(project, UserCopy.COMPARE_TARGET_TITLE) {
+            service.cliInvoker.invoke("config", listOf("--porcelain"), cwd)
+        }
+        val revisions = if (config.exitCode == 0 && !config.timedOut) {
+            com.ezevillo.gitreview.domain.compareRevisionItems(com.ezevillo.gitreview.domain.parseConfigPorcelain(config.stdout).candidates)
+        } else emptyList()
+        val candidates = revisions.map { it.label }.toTypedArray()
+        val upper = UiMessages.chooseOrType(
+            project, UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_TARGET_TITLE, candidates,
+        ) ?: return
+        val upperRef = revisions.find { it.label == upper }?.value ?: upper
+        val lower = UiMessages.chooseOrType(
+            project, UserCopy.compareBasePrompt(upperRef) + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_BASE_TITLE, candidates,
+        ) ?: return
+        val lowerRef = revisions.find { it.label == lower }?.value ?: lower
         val report = Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) {
             service.cliInvoker.invoke("config", listOf("--porcelain", "--compare", "--", lowerRef, upperRef), cwd)
         }

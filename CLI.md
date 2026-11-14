@@ -418,6 +418,8 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
 
 Compare keeps both original revision names and their resolved commit IDs in `status`, in every reading mode and after saving/resuming. Moving a branch later does not change the comparison already opened.
 
+In the interactive flow, **What do you want to review?** asks for `<b>` first. **Compare against what?** asks for `<a>`. The IDEs read the current branch suggestions when Compare opens and also accept revisions you type.
+
 The clients query `config --porcelain --compare -- <a> <b>` before offering a layout. Only usable walkthroughs and keys appear, alongside creating, resuming or updating your own reading order when needed. These drafts are independent of Start drafts and work with branches, tags and commits, without a configured base or fetch.
 
 ```sh

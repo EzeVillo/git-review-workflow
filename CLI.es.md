@@ -430,6 +430,8 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
 
 Compare conserva los nombres de ambas revisiones y sus commits resueltos en `status`, en todos los modos y después de guardar/retomar. Mover una rama después no cambia la comparación ya abierta.
 
+En el flujo interactivo, **What do you want to review?** pide primero `<b>`. **Compare against what?** pide `<a>`. Los IDE consultan las sugerencias de ramas al abrir Compare y también aceptan las revisiones que escribas.
+
 Los clientes consultan `config --porcelain --compare -- <a> <b>` antes de ofrecer una forma de lectura. Sólo aparecen walkthroughs y esenciales utilizables, junto con crear, retomar o actualizar tu propio orden de lectura cuando corresponde. Estos borradores son independientes de los de Start y funcionan con ramas, tags y commits, sin base configurada ni fetch.
 
 ```sh

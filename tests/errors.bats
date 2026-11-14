@@ -433,12 +433,18 @@ step_review_two_with_edits() {
 	push_pr2
 	fresh=$(git rev-parse refs/remotes/origin/feature/x)
 	git update-ref refs/remotes/origin/feature/x "$cached"
+	new_base=$(git commit-tree "$local_base^{tree}" -p "$local_base" -m 'advance remote base')
+	git push -q origin "$new_base:refs/heads/develop"
+	git update-ref refs/remotes/origin/develop "$local_base"
+	git config fetch.prune true
+	git update-ref refs/remotes/origin/previously-deleted "$local_base"
 	run git review start --prepare -- feature/x
 	[ "$status" -eq 0 ]
 	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
 	[ -n "$token" ]
 	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
 	[ "$(git rev-parse refs/remotes/origin/develop)" = "$local_base" ]
+	[ "$(git rev-parse refs/remotes/origin/previously-deleted)" = "$local_base" ]
 	[ "$(git branch --show-current)" = develop ]
 	git switch -q feature/x
 	git commit -q --allow-empty -m 'advance after preparation'
@@ -448,6 +454,7 @@ step_review_two_with_edits() {
 	run git review start "--prepared=$token" --no-walk -- feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewtip)" = "$fresh" ]
+	[ "$(git config branch.review/feature/x.reviewbasecommit)" = "$new_base" ]
 	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
 	run git review start --release -- "$token"
 	[ "$status" -eq 0 ]

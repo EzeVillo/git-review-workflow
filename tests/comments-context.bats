@@ -87,6 +87,8 @@ context 1111111111111111111111111111111111111111
 	run --separate-stderr comments_start whole
 	[ "$status" -eq 0 ]
 	git config branch.review/feature/comments.reviewbase missing-base
+	assert_identity fresh
+	git config --unset branch.review/feature/comments.reviewbasecommit
 	assert_identity ambiguous
 }
 

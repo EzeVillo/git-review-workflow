@@ -15,6 +15,10 @@ usage() {
 	cat <<EOF
 usage: $prog <a> <b> [--step | --no-walk | --keys]
        $prog --draft <comparison-draft> [--step | --no-walk | --keys]
+       $prog --sources --porcelain
+       $prog --prepare --porcelain -- <a> <b>
+       $prog --prepared=<token> [--step | --no-walk | --keys] -- <a> <b>
+       $prog --release -- <token>
 
 Stage the diff between two commit-ish on a review/<b> branch for inline reading.
 This is a read-only review: there is no branch to write back to, so git review
@@ -23,6 +27,9 @@ finish refuses on it.
   <a>        the lower bound (a branch, tag or commit) — what to diff from
   <b>        the upper bound — what to diff to; names the review branch
   --draft    use the endpoints pinned in a comparison reading draft
+  --sources  list available branch versions for interactive selection
+  --prepare  pin a range and return its reading options; fetch:<remote>:<branch>
+             brings the current remote branch without moving tracking branches
   --step     read one commit at a time; advance with git review next
   --no-walk  ignore any walkthrough on <b>; read the whole diff
   --keys     walk mode restricted to entries marked > key (requires a
@@ -44,6 +51,9 @@ step=0
 no_walk=0
 keys_only=0
 from_draft=0
+comparison_query=''
+compare_prepared=''
+porcelain=0
 compare_mode=1
 # Collect the two positional commit-ish; mirror start's parser, including -- as the
 # end-of-options separator so a commit-ish that starts with "-" stays positional.
@@ -65,6 +75,11 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--draft) from_draft=1 ;;
+	--sources|--prepare|--release)
+		[ -z "$comparison_query" ] || die 'choose one comparison operation'
+		comparison_query=${1#--} ;;
+	--prepared=*) compare_prepared=${1#--prepared=} ;;
+	--porcelain) porcelain=1 ;;
 	--step) step=1 ;;
 	--no-walk) no_walk=1 ;;
 	--keys) keys_only=1 ;;
@@ -88,7 +103,12 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-if [ "$from_draft" -eq 1 ]; then
+if [ -n "$comparison_query" ]; then
+	if [ "$from_draft$step$no_walk$keys_only" != 0000 ] || [ -n "$compare_prepared" ]; then
+		die 'comparison query cannot be combined with reading options'
+	fi
+elif [ "$from_draft" -eq 1 ]; then
+	[ -z "$compare_prepared" ] || die '--draft cannot be combined with --prepared'
 	[ "$have_a$have_b" = 10 ] || die "--draft requires one comparison draft"
 elif [ "$have_a" -ne 1 ] || [ "$have_b" -ne 1 ]; then
 	die "need two commit-ish to compare: $prog <a> <b>"
@@ -108,6 +128,18 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+case "$comparison_query" in
+sources)
+	[ "$porcelain$have_a$have_b" = 100 ] || die '--sources requires --porcelain and no revisions'
+	compare_sources; exit ;;
+prepare)
+	[ "$porcelain$have_a$have_b" = 111 ] || die '--prepare requires --porcelain and two revisions'
+	compare_prepare "$a" "$b"; exit ;;
+release)
+	[ "$porcelain$have_a$have_b" = 010 ] || die '--release requires a prepared comparison token'
+	compare_release "$a"; exit ;;
+esac
+
 if [ "$from_draft" -eq 1 ]; then compare_load_draft "$a"; else compare_resolve "$a" "$b"; fi
 
 require_clean_work_tree
@@ -122,6 +154,7 @@ returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
 # status/list/clean only, never a writeback target — compare is read-only.
 bname="$b"
 case "$bname" in
+fetch:*) bname=${bname#fetch:}; bname="${bname%%:*}/${bname#*:}" ;;
 refs/heads/*) bname="${bname#refs/heads/}" ;;
 refs/remotes/*) bname="${bname#refs/remotes/}" ;;
 refs/tags/*) bname="${bname#refs/tags/}" ;;
@@ -156,6 +189,7 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewtip" "$bcommit"
 	git config "branch.$rb.reviewcomparebase" "$acommit"
 	git config "branch.$rb.reviewcomparetarget" "$b"
+	compare_keep_session "$name"
 	git config "branch.$rb.reviewstart" "$acommit"
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
@@ -228,6 +262,7 @@ git config "branch.$rb.reviewbase" "$a"
 git config "branch.$rb.reviewtip" "$bcommit"
 git config "branch.$rb.reviewcomparebase" "$acommit"
 git config "branch.$rb.reviewcomparetarget" "$b"
+compare_keep_session "$name"
 git config "branch.$rb.reviewreadonly" "1"
 # Where this review's draft lives, from the single derivation above. Recorded in
 # every mode and whether or not a draft exists yet, because the surfaces that need

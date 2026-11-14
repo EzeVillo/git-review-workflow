@@ -289,6 +289,12 @@ object UserCopy {
     const val COMPARE_BASE_TITLE = "Compare against what?"
     const val COMPARE_BASE_PROMPT = "Reviewing {target}."
     const val COMPARE_REVISION_PROMPT = "Branch, tag or commit"
+    const val COMPARE_SOURCE_TITLE = "Which version of {branch}?"
+    const val COMPARE_SOURCE_LOCAL = "Local branch"
+    const val COMPARE_SOURCE_REMOTE = "Fetch from {remote}"
+    const val COMPARE_SOURCE_CACHED = "{remote} from last fetch"
+    const val COMPARE_PREPARE_PROGRESS = "Fetching comparison revisions…"
+    const val COMPARE_USE_AS_TYPED = "Use as typed"
     const val COMPARE_SUMMARY = "Review {target} against {base}"
     const val COMPARE_WALK_DETAIL = "Your draft or the author's order; whole diff if neither applies."
     const val COMPARE_KEYS_DETAIL = "Only entries marked key; requires a draft or walkthrough with keys."
@@ -428,13 +434,13 @@ object UserCopy {
     const val COMPARISON_TARGET = "Inspect: {revision} ({oid})"
     fun comparisonLines(c: ComparisonRecord): List<String> {
         fun line(template: String, label: String, oid: String): String {
-            val prefix = listOf("refs/heads/", "refs/remotes/", "refs/tags/").firstOrNull { label.startsWith(it) }
-            return template.replace("{oid}", oid.take(7)).replace("{revision}", if (prefix == null) label else label.removePrefix(prefix))
+            return template.replace("{oid}", oid.take(7)).replace("{revision}", revisionLabel(label))
         }
         return listOf(line(COMPARISON_BASE, c.baseLabel, c.baseOid), line(COMPARISON_TARGET, c.targetLabel, c.targetOid))
     }
 
     fun revisionLabel(value: String): String {
+        if (value.startsWith("fetch:")) return value.removePrefix("fetch:").replaceFirst(':', '/')
         val prefix = listOf("refs/heads/", "refs/remotes/", "refs/tags/").firstOrNull { value.startsWith(it) }
         return if (prefix == null) value else value.removePrefix(prefix)
     }

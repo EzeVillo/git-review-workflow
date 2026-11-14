@@ -135,6 +135,8 @@ separate interface.
 
 Comparisons offer Local comments only and retain them automatically when closed. Comment forms skip the destination selector when the CLI permits a single option.
 
+In **Compare revisions**, choose each branch by name, then choose the version to use. Fetching a version for Compare leaves local and remote-tracking branches in place.
+
 Local notes stay private; Shared comments are prepared for the PR. Both documents
 coexist, and the destination only applies to the new comment. If asked whether to
 continue a previous review, choose whether to restore its Local notes or keep them

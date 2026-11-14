@@ -28,6 +28,7 @@ import (
 // set. action still travels for genericFailureText and mutationDoneMsg's own
 // bookkeeping either way.
 type mutationRequest struct {
+	comparePrepared       string
 	stateGuard            string
 	saveState             bool
 	continueState         bool
@@ -80,6 +81,7 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 		} else {
 			result = host.InvokeReviewGuarded(context.Background(), argv.Verb, argv.Args, req.stateGuard)
 		}
+		releasePreparedComparison(req.comparePrepared)
 		var reply *host.ReadResult
 		if req.navigationState && !mutationFailed(result) {
 			if primary, notice, ok := host.ReadNavigationReply(result.Stdout); ok {
@@ -134,12 +136,12 @@ func currentStateToken(p domain.PanelModel) domain.StateToken {
 func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Model, tea.Cmd) {
 	if !m.lock.Begin() {
 		m.statusLine = domain.MutationDiscardedNotice
-		return m, nil
+		return m, releasePreparedComparisonCmd(req.comparePrepared)
 	}
 	if !token.Matches(currentStateToken(m.Panel)) {
 		m.lock.Cancel()
 		m.statusLine = domain.StaleNotice
-		return m, nil
+		return m, releasePreparedComparisonCmd(req.comparePrepared)
 	}
 	if req.action != "" && (req.argv == nil || req.argv.Verb != "comments") {
 		req.stateGuard = token.Guard
@@ -210,6 +212,7 @@ func flattenStderr(stderr string) string {
 // any stderr at all (FR-024's "los fallbacks de error dicen qué no pasó, no
 // qué comando falló" — with stderr present, nothing here is ever touched).
 var genericFailureText = map[string]string{
+	"compareReview":  domain.CompareFailed,
 	"finishReview":   "Could not finish the review.",
 	"undoFinish":     "Could not undo the finish.",
 	"resumeFinish":   "Could not continue the finish.",
@@ -1364,7 +1367,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	overlay := m.confirm
 	m.confirm = nil
 	if choice != domain.ConfirmAccepted {
-		return m, nil
+		return m, releasePreparedComparisonCmd(overlay.Pending.comparePrepared)
 	}
 	next, cmd := m.beginMutation(overlay.Pending, overlay.Token)
 	if overlay.Pending.action == "deleteCommentEntry" && next.commentsBrowser != nil {

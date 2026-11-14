@@ -403,8 +403,7 @@ public static class UserCopy
     {
         string Line(string template, string label, string oid)
         {
-            var prefix = new[] { "refs/heads/", "refs/remotes/", "refs/tags/" }.FirstOrDefault(p => label.StartsWith(p, StringComparison.Ordinal));
-            return template.Replace("{oid}", oid.Substring(0, Math.Min(7, oid.Length))).Replace("{revision}", prefix is null ? label : label.Substring(prefix.Length));
+            return template.Replace("{oid}", oid.Substring(0, Math.Min(7, oid.Length))).Replace("{revision}", RevisionLabel(label));
         }
         return new[] { Line(ComparisonBase, c.BaseLabel, c.BaseOid), Line(ComparisonTarget, c.TargetLabel, c.TargetOid) };
     }
@@ -419,6 +418,12 @@ public static class UserCopy
     public const string CompareBaseTitle = "Compare against what?";
     public const string CompareBasePrompt = "Reviewing {target}.";
     public const string CompareRevisionPrompt = "Branch, tag or commit";
+    public const string CompareSourceTitle = "Which version of {branch}?";
+    public const string CompareSourceLocal = "Local branch";
+    public const string CompareSourceRemote = "Fetch from {remote}";
+    public const string CompareSourceCached = "{remote} from last fetch";
+    public const string ComparePrepareProgress = "Fetching comparison revisions…";
+    public const string CompareUseAsTyped = "Use as typed";
     public const string CompareSummary = "Review {target} against {base}";
     public const string CompareWalkDetail = "Your draft or the author's order; whole diff if neither applies.";
     public const string CompareKeysDetail = "Only entries marked key; requires a draft or walkthrough with keys.";
@@ -429,6 +434,11 @@ public static class UserCopy
 
     public static string RevisionLabel(string value)
     {
+        if (value.StartsWith("fetch:", StringComparison.Ordinal))
+        {
+            var separator = value.IndexOf(':', 6);
+            if (separator >= 0) return value.Substring(6, separator - 6) + "/" + value.Substring(separator + 1);
+        }
         var prefix = new[] { "refs/heads/", "refs/remotes/", "refs/tags/" }.FirstOrDefault(p => value.StartsWith(p, StringComparison.Ordinal));
         return prefix is null ? value : value.Substring(prefix.Length);
     }

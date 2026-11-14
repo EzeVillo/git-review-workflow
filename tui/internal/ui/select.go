@@ -27,9 +27,10 @@ type selectResult struct {
 	// probe is reserved for the Start assistant's config reads. Ordinary
 	// commands (editor/diff delegation) must stay in cmd because their
 	// Bubble Tea messages have a different type and lifecycle.
-	probe tea.Cmd
-	cmd   tea.Cmd
-	done  *mutationRequest
+	probe         tea.Cmd
+	probeProgress string
+	cmd           tea.Cmd
+	done          *mutationRequest
 	// status: set the status line directly and close the picker, with no
 	// mutation and nothing further to run — goToEntry's own "no editor is
 	// configured" (T086/T089) is the only user today.
@@ -65,7 +66,11 @@ func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
 		return m.beginMutation(*r.done, currentStateToken(m.Panel))
 	}
 	if r.probe != nil {
-		return m.beginAssistantProbe(r.probe)
+		next, cmd := m.beginAssistantProbe(r.probe)
+		if r.probeProgress != "" {
+			next.progressOverlay.Text = r.probeProgress
+		}
+		return next, cmd
 	}
 	return m, r.cmd
 }
@@ -91,8 +96,10 @@ type SelectOverlay struct {
 	Notice string
 	Items  []SelectItem
 	Cursor int
+	scroll bool
 	// OnPick is called with the CHOSEN item's Value once Enter picks it.
-	OnPick func(value string) selectResult
+	OnPick   func(value string) selectResult
+	onCancel tea.Cmd
 }
 
 // HandleKey resolves one keypress against the open picker. picked=true
@@ -132,7 +139,23 @@ func (o *SelectOverlay) Render(vp Viewport) string {
 	if len(o.Items) == 0 {
 		lines = append(lines, st.note.Render("(nothing to choose from)"))
 	}
-	for i, it := range o.Items {
+	items, first := o.Items, 0
+	if o.scroll && vp.Rows > 0 && len(items) > 0 {
+		visible := vp.Rows - len(lines) - 2
+		if visible < 1 {
+			visible = 1
+		}
+		if o.Cursor >= visible {
+			first = o.Cursor - visible + 1
+		}
+		end := first + visible
+		if end > len(items) {
+			end = len(items)
+		}
+		items = items[first:end]
+	}
+	for index, it := range items {
+		i := index + first
 		prefix := "  "
 		style := st.secondary
 		if i == o.Cursor {

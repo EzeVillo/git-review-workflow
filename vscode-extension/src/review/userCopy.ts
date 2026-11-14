@@ -214,6 +214,12 @@ export const COMPARE_COPY = {
     "baseTitle": "Compare against what?",
     "basePrompt": "Reviewing {target}.",
     "revisionPrompt": "Branch, tag or commit",
+    "sourceTitle": "Which version of {branch}?",
+    "sourceLocal": "Local branch",
+    "sourceRemote": "Fetch from {remote}",
+    "sourceCached": "{remote} from last fetch",
+    "prepareProgress": "Fetching comparison revisions…",
+    "useAsTyped": "Use as typed",
     "summary": "Review {target} against {base}",
     "layoutTitle": "How to read the comparison",
     "walkDetail": "Your draft or the author's order; whole diff if neither applies.",
@@ -230,7 +236,7 @@ export const COMPARE_COPY = {
 } as const;
 
 export function revisionLabel(value: string): string {
-    return value.replace(/^refs\/(heads|remotes|tags)\//, "");
+    return value.replace(/^refs\/(heads|remotes|tags)\//, "").replace(/^fetch:([^:]+):(.+)$/, "$1/$2");
 }
 export function comparisonSummary(base: string, target: string): string {
     return COMPARE_COPY.summary.replace(/\{(base|target)\}/g, (_, role) => revisionLabel(role === "base" ? base : target));

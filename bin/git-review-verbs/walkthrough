@@ -99,6 +99,7 @@ sub=""
 branch=""
 compare_target=""
 compare_mode=0
+compare_prepared=''
 compare_seed=""
 base=""
 base_explicit=0
@@ -145,6 +146,7 @@ while [ $# -gt 0 ]; do
 		base_explicit=1
 		;;
 	--compare) compare_mode=1 ;;
+	--prepared=*) compare_prepared=${1#--prepared=} ;;
 	--force) force=1 ;;
 	--check) check=1 ;;
 	--build) build_draft=1 ;;
@@ -208,6 +210,7 @@ if [ "$compare_mode" -eq 1 ]; then
 	[ "$local_only$offline$delta_mode$base_explicit" = 0000 ] || die "--compare cannot be combined with --local, --offline, --delta or --base"
 	[ -n "$branch" ] || die "--compare requires two revisions or a comparison draft"
 fi
+[ -z "$compare_prepared" ] || { [ "$compare_mode$build_draft" = 10 ] && [ -n "$compare_target" ]; } || die '--prepared requires a comparison draft with two revisions'
 
 [ "$compare_mode" -eq 1 ] || [ -z "$compare_target" ] || die "unexpected argument $compare_target"
 
@@ -1180,6 +1183,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			die "$targetrel exists and is not a file; move it out of the way first"
 		fi
 		emit_skeleton >"$tmp"
+		if [ "$compare_mode" -eq 1 ]; then compare_keep_draft; fi
 		mv "$tmp" "$targetpath"
 		trap - EXIT INT TERM
 	fi

@@ -42,7 +42,7 @@ describe("Compare revisions", function () {
                 show() {
                     questions.push(this.title);
                     if (questions.length === 1) {
-                        const candidate = this.items.find(item => item.value === `refs/heads/${branch}`);
+                        const candidate = this.items.find(item => item.label === branch);
                         assert.ok(candidate, "the new local branch should be suggested");
                         this.selectedItems = [candidate];
                     } else {
@@ -58,6 +58,10 @@ describe("Compare revisions", function () {
             return picker;
         };
         edit.showQuickPick = async (items: Item[], options: vscode.QuickPickOptions) => {
+            if (options.title === `Which version of ${branch}?`) {
+                assert.deepStrictEqual(items.map(item => item.label), ["Local branch"]);
+                return items[0];
+            }
             assert.strictEqual(options.title, `Review ${branch} against ${tag}`);
             return items.find(item => item.layout === "whole");
         };
@@ -73,5 +77,6 @@ describe("Compare revisions", function () {
         assert.strictEqual(state.comparison?.baseOid, git(["rev-parse", tag], repo.dir).trim());
         assert.strictEqual(state.comparison?.targetOid, git(["rev-parse", branch], repo.dir).trim());
         assert.strictEqual(git(["diff", "--cached", "--name-status"], repo.dir).trim(), "A\tcompare.txt");
+        assert.strictEqual(git(["for-each-ref", "--format=%(refname)", "refs/worktree/review-compare/pending/"], repo.dir).trim(), "");
     });
 });

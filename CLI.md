@@ -412,15 +412,15 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
   `git review finish` on a compare refuses explicitly ("this review is read-only,
   there is nothing to write back"). Use `git review abort` to end it.
 - `--step` reads commits reachable from `<b>` but not `<a>`, following the first-parent history and skipping merges and their side branches. Each step compares a commit with its parent. For diverged revisions, this can differ from the whole diff between their contents. Navigate with `git review next` / `git review prev`.
-- Whole diff and walkthrough compare the exact contents of `<a>` and `<b>`, without substituting their merge-base. Compare does not fetch or use `reviewworkflow.base`; a remote-tracking revision reflects the last fetch.
+- Whole diff and walkthrough compare the exact contents of `<a>` and `<b>`, without substituting their merge-base. `git review compare <a> <b>` uses locally available refs without fetching or using `reviewworkflow.base`.
 - If `<b>`'s tree carries a walkthrough, `compare` enters walk mode too, just like
   `git review start`, and stays read-only. `--no-walk` opts out.
 
 Compare keeps both original revision names and their resolved commit IDs in `status`, in every reading mode and after saving/resuming. Moving a branch later does not change the comparison already opened.
 
-In the interactive flow, **What do you want to review?** asks for `<b>` first. **Compare against what?** asks for `<a>`. The IDEs read the current branch suggestions when Compare opens and also accept revisions you type.
+In the interactive flow, **What do you want to review?** asks for `<b>` first. **Compare against what?** asks for `<a>`. Each branch name appears once. For each branch, you can choose the local version, a remote-tracking copy from the last fetch, or fetch the current version from that remote. You can also enter a tag, a commit, or an exact ref. Compare fetches only the branches selected for refresh and uses the same two pinned commits to offer reading layouts and open the diff. Compare's fetch leaves local branches and refs like `origin/feature` in place.
 
-The clients query `config --porcelain --compare -- <a> <b>` before offering a layout. Only usable walkthroughs and keys appear, alongside creating, resuming or updating your own reading order when needed. These drafts are independent of Start drafts and work with branches, tags and commits, without a configured base or fetch.
+Only usable walkthroughs and keys appear, alongside creating, resuming or updating your own reading order when needed. These drafts are independent of Start drafts and work with branches, tags and commits, without a configured base.
 
 ```sh
 git review walkthrough draft --compare -- v1.0 v2.0

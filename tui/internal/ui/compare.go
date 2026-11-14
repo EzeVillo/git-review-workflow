@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"context"
 	"strings"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
+	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -111,22 +113,108 @@ func compareLayoutFlags(layout string) []string {
 	}
 }
 
-// beginCompareReview opens the FIRST of compareReview's two free-text
-// questions. token is captured HERE, at the gesture that opened the whole
-// chain — T065's own revalidation happens once, inside beginMutation, right
-// before the eventual spawn, never re-captured at any step in between.
+func compareProbe(args []string, advance func(string) selectResult) tea.Cmd {
+	return func() tea.Msg {
+		return assistantStepMsg{result: host.InvokeReview(context.Background(), "compare", args), compareAdvance: advance}
+	}
+}
+
+func releasePreparedComparison(token string) {
+	if token != "" {
+		host.InvokeReview(context.Background(), "compare", []string{"--release", "--", token})
+	}
+}
+
+func releasePreparedComparisonCmd(token string) tea.Cmd {
+	if token == "" {
+		return nil
+	}
+	return func() tea.Msg { releasePreparedComparison(token); return nil }
+}
+
 func (m Model) beginCompareReview() (Model, tea.Cmd) {
 	token := currentStateToken(m.Panel)
-	m.textPrompt = NewTextPrompt(domain.CompareTargetTitle, domain.CompareRevisionPrompt, func(upper string) selectResult {
-		prompt := NewTextPrompt(domain.CompareBaseTitle, domain.CompareRevisionPrompt, func(lower string) selectResult {
-			return selectResult{probe: configProbeCmd([]string{"--compare", "--", lower, upper}, func(cfg domain.ConfigPorcelainResult) SelectOverlay {
-				return *compareLayoutStep(lower, upper, token, cfg.Offers)
-			})}
+	return m.beginAssistantProbe(compareProbe([]string{"--sources", "--porcelain"}, func(stdout string) selectResult {
+		return compareTargetStep(stdout, token)
+	}))
+}
+
+func compareTargetStep(stdout string, token domain.StateToken) selectResult {
+	var names []string
+	sources := make(map[string][]SelectItem)
+	for _, line := range strings.Split(stdout, "\n") {
+		fields := strings.Split(strings.TrimSuffix(line, "\r"), "\t")
+		if len(fields) != 5 || fields[0] != "compare-source" {
+			continue
+		}
+		name, kind, remote, value := fields[1], fields[2], fields[3], fields[4]
+		var label string
+		switch kind {
+		case "local":
+			label = domain.CompareSourceLocal
+		case "remote":
+			label = strings.ReplaceAll(domain.CompareSourceRemote, "{remote}", remote)
+		case "cached":
+			label = strings.ReplaceAll(domain.CompareSourceCached, "{remote}", remote)
+		default:
+			continue
+		}
+		if len(sources[name]) == 0 {
+			names = append(names, name)
+		}
+		sources[name] = append(sources[name], SelectItem{Label: label, Value: value})
+	}
+	return compareRevisionStep(domain.CompareTargetTitle, "", names, sources, func(upper string) selectResult {
+		return compareRevisionStep(domain.CompareBaseTitle, domain.CompareBasePromptText(upper), names, sources, func(lower string) selectResult {
+			if stdout == "" {
+				return selectResult{probe: configProbeCmd([]string{"--compare", "--", lower, upper}, func(cfg domain.ConfigPorcelainResult) SelectOverlay {
+					return *compareLayoutStep(lower, upper, token, cfg.Offers, "")
+				})}
+			}
+			progress := ""
+			if strings.HasPrefix(lower, "fetch:") || strings.HasPrefix(upper, "fetch:") {
+				progress = domain.ComparePrepareProgress
+			}
+			return selectResult{probe: compareProbe([]string{"--prepare", "--porcelain", "--", lower, upper}, func(report string) selectResult {
+				for _, line := range strings.Split(report, "\n") {
+					if prepared, ok := strings.CutPrefix(strings.TrimSpace(line), "comparison-prepared\t"); ok && prepared != "" {
+						return selectResult{next: compareLayoutStep(lower, upper, token, domain.ParseConfigPorcelain(report).Offers, prepared)}
+					}
+				}
+				return selectResult{status: domain.CompareFailed}
+			}), probeProgress: progress}
 		})
-		prompt.Context = domain.CompareBasePromptText(upper)
-		return selectResult{nextPrompt: prompt}
 	})
-	return m, nil
+}
+
+func compareRevisionStep(title, context string, names []string, sources map[string][]SelectItem, next func(string) selectResult) selectResult {
+	choose := func(name string) selectResult {
+		if len(sources[name]) == 0 {
+			return next(name)
+		}
+		return selectResult{next: &SelectOverlay{
+			Title: strings.ReplaceAll(domain.CompareSourceTitle, "{branch}", name), Items: sources[name], scroll: true, OnPick: next,
+		}}
+	}
+	typeRevision := func() selectResult {
+		prompt := NewTextPrompt(title, domain.CompareRevisionPrompt, choose)
+		prompt.Context = context
+		return selectResult{nextPrompt: prompt}
+	}
+	if len(names) == 0 {
+		return typeRevision()
+	}
+	items := make([]SelectItem, 0, len(names)+1)
+	items = append(items, SelectItem{Label: domain.CompareUseAsTyped})
+	for _, name := range names {
+		items = append(items, SelectItem{Label: name, Value: name})
+	}
+	return selectResult{next: &SelectOverlay{Title: title, Notice: context, Items: items, scroll: true, OnPick: func(name string) selectResult {
+		if name == "" {
+			return typeRevision()
+		}
+		return choose(name)
+	}}}
 }
 
 // compareLayoutStep projects CLI offers through the shared Start labels. Picking a reading layout
@@ -134,7 +222,11 @@ func (m Model) beginCompareReview() (Model, tea.Cmd) {
 // ConfirmMutation, the compareReview id's own literal first argument (gate
 // 2, T067/T085): a destructive-enough pick from this chain passes through
 // the exact same door the body's Compare revisions button would.
-func compareLayoutStep(lower, upper string, token domain.StateToken, offers []domain.ReadingOffer) *SelectOverlay {
+func compareLayoutStep(lower, upper string, token domain.StateToken, offers []domain.ReadingOffer, prepared string) *SelectOverlay {
+	var preparedFlag []string
+	if prepared != "" {
+		preparedFlag = []string{"--prepared=" + prepared}
+	}
 	intent := domain.ReviewIntent{Source: "compare", Range: "full"}
 	items := buildLayoutOverlay(intent, offers).Items
 	for i := range items {
@@ -154,24 +246,27 @@ func compareLayoutStep(lower, upper string, token domain.StateToken, offers []do
 		}
 	}
 	overlay := SelectOverlay{
-		Title:  domain.CompareLayoutTitle,
-		Notice: domain.ComparisonSummary(lower, upper),
-		Items:  items,
+		Title:    domain.CompareLayoutTitle,
+		Notice:   domain.ComparisonSummary(lower, upper),
+		Items:    items,
+		onCancel: releasePreparedComparisonCmd(prepared),
 		OnPick: func(layout string) selectResult {
 			if layout == "draft-resume" {
-				return selectResult{}
+				return selectResult{cmd: releasePreparedComparisonCmd(prepared)}
 			}
 			if layout == "draft" || layout == "draft-update" {
 				req := draftFlowRequest(intent, offers, layout == "draft-update")
-				req.argv = &domain.Argv{Verb: "walkthrough", Args: []string{"draft", "--porcelain", "--compare", "--", lower, upper}}
+				args := append([]string{"draft", "--porcelain", "--compare"}, preparedFlag...)
+				req.argv = &domain.Argv{Verb: "walkthrough", Args: append(args, "--", lower, upper)}
+				req.comparePrepared = prepared
 				return selectResult{done: &req}
 			}
 			params := domain.ActionParams{
-				CompareLayout: compareLayoutFlags(layout),
+				CompareLayout: append(compareLayoutFlags(layout), preparedFlag...),
 				CompareLower:  lower,
 				CompareUpper:  upper,
 			}
-			req := mutationRequest{action: "compareReview", params: params}
+			req := mutationRequest{action: "compareReview", params: params, comparePrepared: prepared}
 			title := domain.ComparisonSummary(lower, upper) + "?"
 			overlay := ConfirmMutation("compareReview", title, domain.CompareReviewConfirmDetail, domain.CompareRevisionsLabel, token, req)
 			return selectResult{confirmNext: overlay}

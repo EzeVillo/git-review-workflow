@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
@@ -36,6 +37,7 @@ type assistantStepMsg struct {
 	result              host.Result
 	build               func(domain.ConfigPorcelainResult) SelectOverlay
 	advance             func(domain.ConfigPorcelainResult) selectResult
+	compareAdvance      func(string) selectResult
 }
 
 // configProbeCmd runs one `config --porcelain <extra...>` probe. Always
@@ -85,9 +87,19 @@ func (m Model) handleAssistantStep(msg assistantStepMsg) (Model, tea.Cmd) {
 	}
 	m.progressOverlay = nil
 	if mutationFailed(msg.result) {
-		m.statusLine = failureMessage("startReview", msg.result)
+		action := "startReview"
+		if msg.compareAdvance != nil {
+			if strings.Contains(msg.result.Stderr, "unknown option --sources") {
+				return m.applySelectResult(msg.compareAdvance(""))
+			}
+			action = "compareReview"
+		}
+		m.statusLine = failureMessage(action, msg.result)
 		m.selectOverlay = nil
 		return m, nil
+	}
+	if msg.compareAdvance != nil {
+		return m.applySelectResult(msg.compareAdvance(msg.result.Stdout))
 	}
 	cfg := domain.ParseConfigPorcelain(msg.result.Stdout)
 	if msg.advance != nil {
@@ -327,8 +339,9 @@ func draftFlowRequest(intent domain.ReviewIntent, offers []domain.ReadingOffer, 
 func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	value, picked, cancelled := m.selectOverlay.HandleKey(msg.String())
 	if cancelled {
+		cmd := m.selectOverlay.onCancel
 		m.selectOverlay = nil
-		return m, nil
+		return m, cmd
 	}
 	if !picked {
 		return m, nil

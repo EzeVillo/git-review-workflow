@@ -10,6 +10,93 @@
 #   v2.0  touches more.txt  more.txt added
 # So v1.0..v2.0 spans two commits (c1, then the v2.0 commit).
 
+@test "prepared compare fetches exactly the selected history and pins it for the session" {
+	remote="$BATS_TEST_TMPDIR/remote.git"
+	git init -q --bare "$remote"
+	git remote add isolated "$remote"
+	git push -q isolated 'v1.0^{commit}:refs/heads/topic' 'v1.0^{commit}:refs/heads/other'
+	git fetch -q isolated
+	# Advance the server from a separate worktree, like another contributor.
+	git clone -q --branch topic "$remote" "$BATS_TEST_TMPDIR/author"
+	printf 'a\nB from server\nc\n' > "$BATS_TEST_TMPDIR/author/app.txt"
+	git -C "$BATS_TEST_TMPDIR/author" commit -qam 'server update'
+	new_tip=$(git -C "$BATS_TEST_TMPDIR/author" rev-parse HEAD)
+	git -C "$BATS_TEST_TMPDIR/author" push -q origin HEAD:refs/heads/topic HEAD:refs/heads/other
+	! git cat-file -e "$new_tip^{commit}" 2>/dev/null
+	before=$(git rev-parse refs/remotes/isolated/topic)
+	local_tip=$(git rev-parse develop)
+	run git review compare --sources --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'compare-source\ttopic\tremote\tisolated\tfetch:isolated:topic'* ]]
+	[[ "$output" == *$'compare-source\ttopic\tcached\tisolated\trefs/remotes/isolated/topic'* ]]
+	run git review compare --prepare --porcelain -- refs/remotes/isolated/topic fetch:isolated:topic
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git rev-parse refs/remotes/isolated/topic)" = "$before" ]
+	[ "$(git rev-parse refs/remotes/isolated/other)" = "$before" ]
+	[ "$(git rev-parse develop)" = "$local_tip" ]
+	[ "$(git for-each-ref --format='%(refname)' refs/worktree/review-compare/pending/)" = "refs/worktree/review-compare/pending/$token" ]
+	run git review compare "--prepared=$token" --no-walk -- refs/remotes/isolated/topic fetch:isolated:other
+	[ "$status" -eq 1 ]
+	[[ "$output" == *'prepared comparison does not match'* ]]
+	[ "$(git branch --show-current)" = develop ]
+	run git review compare "--prepared=$token" --no-walk -- refs/remotes/isolated/topic fetch:isolated:topic
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/isolated/topic.reviewtip)" = "$new_tip" ]
+	[ "$(git rev-parse HEAD)" = "$before" ]
+	run git review compare --release -- "$token"
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet "refs/worktree/review-compare/pending/$token"
+	git show-ref --verify --quiet refs/worktree/review-compare/session/isolated/topic
+	run git review save
+	[ "$status" -eq 0 ]
+	git show-ref --verify --quiet refs/worktree/review-compare/session/isolated/topic
+	run git review continue isolated/topic
+	[ "$status" -eq 0 ]
+	run git review comments add --document local --path app.txt --side head --start-line 2 --end-line 2 --text 'Keep this range.'
+	[ "$status" -eq 0 ]
+	run git review abort
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet refs/worktree/review-compare/session/isolated/topic
+	[ "$(git rev-parse refs/remotes/isolated/topic)" = "$before" ]
+	[ "$(git rev-parse refs/remotes/isolated/other)" = "$before" ]
+	git reflog expire --expire=now --expire-unreachable=now --all
+	git gc --prune=now
+	git cat-file -e "$new_tip^{commit}"
+	retained=$(git for-each-ref --format='%(refname)' refs/worktree/review-compare/comments/)
+	[ -n "$retained" ]
+	context=${retained##*/}
+	run git review comments diff --document local --context "$context" --entry 1 --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'comment-blob\tapp.txt\thead\tpresent\t'* ]]
+	run git review comments delete --document local --context "$context" --entry 1
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet "$retained"
+	git gc --prune=now
+	! git cat-file -e "$new_tip^{commit}" 2>/dev/null
+}
+
+@test "compare clean only drops the refs owned by the removed session" {
+	for target in c1 v2.0; do
+		if [ "$target" = c1 ]; then git tag c1 v2.0^; fi
+		run git review compare --prepare --porcelain -- v1.0 "$target"
+		[ "$status" -eq 0 ]
+		token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+		run git review compare "--prepared=$token" --no-walk -- v1.0 "$target"
+		[ "$status" -eq 0 ]
+		run git review compare --release -- "$token"
+		[ "$status" -eq 0 ]
+		if [ "$target" = c1 ]; then git switch --quiet --discard-changes develop; fi
+	done
+	git branch -D review/c1
+	run git review clean --keep-fixes
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet refs/worktree/review-compare/session/c1
+	git show-ref --verify --quiet refs/worktree/review-compare/session/v2.0
+	[ "$(git branch --show-current)" = review/v2.0 ]
+}
+
 setup() {
 	bats_require_minimum_version 1.5.0
 	TMP="$(mktemp -d)"

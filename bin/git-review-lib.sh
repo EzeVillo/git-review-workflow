@@ -1260,6 +1260,7 @@ comments_replace() {
 
 comments_publish() {
 	_cp_context=$1 _cp_source=$2 _cp_guard=${3:-}
+	_cp_retained_ref=''
 	comments_require_token "$_cp_context" || return 1
 	_cp_parent=$cm_root/results/$_cp_context
 	comments_safe_path "$_cp_parent/current" || return 1
@@ -1365,6 +1366,12 @@ comments_publish() {
 		fi
 	done
 	if ! mv "$_cp_temporary" "$_cp_destination"; then comments_error 'could not publish comments generation'; return 1; fi
+	if [ "${compare_retain_objects:-0}" -eq 1 ]; then
+		_cp_retained_ref="refs/worktree/review-compare/comments/$_cp_context"
+		# Preserve the previous generation until the new pointer is committed.
+		_cp_prior_compare=$(comments_result_dir "$_cp_context") || return 1
+		compare_keep_comment_revisions "$_cp_destination/local.md" "$_cp_retained_ref" "${_cp_prior_compare:+$_cp_prior_compare/local.md}" || return 1
+	fi
 	_cp_pointer=$(mktemp "$_cp_parent/current.candidate.XXXXXX") || { comments_error 'could not create comments generation pointer'; return 1; }
 	if ! printf '%s\n' "$_cp_generation" >"$_cp_pointer"; then comments_error 'could not write comments generation pointer'; return 1; fi
 	if [ -n "$_cp_guard" ]; then
@@ -1377,6 +1384,9 @@ comments_publish() {
 		printf 'error: comments result is stale; candidate preserved at %s\n' "$_cp_pointer" >&2; return 4
 	fi
 	if ! mv "$_cp_pointer" "$_cp_parent/current"; then comments_error 'could not publish comments generation pointer'; return 1; fi
+	if [ -n "$_cp_retained_ref" ] && [ -n "$_cp_prior_compare" ] && git show-ref --verify --quiet "$_cp_retained_ref"; then
+		compare_keep_comment_revisions "$_cp_destination/local.md" "$_cp_retained_ref" || comments_error 'could not release superseded comparison revisions'
+	fi
 }
 
 comments_header() {
@@ -2127,6 +2137,11 @@ comments_retain_compare() {
 	if [ -z "$cc_session" ] || [ -z "$cc_context" ]; then return 0; fi
 	_crc_kind=$(comments_field "$cc_dir/manifest" kind) || return 1
 	[ "$_crc_kind" = compare ] || return 0
+	compare_retain_objects=0
+	if git show-ref --verify --quiet "refs/worktree/review-compare/session/${_cc_branch#*/}" ||
+		git show-ref --verify --quiet "refs/worktree/review-compare/comments/$cc_context"; then
+		compare_retain_objects=1
+	fi
 	comments_publish "$cc_context" "$cc_dir"
 }
 
@@ -3373,7 +3388,7 @@ walk_draft_progress() {
 				if (f in seen) {
 					title = ""
 					if (src[f] == "compare" && cmpfrom[f] != "" && cmpto[f] != "") {
-						title = cmpfrom[f] " → " cmpto[f]
+						title = compare_label(cmpfrom[f]) " → " compare_label(cmpto[f])
 						gsub(/%2D%2D%3E/, "-->", title); gsub(/%25/, "%", title)
 					}
 					printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\n", f, ann[f], tot[f], src[f], rng[f], tp[f], title
@@ -3381,6 +3396,10 @@ walk_draft_progress() {
 					printf "%s\t0\t0\tunknown\tunknown\t\n", f
 				}
 			}
+		}
+		function compare_label(selector) {
+			if (sub(/^fetch:/, "", selector)) sub(/:/, "/", selector)
+			return selector
 		}
 	' "$@"
 }
@@ -5010,8 +5029,8 @@ emit_walkthrough_row() {
 	fi
 }
 
-# Shared, read-only resolution for Compare, its offers and its reading drafts.
-compare_resolve() {
+# Shared identity for Compare, its offers and its reading drafts.
+compare_selectors() {
 	a="$1"
 	b="$2"
 	# Selectors are stored inside an HTML comment. Reject record separators;
@@ -5020,10 +5039,233 @@ compare_resolve() {
 	*"
 "* | *"$(printf '\r')"* | *"$(printf '\t')"*) die "comparison revisions cannot contain tabs or newlines" ;;
 	esac
-	acommit="$(git rev-parse --verify --quiet "$a^{commit}")" || die "unknown commit: $a"
-	bcommit="$(git rev-parse --verify --quiet "$b^{commit}")" || die "unknown commit: $b"
-	[ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
 	compare_draft_id="compare/$(printf '%s\n%s\n' "$a" "$b" | git hash-object --stdin)"
+}
+
+compare_resolve() {
+	compare_selectors "$1" "$2"
+	if [ -n "${compare_prepared:-}" ]; then
+		compare_prepared_ref=$(compare_pending_ref "$compare_prepared")
+		compare_pack_oid=$(git show-ref --hash --verify "$compare_prepared_ref" 2>/dev/null) || die 'prepared comparison is unavailable'
+		_compare_range=$(git --no-replace-objects log -1 --format='%s %P' "$compare_pack_oid" -- 2>/dev/null) || die 'prepared comparison is unavailable'
+		_compare_parents=${_compare_range#* }
+		acommit=${_compare_parents%% *}
+		bcommit=${_compare_parents#* }
+		[ "$acommit" != "$_compare_parents" ] || die 'prepared comparison has no revision pair'
+		case "$acommit$bcommit" in *[!0-9a-f]*) die 'prepared comparison has an invalid revision pair' ;; esac
+		if [ "${#acommit}" -ne "${#compare_pack_oid}" ] || [ "${#bcommit}" -ne "${#compare_pack_oid}" ]; then
+			die 'prepared comparison has an invalid revision pair'
+		fi
+		[ "$_compare_range" = "$compare_draft_id $acommit $bcommit" ] || die 'prepared comparison does not match the selected revisions'
+	else
+		acommit=$(compare_literal_commit "$a") || exit 1
+		bcommit=$(compare_literal_commit "$b") || exit 1
+	fi
+	[ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
+}
+
+compare_literal_commit() {
+	case "$1" in -*) die "unknown commit: $1" ;; esac
+	git rev-parse --verify --quiet "$1^{commit}" || die "unknown commit: $1"
+}
+
+# Branch choices use the refs available in the repository. Fetch selectors
+# identify a server branch independently of the corresponding tracking name.
+compare_sources() {
+	_cs_remotes=$(git remote) || return 1
+	porcelain_row compare-sources 1
+	_cs_refs=$(git for-each-ref --format='%(refname) %(symref)' refs/heads/ refs/remotes/) || return 1
+	printf '%s\n' "$_cs_refs" |
+		COMPARE_REMOTES="$_cs_remotes" awk '
+			BEGIN { count=split(ENVIRON["COMPARE_REMOTES"], remotes, "\n") }
+			NF != 1 { next }
+			/^refs\/heads\// {
+				name=substr($1,12)
+				if (name !~ /^(review|review-fixes|review-saved)\//) {
+					printf "compare-source\t%s\tlocal\t-\t%s\n",name,$1
+				}
+			}
+			/^refs\/remotes\// {
+				path=substr($1,14); remote=""
+				for (i=1; i<=count; i++)
+					if (length(remotes[i])>length(remote) && index(path,remotes[i] "/")==1) remote=remotes[i]
+				configured=(remote!="")
+				if (!configured) {
+					slash=index(path,"/")
+					if (!slash) next
+					remote=substr(path,1,slash-1)
+				}
+				name=substr(path,length(remote)+2)
+				if (name=="HEAD" || name ~ /^(review|review-fixes|review-saved)\//) next
+				if (configured) printf "compare-source\t%s\tremote\t%s\tfetch:%s:%s\n",name,remote,remote,name
+				printf "compare-source\t%s\tcached\t%s\t%s\n",name,remote,$1
+			}'
+}
+
+compare_pending_ref() {
+	case "$1" in ''|*[!0-9a-f]*) die 'invalid prepared comparison' ;; esac
+	case ${#1} in 40|64) ;; *) die 'invalid prepared comparison' ;; esac
+	printf 'refs/worktree/review-compare/pending/%s\n' "$1"
+}
+
+compare_pack_range() {
+	compare_lease_commit "$compare_draft_id" -p "$acommit" -p "$bcommit"
+}
+
+compare_lease_commit() {
+	_compare_lease_message=$1; shift
+	_compare_lease_tree=$(git mktree) || return 1
+	GIT_AUTHOR_DATE= GIT_COMMITTER_DATE= \
+		git -c user.name='Git Review' -c user.email='git-review@localhost' -c commit.gpgSign=false \
+		commit-tree "$_compare_lease_tree" "$@" -m "$_compare_lease_message"
+}
+
+compare_fetch_spec() {
+	_compare_selector=${1#fetch:}
+	_compare_remote=${_compare_selector%%:*}
+	_compare_branch=${_compare_selector#*:}
+	if [ "$_compare_branch" = "$_compare_selector" ] ||
+		! git check-ref-format "refs/heads/$_compare_branch" ||
+		! git remote | grep -Fxq -e "$_compare_remote"; then
+		die "unknown remote branch: $1"
+	fi
+}
+
+compare_prepare_cleanup() {
+	if [ -n "$_compare_a_remote" ]; then git update-ref -d "$_compare_pending-base" || true; fi
+	if [ -n "$_compare_b_remote" ]; then git update-ref -d "$_compare_pending-target" || true; fi
+	if [ "$_compare_ready" -eq 0 ]; then git update-ref -d "$_compare_pending" || true; fi
+	if [ -n "$_compare_a_remote$_compare_b_remote" ]; then git update-ref -d "$_compare_pending-lease" || true; fi
+}
+
+compare_prepare() {
+	compare_selectors "$1" "$2"
+	# Resolve any cached copy before contacting the server.
+	_compare_a_remote='' _compare_b_remote=''
+	GIT_NO_LAZY_FETCH=1
+	export GIT_NO_LAZY_FETCH
+	case "$a" in fetch:*) compare_fetch_spec "$a"; _compare_a_remote=$_compare_remote; _compare_a_branch=$_compare_branch ;; *) acommit=$(compare_literal_commit "$a") || exit 1 ;; esac
+	case "$b" in fetch:*) compare_fetch_spec "$b"; _compare_b_remote=$_compare_remote; _compare_b_branch=$_compare_branch ;; *) bcommit=$(compare_literal_commit "$b") || exit 1 ;; esac
+	walk_gitdir_init
+	_compare_nonce=$(mktemp "$_walk_gitdir/compare.XXXXXX") || die 'could not allocate a comparison'
+	compare_prepared=$(printf '%s\n%s\n' "$_compare_nonce" "$$" | git hash-object --stdin)
+	rm -f "$_compare_nonce"
+	_compare_pending=$(compare_pending_ref "$compare_prepared")
+	_compare_ready=0
+	trap compare_prepare_cleanup 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	if [ -n "$_compare_a_remote$_compare_b_remote" ]; then
+		_compare_lease=$(compare_lease_commit 'Prepare comparison' </dev/null)
+		git update-ref "$_compare_pending-lease" "$_compare_lease"
+	fi
+	# A private refspec with an empty refmap leaves even the corresponding
+	# tracking branch alone. Ignore configured tag following and submodule fetches.
+	_compare_fetch_head='--no-write-fetch-head'
+	if [ -n "$_compare_a_remote$_compare_b_remote" ] && ! git fetch -h 2>&1 | grep -q 'write-fetch-head'; then
+		_compare_fetch_head=''
+	fi
+	if [ -n "$_compare_a_remote" ] && [ "$_compare_a_remote" = "$_compare_b_remote" ]; then
+		if [ "$_compare_a_branch" = "$_compare_b_branch" ]; then die "$a and $b select the same remote branch; nothing to compare"; fi
+		git fetch -q --refmap= --no-tags --no-recurse-submodules ${_compare_fetch_head:+"$_compare_fetch_head"} -- "$_compare_a_remote" \
+			"refs/heads/$_compare_a_branch:$_compare_pending-base" "refs/heads/$_compare_b_branch:$_compare_pending-target"
+	else
+		if [ -n "$_compare_a_remote" ]; then
+			git fetch -q --refmap= --no-tags --no-recurse-submodules ${_compare_fetch_head:+"$_compare_fetch_head"} -- "$_compare_a_remote" "refs/heads/$_compare_a_branch:$_compare_pending-base"
+		fi
+		if [ -n "$_compare_b_remote" ]; then
+			git fetch -q --refmap= --no-tags --no-recurse-submodules ${_compare_fetch_head:+"$_compare_fetch_head"} -- "$_compare_b_remote" "refs/heads/$_compare_b_branch:$_compare_pending-target"
+		fi
+	fi
+	if [ -n "$_compare_a_remote" ]; then acommit=$(compare_literal_commit "$_compare_pending-base"); fi
+	if [ -n "$_compare_b_remote" ]; then bcommit=$(compare_literal_commit "$_compare_pending-target"); fi
+	[ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
+	_compare_pack=$(compare_pack_range </dev/null) || die 'could not pin comparison revisions'
+	git update-ref "$_compare_pending" "$_compare_pack"
+	emit_compare_offers
+	porcelain_row comparison-prepared "$compare_prepared"
+	_compare_ready=1
+}
+
+# An IDE can be killed after receiving a token, or during a fetch. Normal
+# cancellation releases immediately; Clean expires abandoned preparations.
+compare_expired_preparations() {
+	_compare_pending_refs=$(git for-each-ref --format='%(objectname) %(refname) %(committerdate:unix)' refs/worktree/review-compare/pending/) || return 1
+	[ -n "$_compare_pending_refs" ] || return 0
+	_compare_cutoff=$(git rev-parse --since='1 day ago') || return 1
+	printf '%s\n' "$_compare_pending_refs" |
+		while read -r _compare_oid _compare_ref _compare_date; do
+			case "$_compare_ref" in *-base|*-target) continue ;; esac
+			case "$_compare_date" in ''|*[!0-9]*) continue ;; esac
+			if [ "$_compare_date" -lt "${_compare_cutoff#--max-age=}" ]; then
+				case "$_compare_ref" in *-lease)
+					git update-ref -d "${_compare_ref%-lease}-base" || return 1
+					git update-ref -d "${_compare_ref%-lease}-target" || return 1
+					;;
+				esac
+				git update-ref -d "$_compare_ref" "$_compare_oid" || return 1
+				printf '%s\n' "$_compare_ref"
+			fi
+		done
+}
+
+compare_release() {
+	_compare_release_ref=$(compare_pending_ref "$1")
+	git update-ref -d "$_compare_release_ref"
+}
+
+compare_keep_session() {
+	[ -n "${compare_prepared_ref:-}" ] || return 0
+	git update-ref "refs/worktree/review-compare/session/$1" "$compare_pack_oid"
+}
+
+compare_drop_session() {
+	_compare_session_ref="refs/worktree/review-compare/session/$1"
+	if _compare_session_oid=$(git show-ref --hash --verify "$_compare_session_ref" 2>/dev/null) &&
+		! git show-ref --verify --quiet "refs/heads/review/$1" &&
+		! git show-ref --verify --quiet "refs/heads/review-saved/$1"; then
+		git update-ref -d "$_compare_session_ref" "$_compare_session_oid" || return 1
+		printf '%s\n' "$1"
+	fi
+}
+
+compare_keep_comment_revisions() {
+	_compare_versions=$(
+		for _compare_document in "$1" "${3:-}"; do
+			if [ -f "$_compare_document" ]; then walk_normalize <"$_compare_document" | comments_contours entries || exit 1; fi
+		done
+	) || return 1
+	_compare_revisions=$(printf '%s\n' "$_compare_versions" | awk -F '\t' '$1=="comment-version" {if (!seen[$3]++) print $3; if (!seen[$4]++) print $4}')
+	_compare_tree_entries=''
+	set -- "$2"
+	for _compare_oid in $_compare_revisions; do
+		case "$(GIT_NO_LAZY_FETCH=1 git cat-file -t "$_compare_oid" 2>/dev/null || true)" in
+		commit) set -- "$@" -p "$_compare_oid" ;;
+		tree) _compare_tree_entries="$_compare_tree_entries$_compare_oid " ;;
+		esac
+	done
+	if [ "$#" -eq 1 ] && [ -z "$_compare_tree_entries" ]; then git update-ref -d "$1"; return; fi
+	_compare_retained_ref=$1; shift
+	_compare_retained_commit=$(
+		for _compare_oid in $_compare_tree_entries; do printf '040000 tree %s\t%s\n' "$_compare_oid" "$_compare_oid"; done |
+			compare_lease_commit 'Compare comment revisions' "$@"
+	) || return 1
+	git update-ref "$_compare_retained_ref" "$_compare_retained_commit"
+}
+
+compare_keep_draft() {
+	if [ -z "${compare_prepared_ref:-}" ]; then
+		compare_drop_draft "$compare_draft_id"
+		return
+	fi
+	git update-ref "refs/worktree/review-compare/draft/${compare_draft_id#compare/}" "$compare_pack_oid"
+}
+
+compare_drop_draft() {
+	case "$1" in compare/*)
+		_compare_draft_ref="refs/worktree/review-compare/draft/${1#compare/}"
+		if git show-ref --verify --quiet "$_compare_draft_ref"; then git update-ref -d "$_compare_draft_ref"; fi ;;
+	esac
 }
 
 compare_load_draft() {
@@ -5056,6 +5298,11 @@ compare_load_draft() {
 		git cat-file -e "$_cmp_oid^{commit}" 2>/dev/null || die "comparison draft endpoint is unavailable: $_cmp_oid"
 	done
 	[ "$acommit" != "$bcommit" ] || die "comparison draft endpoints are identical"
+	_compare_draft_ref="refs/worktree/review-compare/draft/${compare_draft_id#compare/}"
+	if git show-ref --verify --quiet "$_compare_draft_ref"; then
+		compare_prepared_ref=$_compare_draft_ref
+		compare_pack_oid=$(git rev-parse "$compare_prepared_ref")
+	fi
 }
 
 compare_encode_selector() { sed 's/%/%25/g; s/-->/%2D%2D%3E/g'; }
@@ -5076,6 +5323,9 @@ compare_use_draft() {
 		walk_use_draft "$draftsrc"
 		return
 	fi
+	case "$b" in
+	fetch:*) _cmp_remote_branch=${b#fetch:}; draftsrc=${_cmp_remote_branch#*:}; walk_use_draft "$draftsrc"; return ;;
+	esac
 	_cmp_ref="$(git rev-parse --symbolic-full-name "$b" 2>/dev/null || true)"
 	case "$_cmp_ref" in
 	refs/heads/*) draftsrc="${_cmp_ref#refs/heads/}"; walk_use_draft "$draftsrc" ;;

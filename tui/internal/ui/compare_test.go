@@ -15,26 +15,30 @@ import (
 // startReview's own chain does.
 func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview}}
-	m2, _ := m.beginCompareReview()
-	if m2.textPrompt == nil {
-		t.Fatal("beginCompareReview must open the first free-text question")
+	_, cmd := m.beginCompareReview()
+	if cmd == nil {
+		t.Fatal("beginCompareReview must query branch versions")
 	}
-	if m2.textPrompt.Title != "What do you want to review?" {
-		t.Fatalf("unexpected first question: %q", m2.textPrompt.Title)
+	const sources = "compare-source\tfeature/x\tlocal\t-\trefs/heads/feature/x\ncompare-source\tfeature/x\tremote\torigin\tfetch:origin:feature/x\ncompare-source\tfeature/x\tcached\torigin\trefs/remotes/origin/feature/x"
+	target := compareTargetStep(sources, currentStateToken(m.Panel)).next
+	if target.Title != "What do you want to review?" || len(target.Items) != 2 || target.Items[1].Label != "feature/x" {
+		t.Fatalf("unexpected first question: %+v", target)
 	}
-
-	targetResult := m2.textPrompt.OnSubmit("feature/x")
-	if targetResult.nextPrompt == nil {
+	versions := target.OnPick("feature/x").next
+	if len(versions.Items) != 3 || versions.Items[1].Label != "Fetch from origin" {
+		t.Fatalf("unexpected version picker: %+v", versions)
+	}
+	targetResult := versions.OnPick("refs/heads/feature/x")
+	if targetResult.next == nil {
 		t.Fatal("submitting the target revision must open the second question")
 	}
-	if targetResult.nextPrompt.Title != "Compare against what?" {
-		t.Fatalf("unexpected second question: %q", targetResult.nextPrompt.Title)
+	if targetResult.next.Title != "Compare against what?" {
+		t.Fatalf("unexpected second question: %q", targetResult.next.Title)
 	}
-
-	if targetResult.nextPrompt.Context != "Reviewing feature/x." {
-		t.Fatalf("target context lost: %q", targetResult.nextPrompt.Context)
+	if targetResult.next.Notice != "Reviewing feature/x." {
+		t.Fatalf("target context lost: %q", targetResult.next.Notice)
 	}
-	baseResult := targetResult.nextPrompt.OnSubmit("develop")
+	baseResult := targetResult.next.OnPick("").nextPrompt.OnSubmit("develop")
 	if baseResult.probe == nil {
 		t.Fatal("submitting the base revision must query exact comparison offers")
 	}
@@ -44,7 +48,7 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 		{ID: domain.OfferStep, Rank: "available"},
 		{ID: domain.OfferWhole, Rank: "available"},
 	}}
-	offer := compareLayoutStep("develop", "feature/x", currentStateToken(m.Panel), cfg.Offers)
+	offer := compareLayoutStep("develop", "feature/x", currentStateToken(m.Panel), cfg.Offers, "token")
 
 	if offer.Notice != "Review feature/x against develop" {
 		t.Fatalf("range summary lost: %q", offer.Notice)
@@ -70,15 +74,15 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 	if params.CompareLower != "develop" || params.CompareUpper != "feature/x" {
 		t.Fatalf("params lower/upper = %q/%q, want develop/feature/x", params.CompareLower, params.CompareUpper)
 	}
-	if len(params.CompareLayout) != 1 || params.CompareLayout[0] != "--step" {
-		t.Fatalf("CompareLayout = %v, want [--step]", params.CompareLayout)
+	if len(params.CompareLayout) != 2 || params.CompareLayout[0] != "--step" || params.CompareLayout[1] != "--prepared=token" {
+		t.Fatalf("CompareLayout = %v", params.CompareLayout)
 	}
 
 	argv, ok := domain.BuildArgv("compareReview", params)
 	if !ok {
 		t.Fatal("BuildArgv(compareReview) must succeed")
 	}
-	wantArgs := []string{"--step", "--", "develop", "feature/x"}
+	wantArgs := []string{"--step", "--prepared=token", "--", "develop", "feature/x"}
 	if argv.Verb != "compare" || len(argv.Args) != len(wantArgs) {
 		t.Fatalf("argv = %+v, want verb=compare args=%v", argv, wantArgs)
 	}
@@ -173,7 +177,7 @@ func TestComparisonOffersAndDraftContinuation(t *testing.T) {
 		t.Fatalf("draft starts another review: %+v", req.argv)
 	}
 	offers := []domain.ReadingOffer{{ID: domain.OfferDraft, Rank: "available"}, {ID: domain.OfferWhole, Rank: "available"}}
-	overlay := compareLayoutStep("a", "b", domain.StateToken{}, offers)
+	overlay := compareLayoutStep("a", "b", domain.StateToken{}, offers, "token")
 	if len(overlay.Items) != 2 || overlay.Items[0].Value != "draft" || overlay.Items[1].Value != "whole" {
 		t.Fatalf("invented unsupported layouts: %+v", overlay.Items)
 	}
@@ -182,7 +186,7 @@ func TestComparisonOffersAndDraftContinuation(t *testing.T) {
 		t.Fatalf("draft must prepare reading order without a confirmation: %+v", result)
 	}
 	args := result.done.argv.Args
-	if len(args) != 6 || args[2] != "--compare" || args[4] != "a" || args[5] != "b" {
+	if len(args) != 7 || args[2] != "--compare" || args[3] != "--prepared=token" || args[5] != "a" || args[6] != "b" {
 		t.Fatalf("wrong range: %v", args)
 	}
 }

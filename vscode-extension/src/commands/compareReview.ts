@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import {parseConfigPorcelain, CandidateBranch, compareRevisionItems} from "../cli/configPorcelain";
+import {compareRevisionItems, parseConfigPorcelain} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {buildLayoutItems, layoutSummary} from "../review/layoutOffers";
@@ -21,7 +21,9 @@ export async function compareReview(
     reveal: PanelRevealer
 ): Promise<void> {
     const options = getInvokeOptions();
-    const candidates = await loadCandidates(options);
+    const loaded = await loadCandidates(options);
+    if (!loaded) return;
+    const {branches: candidates, legacy} = loaded;
     const upper = await pickCommitIsh(candidates, COMPARE_COPY.targetTitle);
     if (!upper) {
         return;
@@ -31,12 +33,40 @@ export async function compareReview(
         return;
     }
 
-    const report = await invokeGitReview("config", ["--porcelain", "--compare", "--", lower, upper], {...options, network: false});
+    const network = [lower, upper].some(ref => ref.startsWith("fetch:"));
+    if (legacy) {
+        const report = await invokeGitReview("config", ["--porcelain", "--compare", "--", lower, upper], {...options, network: false});
+        if (report.errorCode || report.exitCode !== 0) {
+            void vscode.window.showErrorMessage(report.stderr.trim() || COMPARE_COPY.failed);
+            return;
+        }
+        await readComparison(lower, upper, undefined, report.stdout, options, lock, stateManager, reveal);
+        return;
+    }
+    const prepare = () => invokeGitReview("compare", ["--prepare", "--porcelain", "--", lower, upper], {...options, network, timeoutMs: network ? 300_000 : undefined});
+    const report = network
+        ? await vscode.window.withProgress({location: vscode.ProgressLocation.Notification, title: COMPARE_COPY.prepareProgress}, prepare)
+        : await prepare();
     if (report.errorCode || report.exitCode !== 0) {
         void vscode.window.showErrorMessage(report.stderr.trim() || COMPARE_COPY.failed);
         return;
     }
-    const items = buildLayoutItems(parseConfigPorcelain(report.stdout).offers).map(item => ({
+    const token = report.stdout.match(/^comparison-prepared\t([0-9a-f]+)\r?$/m)?.[1];
+    if (!token) {
+        void vscode.window.showErrorMessage(COMPARE_COPY.failed);
+        return;
+    }
+    try {
+        await readComparison(lower, upper, token, report.stdout, options, lock, stateManager, reveal);
+    } finally {
+        await invokeGitReview("compare", ["--release", "--", token], {...options, network: false});
+    }
+}
+
+async function readComparison(lower: string, upper: string, token: string | undefined, stdout: string,
+    options: InvokeOptions, lock: MutationLock, stateManager: ReviewStateManager, reveal: PanelRevealer): Promise<void> {
+    const prepared = token ? [`--prepared=${token}`] : [];
+    const items = buildLayoutItems(parseConfigPorcelain(stdout).offers).map(item => ({
         ...item,
         description: item.draft === "create" ? COMPARE_COPY.draftDetail
             : item.draft === "update" ? COMPARE_COPY.draftUpdateDetail
@@ -50,7 +80,7 @@ export async function compareReview(
     if (layoutPick.draft) {
         if (layoutPick.draft !== "resume") {
             const result = await lock.run(async () => {
-                const invocation = await invokeGitReview("walkthrough", ["draft", "--porcelain", "--compare", "--", lower, upper], {...options, network: false});
+                const invocation = await invokeGitReview("walkthrough", ["draft", "--porcelain", "--compare", ...prepared, "--", lower, upper], {...options, network: false});
                 await stateManager.refreshPrimary();
                 return invocation;
             });
@@ -92,7 +122,7 @@ export async function compareReview(
     // walk: sin flag de layout (la CLI detecta walkthrough en el tip)
     // Separador -- antes de posicionales: commit-ish que empiezan con - no se
     // confunden con flags (misma disciplina que start).
-    args.push("--", lower, upper);
+    args.push(...prepared, "--", lower, upper);
 
     await lock.run(async () => {
         const result = await vscode.window.withProgress(
@@ -101,7 +131,7 @@ export async function compareReview(
                 title: comparingProgress(lower, upper),
             },
             async () => {
-                const invocation = await invokeGitReview("compare", args, getInvokeOptions());
+                const invocation = await invokeGitReview("compare", args, {...options, network: false});
                 await stateManager.refreshPrimary();
                 return invocation;
             }
@@ -113,12 +143,30 @@ export async function compareReview(
     });
 }
 
-async function loadCandidates(options: InvokeOptions): Promise<CandidateBranch[]> {
-    const result = await invokeGitReview("config", ["--porcelain"], {...options, network: false});
-    if (result.exitCode !== 0) {
-        return [];
+type BranchSource = {kind: "local" | "remote" | "cached" | "literal"; remote: string; value: string};
+
+async function loadCandidates(options: InvokeOptions): Promise<{branches: Map<string, BranchSource[]>; legacy: boolean} | undefined> {
+    const result = await invokeGitReview("compare", ["--sources", "--porcelain"], {...options, network: false});
+    const branches = new Map<string, BranchSource[]>();
+    if (result.exitCode !== 0 && result.stderr.includes("unknown option --sources")) {
+        const config = await invokeGitReview("config", ["--porcelain"], {...options, network: false});
+        for (const item of compareRevisionItems(parseConfigPorcelain(config.stdout).candidates)) {
+            branches.set(item.label, [{kind: "literal", remote: "", value: item.value}]);
+        }
+        return {branches, legacy: true};
     }
-    return parseConfigPorcelain(result.stdout).candidates;
+    if (result.exitCode !== 0) {
+        void vscode.window.showErrorMessage(result.stderr.trim() || COMPARE_COPY.failed);
+        return;
+    }
+    for (const line of result.stdout.split(/\r?\n/)) {
+        const [record, name, kind, remote, value] = line.split("\t");
+        if (record !== "compare-source" || !name || !value || (kind !== "local" && kind !== "remote" && kind !== "cached")) continue;
+        const sources = branches.get(name) ?? [];
+        sources.push({kind, remote, value});
+        branches.set(name, sources);
+    }
+    return {branches, legacy: false};
 }
 
 /**
@@ -131,16 +179,16 @@ async function loadCandidates(options: InvokeOptions): Promise<CandidateBranch[]
  * una fila y nunca adivinar si el texto contaba.
  */
 async function pickCommitIsh(
-    candidates: CandidateBranch[],
+    candidates: Map<string, BranchSource[]>,
     title: string,
     context?: string
 ): Promise<string | undefined> {
-    const branches = compareRevisionItems(candidates);
+    const branches = [...candidates.keys()].map(label => ({label}));
     if (branches.length === 0) {
         return inputCommitIsh(title, context);
     }
 
-    return await new Promise<string | undefined>((resolve) => {
+    const revision = await new Promise<string | undefined>((resolve) => {
         const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & {value?: string}>();
         quickPick.title = title;
         quickPick.placeholder = context ? `${context} ${COMPARE_COPY.revisionPrompt}` : COMPARE_COPY.revisionPrompt;
@@ -150,7 +198,7 @@ async function pickCommitIsh(
             const known = typed === "" || branches.some((b) => b.label === typed);
             quickPick.items = known
                 ? branches
-                : [{label: typed, description: "use as typed"}, ...branches];
+                : [{label: typed, description: COMPARE_COPY.useAsTyped}, ...branches];
         });
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
@@ -166,6 +214,16 @@ async function pickCommitIsh(
         });
         quickPick.show();
     });
+    if (!revision) return;
+    const sources = candidates.get(revision);
+    if (!sources) return revision;
+    if (sources[0]?.kind === "literal") return sources[0].value;
+    const items = sources.map(source => ({
+        label: source.kind === "local" ? COMPARE_COPY.sourceLocal :
+            (source.kind === "remote" ? COMPARE_COPY.sourceRemote : COMPARE_COPY.sourceCached).replace("{remote}", () => source.remote),
+        value: source.value,
+    }));
+    return (await vscode.window.showQuickPick(items, {title: COMPARE_COPY.sourceTitle.replace("{branch}", () => revision)}))?.value;
 }
 
 async function inputCommitIsh(title: string, context?: string): Promise<string | undefined> {

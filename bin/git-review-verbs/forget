@@ -203,8 +203,11 @@ if [ "$mode" = saved ]; then
 		if walk_saved_draft_filed "$saved" && [ -f "$saveddraft" ]; then
 			hadraft=1
 			rm -f "$saveddraft"
+			compare_drop_draft "$draftsrc"
 		fi
+		_fso_compare=$(git config "branch.$saved.reviewreadonly" || true)
 		git branch -D "$saved" >/dev/null
+		if [ "$_fso_compare" = 1 ]; then compare_drop_session "$src" >/dev/null; fi
 
 		echo "discarded saved review of $src"
 		# Named, not left to be inferred: the draft is hand-written prose every other
@@ -316,6 +319,7 @@ if [ "$mode" = draft ]; then
 			return
 		fi
 		rm -f "$_fd_path"
+		compare_drop_draft "$_fd_src"
 		echo "forgot the walkthrough draft for $_fd_src"
 		# Deleting it under a live review is allowed — going back to the author's
 		# order is a legitimate thing to want — but it changes what that review
@@ -340,6 +344,7 @@ if [ "$mode" = draft ]; then
 			return
 		fi
 		rm -f "$(walk_saved_draft_path "$_fo_src")"
+		if ! walk_has_draft_file "$_fo_src"; then compare_drop_draft "$_fo_src"; fi
 		echo "forgot the archived walkthrough draft for $_fo_src (no paused review left to restore it)"
 	}
 

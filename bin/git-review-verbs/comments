@@ -291,6 +291,12 @@ case "$command" in
 			comments_remove_document "$cm_dir/$document.md" "$revision" "$initial_guard" || exit $?
 			printf 'Deleted %s comments.\n' "$document"
 		fi
+		if [ "$cm_scope" = result ] && [ "$cm_kind" = compare ] && [ "$document" = local ]; then
+			_retained_ref="refs/worktree/review-compare/comments/$cm_context"
+			if git show-ref --verify --quiet "$_retained_ref"; then
+				compare_keep_comment_revisions "$cm_dir/local.md" "$_retained_ref" || exit 1
+			fi
+		fi
 		;;
 	renumber)
 		comments_select_context "$context" || exit 1

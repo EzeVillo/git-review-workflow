@@ -65,6 +65,15 @@ func ClassForVerb(verb string, args []string) InvocationClass {
 		return Read
 	case "start":
 		return Network
+	case "compare":
+		if len(args) > 0 && args[0] == "--prepare" {
+			for _, arg := range args[1:] {
+				if len(arg) > 6 && arg[:6] == "fetch:" {
+					return Network
+				}
+			}
+		}
+		return LocalMutation
 	case "forget":
 		for _, a := range args {
 			if a == "--stale" {

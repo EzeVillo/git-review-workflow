@@ -1808,6 +1808,12 @@ Los borradores propios de Compare llevan `source=compare`, una identidad estable
 
 `draft-title` aporta la etiqueta legible del par sin usarla como identidad ni reconstruir contexto en los clientes. Se extrae durante la enumeración de borradores existente, sin procesos extra por archivo. Los cuatro clientes consumen las ofertas, ofrecen el mismo circuito crear/retomar/actualizar y el botón del borrador conserva `compare --draft`.
 
+### Compare: versión por rama y fetch aislado
+
+El selector agrupa por nombre las ramas conocidas y pide una versión por cada extremo. La CLI enumera las opciones y conserva la entrada literal para tags, commits y referencias exactas. La copia de seguimiento se resuelve antes de hacer fetch. Las ramas pedidas al mismo remoto viajan en una invocación con refspecs privados y un refmap vacío. Así tampoco se mueve la copia de seguimiento de la propia rama descargada. Si Git admite omitir `FETCH_HEAD`, se omite.
+
+La preparación fija ambos commits antes de calcular las ofertas. Su ref es privada del worktree y el token sólo se acepta para los dos selectores originales. Cancelar libera la preparación y Clean elimina las preparaciones abandonadas de más de un día. Cada rama de Compare conserva su propio par a través de Save y Continue. Abort y Clean liberan el par de la sesión retirada, incluidos los huérfanos cuando se borró la rama a mano. Los borradores conservan sus extremos hasta borrarlos y los resultados Local conservan los commits que necesitan sus rangos históricos. Los clientes conservan el flujo literal si la CLI instalada es anterior a esta opción.
+
 ## 19. Portabilidad de comentarios y duración del CI
 
 Las corridas del 3 de noviembre de 2026 mostraron fallos que una ejecución Linux

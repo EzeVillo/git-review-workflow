@@ -678,12 +678,7 @@ func ComparisonLines(c *ComparisonRecord) []string {
 		return nil
 	}
 	line := func(template, label, oid string) string {
-		for _, prefix := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
-			if strings.HasPrefix(label, prefix) {
-				label = strings.TrimPrefix(label, prefix)
-				break
-			}
-		}
+		label = RevisionLabel(label)
 		if len(oid) > 7 {
 			oid = oid[:7]
 		}
@@ -693,24 +688,33 @@ func ComparisonLines(c *ComparisonRecord) []string {
 }
 
 const (
-	CompareTargetTitle    = "What do you want to review?"
-	CompareBaseTitle      = "Compare against what?"
-	CompareBasePrompt     = "Reviewing {target}."
-	CompareRevisionPrompt = "Branch, tag or commit"
-	CompareSummary        = "Review {target} against {base}"
-	CompareLayoutTitle    = "How to read the comparison"
-	CompareWalkDetail     = "Your draft or the author's order; whole diff if neither applies."
-	CompareKeysDetail     = "Only entries marked key; requires a draft or walkthrough with keys."
-	CompareStepDetail     = "Commits unique to the destination; skips merges and side branches."
-	CompareWholeDetail    = "Changes from the base's content to the revision to inspect."
-	CompareConfirmDetail  = "Opens a separate review for reading. Your working tree must be clean."
-	CompareReadonlyNote   = "Read-only comparison. Local comments are kept when you close it."
-	CompareSetupNote      = "Compare any two revisions without configuring a base."
-	CompareButton         = "Compare"
-	CompareFailed         = "Could not compare those two revisions."
+	CompareTargetTitle     = "What do you want to review?"
+	CompareBaseTitle       = "Compare against what?"
+	CompareBasePrompt      = "Reviewing {target}."
+	CompareRevisionPrompt  = "Branch, tag or commit"
+	CompareSourceTitle     = "Which version of {branch}?"
+	CompareSourceLocal     = "Local branch"
+	CompareSourceRemote    = "Fetch from {remote}"
+	CompareSourceCached    = "{remote} from last fetch"
+	ComparePrepareProgress = "Fetching comparison revisions…"
+	CompareUseAsTyped      = "Use as typed"
+	CompareSummary         = "Review {target} against {base}"
+	CompareLayoutTitle     = "How to read the comparison"
+	CompareWalkDetail      = "Your draft or the author's order; whole diff if neither applies."
+	CompareKeysDetail      = "Only entries marked key; requires a draft or walkthrough with keys."
+	CompareStepDetail      = "Commits unique to the destination; skips merges and side branches."
+	CompareWholeDetail     = "Changes from the base's content to the revision to inspect."
+	CompareConfirmDetail   = "Opens a separate review for reading. Your working tree must be clean."
+	CompareReadonlyNote    = "Read-only comparison. Local comments are kept when you close it."
+	CompareSetupNote       = "Compare any two revisions without configuring a base."
+	CompareButton          = "Compare"
+	CompareFailed          = "Could not compare those two revisions."
 )
 
 func RevisionLabel(value string) string {
+	if strings.HasPrefix(value, "fetch:") {
+		return strings.Replace(strings.TrimPrefix(value, "fetch:"), ":", "/", 1)
+	}
 	for _, prefix := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
 		if strings.HasPrefix(value, prefix) {
 			return strings.TrimPrefix(value, prefix)

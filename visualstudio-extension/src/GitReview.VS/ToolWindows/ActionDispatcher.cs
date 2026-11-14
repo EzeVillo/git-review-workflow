@@ -1065,25 +1065,75 @@ public sealed partial class ActionDispatcher
     {
         var cwd = Cwd;
         if (cwd is null) return;
-        var config = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain" }, cwd, network: false).ConfigureAwait(true);
-        var revisions = config.ExitCode == 0 && !config.TimedOut
-            ? ConfigPorcelain.CompareRevisionItems(ConfigPorcelain.ParseConfigPorcelain(config.Stdout).Candidates)
-            : Array.Empty<CompareRevisionItem>();
-        var candidates = revisions.Select(c => c.Label).ToList();
-        var upper = PickCommitIsh(UserCopy.CompareTargetTitle, UserCopy.CompareRevisionPrompt, candidates);
-        if (upper is null) return;
-        var upperRef = revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper;
-        var lower = PickCommitIsh(UserCopy.CompareBaseTitle, UserCopy.CompareBasePromptText(upperRef) + " " + UserCopy.CompareRevisionPrompt, candidates);
-        if (lower is null) return;
-        var lowerRef = revisions.FirstOrDefault(c => c.Label == lower)?.Value ?? lower;
+        var suggestions = await _panel.Cli.InvokeAsync("compare", new[] { "--sources", "--porcelain" }, cwd, network: false).ConfigureAwait(true);
+        var legacy = suggestions.ExitCode != 0 && !suggestions.TimedOut && suggestions.Stderr.Contains("unknown option --sources");
+        if (!legacy && (suggestions.ExitCode != 0 || suggestions.TimedOut))
+        {
+            GitReviewDialogs.CliError(suggestions.Stderr, UserCopy.CompareFailed, suggestions.Stdout);
+            return;
+        }
+        var literal = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (legacy)
+        {
+            var config = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain" }, cwd, network: false).ConfigureAwait(true);
+            foreach (var item in ConfigPorcelain.CompareRevisionItems(ConfigPorcelain.ParseConfigPorcelain(config.Stdout).Candidates))
+                literal[item.Label] = item.Value;
+        }
+        var revisions = suggestions.Stdout.Split('\n').Select(line => line.TrimEnd('\r').Split('\t'))
+            .Where(fields => fields.Length == 5 && fields[0] == "compare-source").ToLookup(fields => fields[1]);
+        var candidates = revisions.Select(group => group.Key).Concat(literal.Keys).ToList();
+        string? PickRevision(string title, string context)
+        {
+            var name = PickCommitIsh(title, context, candidates);
+            if (name is not null && literal.TryGetValue(name, out var value)) return value;
+            if (name is null || !revisions.Contains(name)) return name;
+            var sources = revisions[name].ToArray();
+            var sourceLabels = sources.Select(fields => fields[2] switch
+            {
+                "remote" => UserCopy.CompareSourceRemote.Replace("{remote}", fields[3]),
+                "cached" => UserCopy.CompareSourceCached.Replace("{remote}", fields[3]),
+                _ => UserCopy.CompareSourceLocal,
+            }).ToList();
+            var pick = GitReviewDialogs.Choose(UserCopy.CompareSourceTitle.Replace("{branch}", name), "", sourceLabels);
+            return pick < 0 ? null : sources[pick][4];
+        }
+        var upperRef = PickRevision(UserCopy.CompareTargetTitle, UserCopy.CompareRevisionPrompt);
+        if (upperRef is null) return;
+        var lowerRef = PickRevision(UserCopy.CompareBaseTitle, UserCopy.CompareBasePromptText(upperRef) + " " + UserCopy.CompareRevisionPrompt);
+        if (lowerRef is null) return;
 
-        var report = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain", "--compare", "--", lowerRef, upperRef }, cwd, network: false).ConfigureAwait(true);
+        var network = lowerRef.StartsWith("fetch:", StringComparison.Ordinal) || upperRef.StartsWith("fetch:", StringComparison.Ordinal);
+        var report = legacy
+            ? await _panel.Cli.InvokeAsync("config", new[] { "--porcelain", "--compare", "--", lowerRef, upperRef }, cwd, network: false).ConfigureAwait(true)
+            : await _panel.Cli.InvokeAsync("compare", new[] { "--prepare", "--porcelain", "--", lowerRef, upperRef }, cwd,
+                network: network, timeoutMs: network ? 300_000 : 120_000).ConfigureAwait(true);
         if (report.ExitCode != 0 || report.TimedOut)
         {
             GitReviewDialogs.CliError(report.Stderr, UserCopy.CompareFailed, report.Stdout);
             return;
         }
-        var items = LayoutOffers.BuildLayoutItems(ConfigPorcelain.ParseConfigPorcelain(report.Stdout).Offers);
+        const string marker = "comparison-prepared\t";
+        var token = report.Stdout.Split('\n').FirstOrDefault(line => line.StartsWith(marker, StringComparison.Ordinal))?.Substring(marker.Length).TrimEnd('\r');
+        if (string.IsNullOrEmpty(token) && !legacy)
+        {
+            GitReviewDialogs.CliError(report.Stderr, UserCopy.CompareFailed, report.Stdout);
+            return;
+        }
+        try
+        {
+            await ReadComparisonAsync(lowerRef, upperRef, token, report.Stdout).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (token is not null)
+                await _panel.Cli.InvokeAsync("compare", new[] { "--release", "--", token }, cwd, network: false).ConfigureAwait(true);
+        }
+    }
+
+    private async Task ReadComparisonAsync(string lowerRef, string upperRef, string? token, string stdout)
+    {
+        var prepared = token is null ? Array.Empty<string>() : new[] { "--prepared=" + token };
+        var items = LayoutOffers.BuildLayoutItems(ConfigPorcelain.ParseConfigPorcelain(stdout).Offers);
         var labels = items.Select(item =>
         {
             var detail = item.Draft switch
@@ -1108,7 +1158,8 @@ public sealed partial class ActionDispatcher
         {
             if (picked.Draft != LayoutOffers.DraftStep.Resume)
             {
-                var result = await _panel.Mutations.RunArgvAsync("walkthrough", new[] { "draft", "--porcelain", "--compare", "--", lowerRef, upperRef }, network: false).ConfigureAwait(true);
+                var args = new[] { "draft", "--porcelain", "--compare" }.Concat(prepared).Concat(new[] { "--", lowerRef, upperRef }).ToArray();
+                var result = await _panel.Mutations.RunArgvAsync("walkthrough", args, network: false).ConfigureAwait(true);
                 await _panel.RefreshAsync().ConfigureAwait(true);
                 if (result is null) return;
                 if (result.ExitCode != 0 || result.TimedOut)
@@ -1140,8 +1191,7 @@ public sealed partial class ActionDispatcher
         };
         await RunAsync(
             "compareReview",
-            new ActionParams.Compare(flags, lowerRef, upperRef),
-            network: true,
+            new ActionParams.Compare(flags.Concat(prepared).ToArray(), lowerRef, upperRef),
             progress: UserCopy.ComparingProgress(lowerRef, upperRef)).ConfigureAwait(true);
     }
 

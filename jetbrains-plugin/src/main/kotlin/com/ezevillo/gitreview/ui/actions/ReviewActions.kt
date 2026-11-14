@@ -580,29 +580,71 @@ class CompareReviewAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val service = GitReviewService.getInstance(project)
         val cwd = pickSoleGitRoot(project)?.rootPath ?: return
-        val config = Bg.sync(project, UserCopy.COMPARE_TARGET_TITLE) {
-            service.cliInvoker.invoke("config", listOf("--porcelain"), cwd)
+        val suggestions = Bg.sync(project, UserCopy.COMPARE_TARGET_TITLE) {
+            service.cliInvoker.invoke("compare", listOf("--sources", "--porcelain"), cwd)
         }
-        val revisions = if (config.exitCode == 0 && !config.timedOut) {
+        val legacy = suggestions.exitCode != 0 && !suggestions.timedOut && suggestions.stderr.contains("unknown option --sources")
+        if (!legacy && (suggestions.exitCode != 0 || suggestions.timedOut)) {
+            UiMessages.error(project, UiMessages.flatten(suggestions.stderr).ifEmpty { UserCopy.COMPARE_FAILED })
+            return
+        }
+        val literal = if (legacy) Bg.sync(project, UserCopy.COMPARE_TARGET_TITLE) {
+            val config = service.cliInvoker.invoke("config", listOf("--porcelain"), cwd)
             com.ezevillo.gitreview.domain.compareRevisionItems(com.ezevillo.gitreview.domain.parseConfigPorcelain(config.stdout).candidates)
-        } else emptyList()
-        val candidates = revisions.map { it.label }.toTypedArray()
-        val upper = UiMessages.chooseOrType(
-            project, UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_TARGET_TITLE, candidates,
-        ) ?: return
-        val upperRef = revisions.find { it.label == upper }?.value ?: upper
-        val lower = UiMessages.chooseOrType(
-            project, UserCopy.compareBasePrompt(upperRef) + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_BASE_TITLE, candidates,
-        ) ?: return
-        val lowerRef = revisions.find { it.label == lower }?.value ?: lower
-        val report = Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) {
-            service.cliInvoker.invoke("config", listOf("--porcelain", "--compare", "--", lowerRef, upperRef), cwd)
+                .associate { it.label to it.value }
+        } else emptyMap()
+        val revisions = suggestions.stdout.lineSequence().map { it.split('\t') }
+            .filter { it.size == 5 && it[0] == "compare-source" }.groupBy { it[1] }
+        fun pickRevision(title: String, context: String): String? {
+            val name = UiMessages.chooseOrType(project, context, title, (revisions.keys + literal.keys).toTypedArray()) ?: return null
+            if (legacy) return literal[name] ?: name
+            val sources = revisions[name] ?: return name
+            val labels = sources.map {
+                when (it[2]) {
+                    "remote" -> UserCopy.COMPARE_SOURCE_REMOTE.replace("{remote}", it[3])
+                    "cached" -> UserCopy.COMPARE_SOURCE_CACHED.replace("{remote}", it[3])
+                    else -> UserCopy.COMPARE_SOURCE_LOCAL
+                }
+            }.toTypedArray()
+            val sourceTitle = UserCopy.COMPARE_SOURCE_TITLE.replace("{branch}", name)
+            val choice = UiMessages.choose(project, "", sourceTitle, labels)
+            return sources.getOrNull(choice)?.get(4)
+        }
+        val upperRef = pickRevision(UserCopy.COMPARE_TARGET_TITLE, UserCopy.COMPARE_REVISION_PROMPT) ?: return
+        val lowerRef = pickRevision(UserCopy.COMPARE_BASE_TITLE, UserCopy.compareBasePrompt(upperRef) + " " + UserCopy.COMPARE_REVISION_PROMPT) ?: return
+        val network = listOf(lowerRef, upperRef).any { it.startsWith("fetch:") }
+        val report = Bg.sync(project, if (network) UserCopy.COMPARE_PREPARE_PROGRESS else UserCopy.COMPARE_LAYOUT_TITLE) {
+            if (legacy) service.cliInvoker.invoke("config", listOf("--porcelain", "--compare", "--", lowerRef, upperRef), cwd)
+            else service.cliInvoker.invoke("compare", listOf("--prepare", "--porcelain", "--", lowerRef, upperRef), cwd,
+                network = network, timeoutMs = if (network) 300_000L else 120_000L)
         }
         if (report.exitCode != 0 || report.timedOut) {
             UiMessages.error(project, UiMessages.flatten(report.stderr).ifEmpty { UserCopy.COMPARE_FAILED })
             return
         }
-        val offers = com.ezevillo.gitreview.domain.parseConfigPorcelain(report.stdout).offers
+        val token = report.stdout.lineSequence().firstOrNull { it.startsWith("comparison-prepared\t") }?.substringAfter('\t')
+        if (token == null && !legacy) {
+            UiMessages.error(project, UserCopy.COMPARE_FAILED)
+            return
+        }
+        fun release() {
+            if (token == null) return
+            Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) {
+                service.cliInvoker.invoke("compare", listOf("--release", "--", token), cwd)
+            }
+        }
+        var opening = false
+        try {
+            opening = readComparison(e, project, service, cwd, lowerRef, upperRef, token, report.stdout, ::release)
+        } finally {
+            if (!opening) release()
+        }
+    }
+
+    private fun readComparison(e: AnActionEvent, project: Project, service: GitReviewService, cwd: String,
+                               lowerRef: String, upperRef: String, token: String?, stdout: String, release: () -> Unit): Boolean {
+        val prepared = if (token == null) emptyList() else listOf("--prepared=$token")
+        val offers = com.ezevillo.gitreview.domain.parseConfigPorcelain(stdout).offers
         val items = com.ezevillo.gitreview.domain.buildLayoutItems(offers)
         val layoutOptions = items.map { item ->
             val detail = when (item.draft) {
@@ -619,19 +661,19 @@ class CompareReviewAction : AnAction(), DumbAware {
             "${item.label} — $detail"
         }.toTypedArray()
         val layoutIdx = UiMessages.choose(project, UserCopy.comparisonSummary(lowerRef, upperRef), UserCopy.COMPARE_LAYOUT_TITLE, layoutOptions)
-        if (layoutIdx < 0) return
+        if (layoutIdx < 0) return false
         val picked = items[layoutIdx]
         if (picked.draft != null) {
             if (picked.draft != com.ezevillo.gitreview.domain.DraftStep.RESUME) {
                 val result = service.mutationLock.run {
                     Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) {
-                        service.cliInvoker.invoke("walkthrough", listOf("draft", "--porcelain", "--compare", "--", lowerRef, upperRef), cwd)
+                        service.cliInvoker.invoke("walkthrough", listOf("draft", "--porcelain", "--compare") + prepared + listOf("--", lowerRef, upperRef), cwd)
                     }
-                } ?: return
+                } ?: return false
                 Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) { service.refreshNow() }
                 if (result.exitCode != 0 || result.timedOut) {
                     UiMessages.error(project, UiMessages.flatten(result.stderr).ifEmpty { UserCopy.DRAFT_FAILED })
-                    return
+                    return false
                 }
                 if (picked.draft == com.ezevillo.gitreview.domain.DraftStep.UPDATE) {
                     com.ezevillo.gitreview.domain.parseMergedRecord(result.stdout)?.let {
@@ -640,7 +682,7 @@ class CompareReviewAction : AnAction(), DumbAware {
                 }
             } else Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) { service.refreshNow() }
             revealPanel(project, ControlId.COMPARE_REVIEW)
-            return
+            return false
         }
         val layout = picked.layout
         if (!UiMessages.confirm(
@@ -651,7 +693,7 @@ class CompareReviewAction : AnAction(), DumbAware {
                 UserCopy.COMPARE_BUTTON,
             )
         ) {
-            return
+            return false
         }
         val flags = when (layout) {
             ReviewLayout.STEP -> listOf("--step")
@@ -659,11 +701,14 @@ class CompareReviewAction : AnAction(), DumbAware {
             ReviewLayout.KEYS -> listOf("--keys")
             ReviewLayout.WALK -> emptyList()
         }
-        mutations(e)?.runSimple(
+        val mutation = mutations(e) ?: return false
+        mutation.runSimple(
             "compareReview",
-            ActionParams.Compare(flags, lowerRef, upperRef),
+            ActionParams.Compare(flags + prepared, lowerRef, upperRef),
             progressTitle = UserCopy.comparingProgress(lowerRef, upperRef),
+            onDone = { release() },
         )
+        return true
     }
 }
 

@@ -132,6 +132,8 @@ Editá y corré el cambio staged con tus herramientas habituales; después eleg�
 
 Las comparaciones ofrecen sólo comentarios Local y los conservan automáticamente al cerrarlas. Los formularios omiten el selector de destino cuando la CLI permite una sola opción.
 
+En **Compare revisions**, elegí cada rama por nombre y después elegí qué versión usar. Traer una versión para Compare conserva las ramas locales y las referencias de seguimiento remoto en sus commits actuales.
+
 Las notas Local son privadas; los comentarios Shared se preparan para el PR. Ambos
 documentos conviven y el destino sólo se aplica al comentario nuevo. Si se pregunta
 si querés continuar una review anterior, elegís si recuperar sus notas Local o

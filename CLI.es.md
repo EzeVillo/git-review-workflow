@@ -423,16 +423,16 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
   review es de solo lectura, no hay a dónde escribir"). Usá `git review abort`
   para terminarlo.
 - `--step` lee los commits alcanzables desde `<b>` pero no desde `<a>`, siguiendo el primer padre y omitiendo los merges y sus ramas laterales. Cada paso compara un commit con su padre. Si las revisiones divergieron, esto puede diferir del diff completo entre sus contenidos. Navegá con `git review next` / `git review prev`.
-- Whole diff y walkthrough comparan los contenidos exactos de `<a>` y `<b>`, sin sustituirlos por su merge-base. Compare no hace fetch ni usa `reviewworkflow.base`; una revisión remota refleja el último fetch.
+- Whole diff y walkthrough comparan los contenidos exactos de `<a>` y `<b>`, sin sustituirlos por su merge-base. `git review compare <a> <b>` toma las referencias disponibles localmente, sin fetch ni `reviewworkflow.base`.
 - Si el árbol de `<b>` trae un walkthrough, `compare` también entra en modo walk,
   igual que `git review start`, y sigue siendo de solo lectura. `--no-walk` opta
   por salir.
 
 Compare conserva los nombres de ambas revisiones y sus commits resueltos en `status`, en todos los modos y después de guardar/retomar. Mover una rama después no cambia la comparación ya abierta.
 
-En el flujo interactivo, **What do you want to review?** pide primero `<b>`. **Compare against what?** pide `<a>`. Los IDE consultan las sugerencias de ramas al abrir Compare y también aceptan las revisiones que escribas.
+En el flujo interactivo, **What do you want to review?** pide primero `<b>`. **Compare against what?** pide `<a>`. Cada nombre de rama aparece una vez. Para cada rama podés elegir la versión local, la copia de un remoto del último fetch o traer la versión actual de ese remoto. También podés escribir un tag, un commit o una referencia exacta. Compare descarga sólo las ramas elegidas para actualizar y usa los dos commits fijados para mostrar las opciones de lectura y abrir el diff. El fetch de Compare conserva las ramas locales y las referencias como `origin/feature` en sus commits actuales.
 
-Los clientes consultan `config --porcelain --compare -- <a> <b>` antes de ofrecer una forma de lectura. Sólo aparecen walkthroughs y esenciales utilizables, junto con crear, retomar o actualizar tu propio orden de lectura cuando corresponde. Estos borradores son independientes de los de Start y funcionan con ramas, tags y commits, sin base configurada ni fetch.
+Sólo aparecen walkthroughs y esenciales utilizables, junto con crear, retomar o actualizar tu propio orden de lectura cuando corresponde. Estos borradores son independientes de los de Start y funcionan con ramas, tags y commits, sin base configurada.
 
 ```sh
 git review walkthrough draft --compare -- v1.0 v2.0

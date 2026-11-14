@@ -1742,7 +1742,11 @@ export function panelHtml(nonce: string): string {
   function renderNotes(model, body) {
     if (model.comparison) {
       const c = model.comparison;
-      const label = function (value) { return value.replace(/^refs\\/(heads|remotes|tags)\\//, "").replace(/^fetch:([^:]+):(.+)$/, "$1/$2"); };
+      const label = function (value) {
+        return value.replace(/^refs\\/(heads|remotes|tags)\\//, "").replace(/^fetch:([^:]+):(.+)$/, function (_, remote, branch) {
+          return COMPARE.sourceFetched.replace("{revision}", function () { return remote + "/" + branch; });
+        });
+      };
       body.appendChild(note(COMPARISON.base.replace("{oid}", c.baseOid.slice(0, 7)).replace("{revision}", function () { return label(c.baseLabel); })));
       body.appendChild(note(COMPARISON.target.replace("{oid}", c.targetOid.slice(0, 7)).replace("{revision}", function () { return label(c.targetLabel); })));
     }

@@ -422,6 +422,7 @@ public static class UserCopy
     public const string CompareSourceLocal = "Local branch";
     public const string CompareSourceRemote = "Fetch from {remote}";
     public const string CompareSourceCached = "{remote} from last fetch";
+    public const string CompareSourceFetched = "{revision} (fetched)";
     public const string ComparePrepareProgress = "Fetching comparison revisions…";
     public const string CompareUseAsTyped = "Use as typed";
     public const string CompareSummary = "Review {target} against {base}";
@@ -437,7 +438,7 @@ public static class UserCopy
         if (value.StartsWith("fetch:", StringComparison.Ordinal))
         {
             var separator = value.IndexOf(':', 6);
-            if (separator >= 0) return value.Substring(6, separator - 6) + "/" + value.Substring(separator + 1);
+            if (separator >= 0) return CompareSourceFetched.Replace("{revision}", value.Substring(6, separator - 6) + "/" + value.Substring(separator + 1));
         }
         var prefix = new[] { "refs/heads/", "refs/remotes/", "refs/tags/" }.FirstOrDefault(p => value.StartsWith(p, StringComparison.Ordinal));
         return prefix is null ? value : value.Substring(prefix.Length);

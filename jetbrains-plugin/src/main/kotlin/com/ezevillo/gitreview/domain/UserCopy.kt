@@ -293,6 +293,7 @@ object UserCopy {
     const val COMPARE_SOURCE_LOCAL = "Local branch"
     const val COMPARE_SOURCE_REMOTE = "Fetch from {remote}"
     const val COMPARE_SOURCE_CACHED = "{remote} from last fetch"
+    const val COMPARE_SOURCE_FETCHED = "{revision} (fetched)"
     const val COMPARE_PREPARE_PROGRESS = "Fetching comparison revisions…"
     const val COMPARE_USE_AS_TYPED = "Use as typed"
     const val COMPARE_SUMMARY = "Review {target} against {base}"
@@ -440,7 +441,7 @@ object UserCopy {
     }
 
     fun revisionLabel(value: String): String {
-        if (value.startsWith("fetch:")) return value.removePrefix("fetch:").replaceFirst(':', '/')
+        if (value.startsWith("fetch:")) return COMPARE_SOURCE_FETCHED.replace("{revision}", value.removePrefix("fetch:").replaceFirst(':', '/'))
         val prefix = listOf("refs/heads/", "refs/remotes/", "refs/tags/").firstOrNull { value.startsWith(it) }
         return if (prefix == null) value else value.removePrefix(prefix)
     }

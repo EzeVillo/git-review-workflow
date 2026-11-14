@@ -696,6 +696,7 @@ const (
 	CompareSourceLocal     = "Local branch"
 	CompareSourceRemote    = "Fetch from {remote}"
 	CompareSourceCached    = "{remote} from last fetch"
+	CompareSourceFetched   = "{revision} (fetched)"
 	ComparePrepareProgress = "Fetching comparison revisions…"
 	CompareUseAsTyped      = "Use as typed"
 	CompareSummary         = "Review {target} against {base}"
@@ -713,7 +714,8 @@ const (
 
 func RevisionLabel(value string) string {
 	if strings.HasPrefix(value, "fetch:") {
-		return strings.Replace(strings.TrimPrefix(value, "fetch:"), ":", "/", 1)
+		revision := strings.Replace(strings.TrimPrefix(value, "fetch:"), ":", "/", 1)
+		return strings.ReplaceAll(CompareSourceFetched, "{revision}", revision)
 	}
 	for _, prefix := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
 		if strings.HasPrefix(value, prefix) {

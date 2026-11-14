@@ -3398,7 +3398,10 @@ walk_draft_progress() {
 			}
 		}
 		function compare_label(selector) {
-			if (sub(/^fetch:/, "", selector)) sub(/:/, "/", selector)
+			if (sub(/^fetch:/, "", selector)) {
+				sub(/:/, "/", selector)
+				selector = selector " (fetched)"
+			}
 			return selector
 		}
 	' "$@"

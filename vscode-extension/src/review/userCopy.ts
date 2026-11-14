@@ -218,6 +218,7 @@ export const COMPARE_COPY = {
     "sourceLocal": "Local branch",
     "sourceRemote": "Fetch from {remote}",
     "sourceCached": "{remote} from last fetch",
+    "sourceFetched": "{revision} (fetched)",
     "prepareProgress": "Fetching comparison revisions…",
     "useAsTyped": "Use as typed",
     "summary": "Review {target} against {base}",
@@ -236,7 +237,8 @@ export const COMPARE_COPY = {
 } as const;
 
 export function revisionLabel(value: string): string {
-    return value.replace(/^refs\/(heads|remotes|tags)\//, "").replace(/^fetch:([^:]+):(.+)$/, "$1/$2");
+    return value.replace(/^refs\/(heads|remotes|tags)\//, "").replace(/^fetch:([^:]+):(.+)$/, (_, remote, branch) =>
+        COMPARE_COPY.sourceFetched.replace("{revision}", () => `${remote}/${branch}`));
 }
 export function comparisonSummary(base: string, target: string): string {
     return COMPARE_COPY.summary.replace(/\{(base|target)\}/g, (_, role) => revisionLabel(role === "base" ? base : target));

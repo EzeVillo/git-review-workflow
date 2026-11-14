@@ -1082,6 +1082,7 @@ compare_flow:
   sourceLocal: "Local branch"
   sourceRemote: "Fetch from {remote}"
   sourceCached: "{remote} from last fetch"
+  sourceFetched: "{revision} (fetched)"
   prepareProgress: "Fetching comparison revisions…"
   useAsTyped: "Use as typed"
   summary: "Review {target} against {base}"

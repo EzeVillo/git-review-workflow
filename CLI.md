@@ -307,7 +307,7 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `origin/<branch>` — if that differs from your checked-out branch you get a note,
   since you would be reviewing a different snapshot than you have. With no branch,
   fails on a detached HEAD or while on a `review/*` branch.
-- Start fetches the requested remote branches to private refs and leaves local and remote-tracking branches in place. The interactive assistant pins the tip and base before it offers reading layouts.
+- Start fetches the requested remote branches to private refs and leaves local and remote-tracking branches in place. Prepared reviews pin the tip and base before offering reading layouts. With `--from`, they also pin the commit selected as the lower bound.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review
@@ -558,9 +558,10 @@ git review start feature/checkout                      # enters walk mode on you
 
 - Takes the branch as an argument, like `git review start` — you're standing on
   the base, not on the PR — and defaults to the branch you are on, or, run from
-  inside a review, to the branch that review is reading. `--local`,
-  `--offline` and `--delta` resolve the range exactly as `start` does, so the
-  skeleton lists precisely the files your review will cover. Never fetches.
+  inside a review, to the branch that review is reading. Drafting for that
+  branch and source uses the review's pinned tip and base, even when you pass
+  the branch explicitly. `--local`, `--offline` and `--delta` select the
+  source or range as they do in `start`. Never fetches.
 - `--build` applies the same validation `build` does for the author's sidecar:
   placeholders, drift, duplicate paths, `> key` with a value. It's a quality
   gate, not a gate — an unvalidated draft is already readable.
@@ -1107,10 +1108,10 @@ forget it yourself.
 - `<branch>` — forget the marker(s) for one source branch, both the remote one
   and the `--local` one if present.
 - `--all` — forget every recorded marker (leaves `reviewworkflow.base` alone).
-- `--stale` — fetch and prune `origin`, then forget only the markers whose branch
-  no longer exists: remote markers whose `origin/<branch>` is gone (e.g. PRs that
-  were merged and deleted), and `--local` markers whose local `<branch>` is gone.
-  Aborts without removing anything if the fetch fails.
+- `--stale` — forget markers for branches that no longer exist. Checks remote
+  markers against the configured remote's branch list and `--local` markers
+  against local branches. Leaves tracking refs as they are. If the remote query
+  fails, no markers are removed.
 - `--dry-run` — with `--stale`, list what would be forgotten without doing it.
   Rejected with the other modes, where the target is already explicit.
 

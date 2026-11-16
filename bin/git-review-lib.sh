@@ -5220,14 +5220,15 @@ start_range_identity() {
 start_read_range() {
 	_rs_pack=$(git show-ref --hash --verify "$1" 2>/dev/null) || die 'prepared review is unavailable'
 	_rs_range=$(git --no-replace-objects log -1 --format='%s' "$_rs_pack" --)
-	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous <<EOF
+	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous _rs_from <<EOF
 $_rs_range
 EOF
 	[ "$_rs_received" = "$2" ] || die 'prepared review does not match the selected branch and range'
 	case "$_rs_base_label" in local|remote) ;; *) die 'invalid prepared review base' ;; esac
 	if [ "$_rs_base" = '-' ]; then _rs_base=''; fi
 	if [ "$_rs_previous" = '-' ]; then _rs_previous=''; fi
-	for _rs_commit in "$_rs_tip" "${_rs_base:-$_rs_tip}"; do
+	if [ "$_rs_from" = '-' ]; then _rs_from=''; fi
+	for _rs_commit in "$_rs_tip" "${_rs_base:-$_rs_tip}" "${_rs_from:-$_rs_tip}"; do
 		case "$_rs_commit" in ''|*[!0-9a-f]*) die 'invalid prepared review commit' ;; esac
 		[ "${#_rs_commit}" -eq "${#_rs_pack}" ] || die 'invalid prepared review commit'
 	done

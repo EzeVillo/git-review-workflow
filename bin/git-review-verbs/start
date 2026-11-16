@@ -16,7 +16,7 @@ prog="git review start"
 usage() {
 	cat <<EOF
 usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk | --keys] [--local | --offline]
-       $prog --prepare [--local | --offline] [--delta] -- <branch>
+       $prog --prepare [--local | --offline] [--base <base> | --delta | --from <commit>] -- <branch>
        $prog --release -- <token>
 
 Stage a pull request diff on a review/<branch> branch for inline review.
@@ -374,6 +374,7 @@ if [ "$local_mode" -eq 0 ]; then
 fi
 
 # Resolve the lower bound of the review range (exclusive).
+pinned_from=''
 if [ "$delta" -eq 1 ]; then
 	[ -n "$prev" ] || die "no previous review of $src recorded; run a full review first"
 	[ "$prev" != "$tip" ] || die "no new commits since your last review of $src"
@@ -382,7 +383,13 @@ if [ "$delta" -eq 1 ]; then
 	start="$prev"
 	range="since last review ($(git rev-parse --short "$prev"))"
 elif [ -n "$from" ]; then
-	start="$(git rev-parse --verify --quiet "$from^{commit}")" || die "unknown commit: $from"
+	if [ -n "${_rs_saved_range:-}" ]; then
+		[ -n "$_rs_from" ] || die 'prepared lower bound is unavailable; prepare the review again'
+		pinned_from=$_rs_from
+	else
+		pinned_from="$(git rev-parse --verify --quiet "$from^{commit}")" || die "unknown commit: $from"
+	fi
+	start=$pinned_from
 	git merge-base --is-ancestor "$start" "$tip" ||
 		die "$from is not an ancestor of $srclabel"
 	[ "$start" != "$tip" ] || die "no commits to review after $from"
@@ -414,11 +421,11 @@ fi
 walk_use_draft "$src"
 
 if [ "$prepare" -eq 1 ]; then
-	# The manifest pins tip, base and delta separately, even when two are equal.
+	# The manifest pins both endpoints, even when a selector is a movable ref.
 	set -- -p "$tip"
 	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
 	if [ "$delta" -eq 1 ] && [ "$prev" != "$baseref" ] && [ "$prev" != "$tip" ]; then set -- "$@" -p "$prev"; fi
-	_rs_pack=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--}" "$@" </dev/null)
+	_rs_pack=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@" </dev/null)
 	git update-ref "$_rs_tmp" "$_rs_pack"
 	_ero_branch=$src
 	_ero_tip=$tip
@@ -440,7 +447,7 @@ start_keep_range() {
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && [ "$prev" != "$baseref" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
 		set -- "$@" -p "$prev"
 	fi
-	_rs_session=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--}" "$@" </dev/null)
+	_rs_session=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@" </dev/null)
 	git update-ref "refs/worktree/review-start/session/$src" "$_rs_session"
 }
 

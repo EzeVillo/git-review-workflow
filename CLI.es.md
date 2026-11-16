@@ -314,7 +314,7 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   revisa `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
   revisando un snapshot distinto al que tenés. Con la rama omitida, falla con HEAD
   detached o estando sobre una rama `review/*`.
-- Start trae las ramas remotas solicitadas a refs privadas y mantiene las ramas locales y de seguimiento en su posición. El asistente fija el tip y la base antes de ofrecer modos de lectura.
+- Start trae las ramas remotas solicitadas a refs privadas y mantiene las ramas locales y de seguimiento en su posición. Una revisión preparada fija el tip y la base antes de ofrecer modos de lectura. Con `--from`, también fija el commit elegido como límite inferior.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que
@@ -574,10 +574,10 @@ git review start feature/checkout                      # entra en walk con tu or
 
 - Toma la rama como argumento, igual que `git review start` — estás parado en la
   base, no en el PR — y por defecto usa la rama en la que estás o, si lo corrés
-  desde adentro de una review, la rama que esa review está leyendo. `--local`, `--offline` y
-  `--delta` resuelven el rango exactamente como lo hace `start`, así que el
-  esqueleto lista precisamente los archivos que tu review va a cubrir. Nunca
-  hace fetch.
+  desde adentro de una review, la rama que esa review está leyendo. Si escribís
+  un borrador para esa rama y ese origen, se usan el tip y la base fijados por
+  la review, aunque indiques la rama explícitamente. `--local`, `--offline` y
+  `--delta` seleccionan el origen o rango como en `start`. Nunca hace fetch.
 - `--build` aplica la misma validación que `build` sobre el sidecar del autor:
   placeholders, drift, paths duplicados, `> key` con valor. Es un control de
   calidad, no una compuerta: un borrador sin validar ya se puede leer.
@@ -1137,10 +1137,10 @@ quieras olvidarlo vos.
 - `<rama>` — olvidar el/los marcador(es) de una rama de origen: el remoto y el de
   `--local` si existe.
 - `--all` — olvidar todos los marcadores (no toca `reviewworkflow.base`).
-- `--stale` — hace fetch y prune de `origin`, y olvida solo los marcadores cuya
-  rama ya no existe: los remotos cuya `origin/<rama>` se fue (PRs mergeados y
-  borrados) y los de `--local` cuya `<rama>` local se fue. Si el fetch falla,
-  aborta sin borrar nada.
+- `--stale` — olvida los marcadores de ramas que ya no existen. Contrasta los
+  marcadores remotos con la lista de ramas del remoto configurado y los de
+  `--local` con las ramas locales. Mantiene las refs de seguimiento tal como
+  están. Si falla la consulta remota, conserva todos los marcadores.
 - `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
   los otros modos, donde el objetivo ya es explícito.
 

@@ -172,6 +172,41 @@ EOF
 	grep -Fxq '## 3. a.txt' "$DRAFT"
 }
 
+@test "draft of the named active branch uses the fetched review range" {
+	cached=$(git rev-parse refs/remotes/origin/feature/plain)
+	git clone -q --branch feature/plain "$ORIGIN" "$TMP/author"
+	printf 'added upstream\n' >"$TMP/author/new.txt"
+	git -C "$TMP/author" add new.txt
+	git -C "$TMP/author" commit -qm 'add a file after the reviewer fetched'
+	git -C "$TMP/author" push -q origin feature/plain
+
+	run git review start feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'git review walkthrough draft feature/plain'* ]]
+	before=$(git diff --cached --name-only)
+	[ "$(git rev-parse refs/remotes/origin/feature/plain)" = "$cached" ]
+
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[ "$(sed -n 's/^## ?\. //p' "$DRAFT" | LC_ALL=C sort)" = "$(git -c core.quotePath=false diff --cached --name-only | LC_ALL=C sort)" ]
+	fill_draft
+	printf '\n## 4. new.txt\nReview the newly fetched file.\n' >>"$DRAFT"
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 0 ]
+	grep -Fxq '## 4. new.txt' "$DRAFT"
+	[ "$(git diff --cached --name-only)" = "$before" ]
+	[ "$(git rev-parse refs/remotes/origin/feature/plain)" = "$cached" ]
+
+	git review abort
+	git config reviewworkflow.feature/plain.reviewed "$cached"
+	run git review start --delta feature/plain
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = new.txt ]
+	run git review walkthrough draft --delta --force feature/plain
+	[ "$status" -eq 0 ]
+	[ "$(sed -n 's/^## ?\. //p' "$DRAFT")" = new.txt ]
+}
+
 @test "draft with no argument inside a compare of a remote-tracking branch writes the branch's draft" {
 	# The review's identity here is "origin/feature/plain"; the draft belongs to
 	# "feature/plain", because a draft belongs to the branch and not to the ref you

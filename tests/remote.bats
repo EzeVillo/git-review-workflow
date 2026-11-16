@@ -66,7 +66,7 @@ teardown() {
 	[[ "$output" != *"origin/"* ]]
 }
 
-@test "review forget --delta --stale fetches from the configured remote" {
+@test "review forget --delta --stale consults the configured remote" {
 	git review start feature/x
 	# A marker now exists for feature/x; delete the remote branch so it is stale.
 	git push --quiet upstream --delete feature/x

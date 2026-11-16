@@ -154,9 +154,9 @@ mark() {
 @test "review forget --delta --stale forgets markers whose origin branch is gone, keeps live ones" {
 	mark feature/x
 	mark feature/y
-	# feature/y is merged & deleted upstream; its remote-tracking ref still
-	# lingers locally until the prune inside review forget --delta removes it.
-	git push --quiet origin --delete feature/y
+	# Deletion by another clone leaves the remote-tracking copy here intact.
+	cached=$(git rev-parse refs/remotes/origin/feature/y)
+	git --git-dir="$ORIGIN" update-ref -d refs/heads/feature/y
 
 	run git review forget --delta --stale
 	[ "$status" -eq 0 ]
@@ -167,6 +167,7 @@ mark() {
 	[ "$status" -ne 0 ]
 	# the marker for the still-live branch survives
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+	[ "$(git rev-parse refs/remotes/origin/feature/y)" = "$cached" ]
 }
 
 @test "review forget --delta --stale --dry-run lists stale markers but removes nothing" {
@@ -194,13 +195,34 @@ mark() {
 	[ -n "$(git config reviewworkflow.feature/y.reviewed)" ]
 }
 
-@test "review forget --delta --stale aborts on a failed fetch and removes nothing" {
+@test "review forget --delta --stale checks branches outside the tracking refspec" {
+	git clone -q --single-branch --branch develop "$ORIGIN" "$TMP/narrow"
+	cd "$TMP/narrow"
+	git config reviewworkflow.base develop
+
+	git review start --no-walk feature/x
+	git review finish
+	git review clean --keep-fixes feature/x
+	tip=$(git config reviewworkflow.feature/x.reviewed)
+	[ "$tip" = "$(git --git-dir="$ORIGIN" rev-parse refs/heads/feature/x)" ]
+	! git show-ref --verify --quiet refs/remotes/origin/feature/x
+	before=$(git for-each-ref refs/remotes/)
+
+	run git review forget --delta --stale
+	[ "$status" -eq 0 ]
+	[ "$output" = 'no stale delta markers (every branch still exists)' ]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$tip" ]
+	[ "$(git for-each-ref --format='%(objectname)' refs/review-delta/)" = "$tip" ]
+	[ "$(git for-each-ref refs/remotes/)" = "$before" ]
+}
+
+@test "review forget --delta --stale aborts on a failed remote query and removes nothing" {
 	mark feature/x
 	git remote remove origin
 
 	run git review forget --delta --stale
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"could not fetch"* ]]
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"error: could not list branches on origin"* ]]
 	# a failed stale run must never drop markers on inference
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 }

@@ -32,9 +32,9 @@ Discard the persistent state a review leaves behind. Choose one mode:
 --delta targets:
   <branch>     forget the marker(s) for one source branch (remote and --local)
   --all        forget every recorded marker
-  --stale      forget only markers whose branch no longer exists: remote markers
-               when <remote>/<branch> is gone (fetches and prunes first), local
-               markers when the local <branch> is gone
+  --stale      forget markers whose branch no longer exists. Checks remote
+               markers against the remote's branches and local markers
+               against local branches
   --dry-run    with --stale, list what would be forgotten without forgetting it
 
 --saved targets:
@@ -533,13 +533,12 @@ fi
 
 # ── --stale ───────────────────────────────────────────────────────────────────
 if [ "$stale" -eq 1 ]; then
-	# A local marker's staleness is decided entirely by whether its local branch
-	# still exists — no remote state involved. Only fetch (to prune deleted
-	# remote-tracking refs) when at least one remote marker is present; a set of
-	# purely --local markers needs no network at all. The anchored pattern matches
-	# reviewworkflow.<src>.reviewed but not reviewworkflowlocal.<src>.reviewed.
+	# The clone's fetch refspec may omit branches Start can review. List the
+	# server's heads before deleting any markers, and only contact it if needed.
+	remote_heads=''
 	if grep -q '^reviewworkflow\.' "$tmp"; then
-		git fetch --prune --quiet "$remote" || die "could not fetch from $remote"
+		remote_refs=$(git ls-remote --heads --refs -- "$remote") || die "could not list branches on $remote"
+		remote_heads=$(printf '%s\n' "$remote_refs" | cut -f 2)
 	fi
 
 	any=0
@@ -551,7 +550,7 @@ if [ "$stale" -eq 1 ]; then
 			git rev-parse --verify --quiet "refs/heads/$msrc" >/dev/null && continue
 			forget_delta "$key" "$msrc" " (local; $msrc no longer exists)"
 		else
-			git rev-parse --verify --quiet "refs/remotes/$remote/$msrc" >/dev/null && continue
+			printf '%s\n' "$remote_heads" | grep -Fxq -e "refs/heads/$msrc" && continue
 			forget_delta "$key" "$msrc" " ($remote/$msrc no longer exists)"
 		fi
 		any=1

@@ -384,12 +384,11 @@ emit_guide_note() {
 
 # Whether HEAD is a review branch, asked of git before anything below derives a
 # branch name: it picks which of the three situation phrases the instruction block
-# carries. Deliberately NOT from_review -- that is 1 only when the reviewer omitted
-# the branch, so "draft feature/x" run from inside review/feature/x would get the
-# base-branch phrase while standing in a review. from_review stays as it is, for
-# deriving the name.
+# carries. This is independent of from_review: a draft for another branch can
+# still be written from a review's working tree.
 head_in_review=0
-case "$(git symbolic-ref --quiet --short HEAD || true)" in
+head_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$head_branch" in
 review/*) head_in_review=1 ;;
 esac
 
@@ -458,7 +457,7 @@ fi
 # than the one start is about to create.
 if [ "$sub" = draft ]; then
 	if [ "$compare_mode" -eq 0 ] && [ -z "$branch" ] && [ "$head_in_review" -eq 1 ]; then
-		_cmp_active="$(walk_review_draft_src "$(git symbolic-ref --quiet --short HEAD)")"
+		_cmp_active="$(walk_review_draft_src "$head_branch")"
 		case "$_cmp_active" in compare/*)
 			if walk_has_draft_file "$_cmp_active"; then
 				[ "$local_only$offline$delta_mode$base_explicit" = 0000 ] || die "--compare cannot be combined with --local, --offline, --delta or --base"
@@ -482,28 +481,31 @@ if [ "$sub" = draft ]; then
 		srclabel="$bcommit"
 		from_review=0
 	else
-	# Standing inside the review is the likeliest moment to want a draft, and the
-	# branch you are on is not one anybody drafts for: review/feature/x has no
-	# remote copy, so the bare command died with "origin/review/feature/x not
-	# found", naming a ref that never existed and never will. Resolved through
-	# walk_review_draft_src, the same function every verb with an active review
-	# uses, which is what makes this draft the one review then reads; it hands back
-	# a branch name — never a remote-tracking one — so the range resolution below
-	# needs no special case for where the name came from.
+	# Start leaves tracking refs untouched. Naming the branch in its own review
+	# must use the pinned revisions, just like omitting the branch. A different
+	# branch or an explicitly different source still resolves independently.
 	from_review=0
-	if [ -z "$branch" ]; then
-		rb="$(git symbolic-ref --quiet --short HEAD || true)"
-		case "$rb" in
-		review/*)
-			branch="$(walk_review_draft_src "$rb")"
+	draft_local=$((local_only + offline))
+	if [ "$head_in_review" -eq 1 ]; then
+		rb="$head_branch"
+		active_draft="$(walk_review_draft_src "$rb")"
+		active_readonly="$(git config "branch.$rb.reviewreadonly" || true)"
+		active_local="$(git config "branch.$rb.reviewlocal" || printf 0)"
+		if [ -z "$branch" ]; then
+			branch="$active_draft"
 			[ -z "$branch" ] || from_review=1
-			;;
-		esac
+		elif [ "$branch" = "$active_draft" ] && [ "$active_readonly" != 1 ] &&
+			[ "$active_local" = "$draft_local" ]; then
+			from_review=1
+		fi
 	fi
-	[ -n "$branch" ] || branch="$(git symbolic-ref --quiet --short HEAD || true)"
+	[ -n "$branch" ] || branch="$head_branch"
 	[ -n "$branch" ] || die "no branch given and HEAD is detached; name the branch to draft for"
 
 	base="$(git config reviewworkflow.base || true)"
+	if [ "$from_review" -eq 1 ] && [ "$active_readonly" != 1 ] && [ -z "$start_prepared" ]; then
+		base="$(git config "branch.$rb.reviewbase" || printf '%s' "$base")"
+	fi
 	[ -n "$base" ] ||
 		die "no base set; run: git config reviewworkflow.base <branch>"
 
@@ -514,7 +516,7 @@ if [ "$sub" = draft ]; then
 	# the review the reviewer is standing in — a name they typed themselves is
 	# theirs to be told is missing, which "$srclabel not found" already says.
 	if [ "$from_review" -eq 1 ] &&
-		[ "$(git config "branch.$rb.reviewreadonly" || true)" = 1 ] &&
+		[ "$active_readonly" = 1 ] &&
 		! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
 		! git rev-parse --verify --quiet "refs/remotes/$remote/$branch" >/dev/null; then
 		die "this review compares $branch, which is not a branch; a walkthrough draft belongs to one, so name it: git review walkthrough draft <branch>"
@@ -577,6 +579,13 @@ if [ "$sub" = draft ]; then
 
 	if [ "$delta_mode" -eq 1 ]; then
 		prev="$(git config "$markerkey" || true)"
+		# Start has already advanced the marker for the live review. When
+		# drafting that same tip, use the point from before Start advanced it.
+		if [ "$from_review" -eq 1 ] && [ "$active_readonly" != 1 ] &&
+			[ "$active_local" = "$draft_local" ] && [ "$prev" = "$tip" ] &&
+			[ "$tip" = "$(git config "branch.$rb.reviewtip" || true)" ]; then
+			prev="$(git config "branch.$rb.reviewprevreviewed" || true)"
+		fi
 		if [ -n "$_start_draft_anchor" ] && [ "$prev" != "$_rs_previous" ]; then die 'last review point changed; prepare the review again'; fi
 		[ -n "$prev" ] ||
 			die "no previous review of $branch recorded for this origin; run a full review first"

@@ -490,6 +490,32 @@ step_review_two_with_edits() {
 	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
 }
 
+@test "prepared start pins the explicit lower bound even after its branch moves" {
+	make_two_commit_feature
+	git branch boundary develop
+	lower=$(git rev-parse boundary)
+	for layout in --no-walk --step; do
+		run git review start --prepare --offline --from boundary -- feature/two
+		[ "$status" -eq 0 ]
+		token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+		[ -n "$token" ]
+		git branch -f boundary feature/two^
+
+		run git review start "--prepared=$token" --offline --from boundary "$layout" -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$lower" ]
+		if [ "$layout" = --no-walk ]; then
+			[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+		else
+			[ "$(git config branch.review/feature/two.reviewcount)" = 2 ]
+			[ "$(git diff --cached --name-only)" = a.txt ]
+		fi
+		git review abort
+		git review start --release -- "$token"
+		git branch -f boundary "$lower"
+	done
+}
+
 @test "finish update refuses undo after committing the correction" {
 	push_pr2
 	git branch -f feature/x origin/feature/x~1

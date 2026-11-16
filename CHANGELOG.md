@@ -26,15 +26,15 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 - Start fetches the requested remote revisions into private refs and leaves
   tracking branches in place. The reading options and the review use the same
-  pinned tip and base. A prepared `--from` also pins the lower bound. Start can
-  fetch a base tag missing locally without creating a public tag. Explicit
-  remote bases and `--from` revisions resolve against the freshly fetched branch,
-  including ancestry expressions such as `origin/main~1`.
+  pinned tip and base. A prepared `--from` also pins the lower bound. Git
+  resolves bases and lower bounds after the requested objects arrive,
+  including symbolic refs, tags and ancestry expressions such as
+  `origin/main~1`. Incremental ranges work when the configured base is absent.
 - Start, Compare and `git review forget --delta --stale` resolve renamed
-  tracking branches using the configured fetch refspec.
+  tracking branches using the same fetch refspec mapping, including PR refs.
 - Drafting for an active review uses its pinned revisions. Delta drafts use
   the last review point from before that session.
-- `git review forget --delta --stale` checks the remote's branch list, including
+- `git review forget --delta --stale` checks the remote's refs, including
   branches outside a single-branch clone's fetch refspec.
 
 ## [0.10.0] — 2026-11-10

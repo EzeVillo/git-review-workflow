@@ -314,20 +314,20 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   revisa `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
   revisando un snapshot distinto al que tenés. Con la rama omitida, falla con HEAD
   detached o estando sobre una rama `review/*`.
-- Start trae las ramas remotas solicitadas a refs privadas y respeta los
-  refspecs de fetch que cambian el nombre de las ramas de seguimiento. Una
-  revisión del remoto configurado, como `--base origin/main~1` o
-  `--from origin/checkpoint`, se resuelve sobre la rama recién traída y deja
-  intacta la ref de seguimiento. Si el tag base falta en el repositorio local,
-  Start también lo trae a una ref privada. Una revisión preparada fija el tip,
-  la base y cualquier commit de `--from` antes de ofrecer modos de lectura.
+- Start trae las revisiones remotas solicitadas a refs privadas y respeta los
+  refspecs de fetch configurados, incluidas las refs de PR mapeadas a ramas de
+  seguimiento. Las revisiones como `--base origin/main~1` o
+  `--from origin/checkpoint` se resuelven sobre el historial recién traído. Si
+  `--base` o `--from` nombran un tag, Start puede traerlo sin agregar un tag local.
+  La revisión preparada fija el tip, la base y cualquier commit de `--from`
+  antes de ofrecer modos de lectura.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que
-  una review completa sin base configurada falla y te pide que la configures. No se
-  usa con `--delta` ni `--from`, que ya traen su propio punto de inicio — pasar una
-  base explícita junto con ellos es un error (una base que viene de config
-  simplemente se ignora).
+  una review completa sin base configurada falla y te pide que la configures.
+  `--delta` y `--from` fijan su propio punto de inicio. Si la base configurada
+  está disponible, ayuda a excluir cambios ya integrados a la rama. Una base
+  explícita no se puede combinar con `--delta` ni `--from`.
 - `--base <base>` — la base contra la que comparar, como flag. Usala para pasar
   una base dejando que `<rama>` defaultee a la rama actual — ej.
   `git review start --base develop` revisa la rama en la que estás contra
@@ -1143,12 +1143,11 @@ quieras olvidarlo vos.
 - `<rama>` — olvidar el/los marcador(es) de una rama de origen: el remoto y el de
   `--local` si existe.
 - `--all` — olvidar todos los marcadores (no toca `reviewworkflow.base`).
-- `--stale` — olvida los marcadores de ramas que ya no existen. Contrasta los
-  marcadores remotos con la lista de ramas del remoto configurado y usa el
-  refspec de fetch para resolver las ramas de seguimiento con otro nombre.
-  Contrasta los marcadores de `--local` con las ramas locales. Mantiene las
-  refs de seguimiento tal como están. Si falla la consulta remota, conserva
-  todos los marcadores.
+- `--stale` — olvida los marcadores cuya ref de origen ya no existe. Contrasta
+  los marcadores remotos con las refs del remoto configurado y aplica el
+  mismo mapeo de refspecs que Start. Contrasta los marcadores de `--local`
+  con las ramas locales. Mantiene las refs de seguimiento tal como están.
+  Si falla la consulta remota, conserva todos los marcadores.
 - `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
   los otros modos, donde el objetivo ya es explícito.
 

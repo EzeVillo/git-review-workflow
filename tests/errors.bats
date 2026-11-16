@@ -462,7 +462,7 @@ step_review_two_with_edits() {
 	cd "$TMP/reader"
 	tracking=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)
 
-	for selector in v-next refs/tags/v-next; do
+	for selector in v-next refs/tags/v-next 'refs/tags/v-next^{}' 'tags/v-next^{}'; do
 		git config reviewworkflow.base "$selector"
 		run git review start --no-walk feature/two
 		[ "$status" -eq 0 ]
@@ -474,6 +474,158 @@ step_review_two_with_edits() {
 		[ "$status" -eq 0 ]
 		[ -z "$(git for-each-ref --format='%(refname)' refs/worktree/review-start/)" ]
 	done
+}
+
+@test "start resolves a base object introduced by the same fetch" {
+	make_two_commit_feature
+	git clone -q --branch develop "$ORIGIN" "$TMP/reader"
+	git switch -q feature/two
+	printf 'third\n' >c.txt
+	git add c.txt
+	git commit -qm third
+	base=$(git rev-parse HEAD)
+	selector=$(git rev-parse --short "$base")
+	printf 'fourth\n' >d.txt
+	git add d.txt
+	git commit -qm fourth
+	git push -q origin feature/two
+	cd "$TMP/reader"
+	! git cat-file -e "$base^{commit}" 2>/dev/null
+	tracking=$(git rev-parse refs/remotes/origin/feature/two)
+	run git review start --prepare --base "$selector" -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review start "--prepared=$token" --base "$selector" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$base" ]
+	[ "$(git diff --cached --name-only)" = d.txt ]
+	[ "$(git rev-parse refs/remotes/origin/feature/two)" = "$tracking" ]
+}
+
+@test "start follows a fresh remote HEAD for both range selectors" {
+	make_two_commit_feature
+	base=$(git rev-parse feature/two^)
+	tracking=$(git rev-parse refs/remotes/origin/develop)
+	git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop
+	git --git-dir="$ORIGIN" update-ref refs/heads/develop "$base"
+	git config --unset reviewworkflow.base
+
+	for kind in --base --from; do
+		run git review start "$kind" origin --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$base" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		[ "$(git rev-parse refs/remotes/origin/develop)" = "$tracking" ]
+		git review abort
+	done
+
+	git update-ref -d refs/remotes/origin/develop
+	run git review start --from origin --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$base" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	! git show-ref --verify --quiet refs/remotes/origin/develop
+}
+
+@test "start resolves and pins a new lower bound tag despite a local branch of the same name" {
+	make_two_commit_feature
+	lower=$(git rev-parse feature/two^)
+	git clone -q --branch develop "$ORIGIN" "$TMP/reader"
+	git tag -a checkpoint -m checkpoint "$lower"
+	git push -q origin refs/tags/checkpoint
+	cd "$TMP/reader"
+	git branch checkpoint develop
+	tracking=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)
+
+	for selector in checkpoint refs/tags/checkpoint; do
+		run git review start --prepare --from "$selector" -- feature/two
+		[ "$status" -eq 0 ]
+		token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+		[ -n "$token" ]
+		run git review start "--prepared=$token" --from "$selector" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$lower" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		[ -z "$(git tag --list)" ]
+		[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)" = "$tracking" ]
+		git review abort
+		git review start --release -- "$token"
+	done
+}
+
+@test "an excluded optional base does not block an incremental prepared range or draft" {
+	make_two_commit_feature
+	lower=$(git rev-parse feature/two^)
+	git config reviewworkflow.feature/two.reviewed "$lower"
+	git config --add remote.origin.fetch '^refs/heads/develop'
+	git update-ref -d refs/remotes/origin/develop
+	git switch -qc reader-work
+	git branch -D develop
+
+	run git review start --from "$lower" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	git review abort
+
+	run git review start --prepare --delta -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review walkthrough draft --delta "--start-prepared=$token" -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(sed -n '/^## ?\. /p' .git/review-walkthrough/feature/two.md)" = '## ?. b.txt' ]
+	git review start --release -- "$token"
+	run git review start --from-draft --delta --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	! git show-ref --verify --quiet refs/remotes/origin/develop
+}
+
+@test "start compare and forget honor remote PR refspecs" {
+	make_two_commit_feature
+	previous=$(git rev-parse feature/two^)
+	tip=$(git rev-parse feature/two)
+	git --git-dir="$ORIGIN" update-ref refs/pull/42/head "$tip"
+	git config --add remote.origin.fetch '+refs/pull/*/head:refs/remotes/origin/pr/*'
+	git update-ref refs/remotes/origin/pr/42 "$previous"
+	git config reviewworkflow.pr/42.reviewed "$previous"
+	git fetch -q origin develop
+	fetch_head=$(cat .git/FETCH_HEAD)
+
+	run git review forget --delta --stale
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflow.pr/42.reviewed)" = "$previous" ]
+
+	run git review compare --prepare --porcelain -- refs/remotes/origin/pr/42 fetch:origin:pr/42
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git rev-parse "refs/worktree/review-compare/pending/$token^2")" = "$tip" ]
+	git review compare --release -- "$token"
+
+	run git review start --delta --no-walk -- pr/42
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/pr/42.reviewtip)" = "$tip" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	[ "$(git rev-parse refs/remotes/origin/pr/42)" = "$previous" ]
+	[ "$(cat .git/FETCH_HEAD)" = "$fetch_head" ]
+}
+
+@test "an abbreviated source in a fetch refspec uses Git ref precedence" {
+	make_two_commit_feature
+	tip=$(git rev-parse feature/two)
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint develop
+	git --git-dir="$ORIGIN" update-ref refs/tags/checkpoint "$tip"
+	git config --add remote.origin.fetch '+checkpoint:refs/remotes/origin/batch'
+
+	run git review start --no-walk batch
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/batch.reviewtip)" = "$tip" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	! git show-ref --verify --quiet refs/tags/checkpoint
+	! git show-ref --verify --quiet refs/remotes/origin/batch
 }
 
 @test "start resolves ancestry of a fresh remote base without updating tracking refs" {

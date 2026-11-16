@@ -533,12 +533,11 @@ fi
 
 # ── --stale ───────────────────────────────────────────────────────────────────
 if [ "$stale" -eq 1 ]; then
-	# The clone's fetch refspec may omit branches Start can review. List the
-	# server's heads before deleting any markers, and only contact it if needed.
-	remote_heads=''
+	# List the server's refs before deleting any markers. The fetch mapping
+	# can place PR refs under a branch's tracking name.
+	remote_refs=''
 	if grep -q '^reviewworkflow\.' "$tmp"; then
-		remote_refs=$(git ls-remote --heads --refs -- "$remote") || die "could not list branches on $remote"
-		remote_heads=$(printf '%s\n' "$remote_refs" | cut -f 2)
+		remote_refs=$(review_remote_refs "$remote") || die "could not list branches on $remote"
 	fi
 
 	any=0
@@ -551,12 +550,13 @@ if [ "$stale" -eq 1 ]; then
 			git rev-parse --verify --quiet "refs/heads/$msrc" >/dev/null && continue
 			forget_delta "$key" "$msrc" " (local; $msrc no longer exists)"
 		else
-			if ! remote_head=$(review_remote_branch "$remote" "$msrc" "$remote_heads"); then
-				unresolved=1
-				continue
-			fi
-			printf '%s\n' "$remote_heads" | grep -Fxq -e "$remote_head" && continue
-			forget_delta "$key" "$msrc" " ($remote/${remote_head#refs/heads/} no longer exists)"
+			remote_status=0
+			remote_ref=$(review_remote_ref "$remote" "$msrc" "$remote_refs") || remote_status=$?
+			case "$remote_status" in
+			0|3) continue ;;
+			2) forget_delta "$key" "$msrc" " ($remote/${remote_ref#refs/heads/} no longer exists)" ;;
+			*) unresolved=1; continue ;;
+			esac
 		fi
 		any=1
 	done <"$tmp"

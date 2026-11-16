@@ -307,18 +307,19 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `origin/<branch>` — if that differs from your checked-out branch you get a note,
   since you would be reviewing a different snapshot than you have. With no branch,
   fails on a detached HEAD or while on a `review/*` branch.
-- Start fetches the requested remote branches to private refs and honors fetch
-  refspecs that rename tracking branches. A configured-remote revision such as
-  `--base origin/main~1` or `--from origin/checkpoint` resolves against the
-  fetched branch while the tracking ref stays in place. If a base tag is missing
-  locally, Start fetches that tag to a private ref too. Prepared reviews pin the
-  tip, base and any `--from` commit before offering reading layouts.
+- Start fetches the requested remote revisions to private refs and honors
+  configured fetch refspecs, including PR refs mapped to tracking branches.
+  Revisions such as `--base origin/main~1` or `--from origin/checkpoint`
+  resolve against the fetched history. A tag named by `--base` or `--from`
+  can be fetched without adding a local tag. Prepared reviews pin the tip,
+  base and any `--from` commit before offering reading layouts.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review
-  with no base set fails and asks you to configure one. Not used with `--delta` or
-  `--from`, which carry their own starting point — passing an explicit base
-  alongside them is an error (a base from config is simply ignored).
+  with no base set fails and asks you to configure one. `--delta` and `--from`
+  set their own starting point. When the configured base is available, it helps
+  exclude changes already merged into the branch. An explicit base cannot be
+  combined with `--delta` or `--from`.
 - `--base <base>` — the base to diff against, as a flag. Use it to pass a base
   while letting `<branch>` default to the current branch — e.g.
   `git review start --base develop` reviews the branch you are on against
@@ -1113,11 +1114,10 @@ forget it yourself.
 - `<branch>` — forget the marker(s) for one source branch, both the remote one
   and the `--local` one if present.
 - `--all` — forget every recorded marker (leaves `reviewworkflow.base` alone).
-- `--stale` — forget markers for branches that no longer exist. Checks remote
-  markers against the configured remote's branch list, using the fetch refspec
-  to resolve renamed tracking branches. Checks `--local` markers against local
-  branches. Leaves tracking refs as they are. If the remote query fails, no
-  markers are removed.
+- `--stale` — forget markers whose source ref no longer exists. Checks remote
+  markers against the configured remote's refs, using the same fetch refspec
+  mapping as Start. Checks `--local` markers against local branches. Leaves
+  tracking refs as they are. If the remote query fails, no markers are removed.
 - `--dry-run` — with `--stale`, list what would be forgotten without doing it.
   Rejected with the other modes, where the target is already explicit.
 

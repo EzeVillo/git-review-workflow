@@ -506,7 +506,7 @@ if [ "$sub" = draft ]; then
 	if [ "$from_review" -eq 1 ] && [ "$active_readonly" != 1 ] && [ -z "$start_prepared" ]; then
 		base="$(git config "branch.$rb.reviewbase" || printf '%s' "$base")"
 	fi
-	[ -n "$base" ] ||
+	[ -n "$base" ] || [ "$delta_mode" -eq 1 ] ||
 		die "no base set; run: git config reviewworkflow.base <branch>"
 
 	remote="$(git config reviewworkflow.remote || echo origin)"
@@ -548,34 +548,27 @@ if [ "$sub" = draft ]; then
 		if [ -n "$_start_session_pack" ]; then
 			_start_draft_identity=$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline")
 			_start_session_identity=$(git log -1 --format='%s' "$_start_session_pack" --)
-			if [ "${_start_session_identity%% *}" = "$_start_draft_identity" ]; then _start_draft_pack=$_start_session_pack; fi
+			if [ "${_start_session_identity%% *}" = "$_start_draft_identity" ]; then
+				start_read_range "$_start_session_anchor" "$_start_draft_identity"
+				_start_draft_pack=$_rs_pack
+				srcref=$_rs_tip
+			fi
 		fi
 	fi
 	# No fetch, ever: like config --porcelain, this reads the refs already in the
 	# clone. A missing tip is an actionable error, not an implicit network call.
-	if ! git rev-parse --verify --quiet "$srcref^{commit}" >/dev/null; then
-		die "$srclabel not found"
-	fi
-	tip="$(git rev-parse "$srcref")"
+	tip=$(review_commit_oid "$srcref") || die "$srclabel not found"
 
-	baseref=""
-	if [ "$offline" -eq 1 ]; then
-		if git rev-parse --verify --quiet "refs/heads/$base^{commit}" >/dev/null; then
-			baseref="refs/heads/$base"
-		fi
+	if [ -n "$_start_draft_pack" ]; then
+		baseref=$_rs_base
 	else
-		if git rev-parse --verify --quiet "refs/remotes/$remote/$base^{commit}" >/dev/null; then
-			baseref="refs/remotes/$remote/$base"
+		base_namespace="refs/remotes/$remote"
+		if [ "$offline" -eq 1 ]; then base_namespace=refs/heads; fi
+		baseref=$(review_cached_base "$base" "$base_namespace" || true)
+		if [ "$from_review" -eq 1 ]; then
+			baseref="$(git config "branch.$rb.reviewbasecommit" || printf '%s' "$baseref")"
 		fi
 	fi
-	if [ -z "$baseref" ]; then
-		baseref="$(git rev-parse --verify --quiet "$base^{commit}" || true)"
-	fi
-	if [ -n "$_start_draft_anchor" ]; then baseref=$_rs_base; fi
-	if [ "$from_review" -eq 1 ] && [ -z "$_start_draft_anchor" ]; then
-		baseref="$(git config "branch.$rb.reviewbasecommit" || printf '%s' "$baseref")"
-	fi
-	[ -n "$baseref" ] || die "base $base not found"
 
 	if [ "$delta_mode" -eq 1 ]; then
 		prev="$(git config "$markerkey" || true)"
@@ -595,6 +588,7 @@ if [ "$sub" = draft ]; then
 			die "$branch was force-pushed since your last review; draft for the full range instead"
 		start="$prev"
 	else
+		[ -n "$baseref" ] || die "base $base not found"
 		start="$(git merge-base "$baseref" "$tip")" ||
 			die "could not compute merge-base with $base"
 		[ "$start" != "$tip" ] || die "no changes vs $base; nothing to walk through"

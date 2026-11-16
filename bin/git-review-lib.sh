@@ -4328,33 +4328,19 @@ emit_reading_offers() {
 	# like an older CLI lacking this feature, triggering its whole+step
 	# fallback, instead of reporting "no remote tip". Local-only branches must
 	# use --local.
-	if ! git rev-parse --verify --quiet "$_ero_srcref^{commit}" >/dev/null; then
+	if ! _ero_tip=$(review_commit_oid "$_ero_srcref"); then
 		echo "error: $_ero_srclabel not found" >&2
 		return 1
 	fi
-	_ero_tip="$(git rev-parse "$_ero_srcref")"
-
-	_ero_baseref=""
-	if [ -n "$_ero_base" ]; then
-		if [ "$_ero_offline" -eq 1 ]; then
-			if git rev-parse --verify --quiet "refs/heads/$_ero_base^{commit}" >/dev/null; then
-				_ero_baseref="refs/heads/$_ero_base"
-			fi
-		else
-			if git rev-parse --verify --quiet "refs/remotes/$_ero_remote/$_ero_base^{commit}" >/dev/null; then
-				_ero_baseref="refs/remotes/$_ero_remote/$_ero_base"
-			fi
-		fi
-		if [ -z "$_ero_baseref" ]; then
-			_ero_bcommit="$(git rev-parse --verify --quiet "$_ero_base^{commit}" || true)"
-			if [ -n "$_ero_bcommit" ]; then
-				_ero_baseref="$_ero_bcommit"
-			fi
-		fi
-	fi
 
 	_ero_prev="$(git config "$_ero_markerkey" || true)"
-	if [ -n "$_ero_draft_range" ]; then _ero_baseref=$_rs_base; fi
+	if [ -n "$_ero_draft_range" ]; then
+		_ero_baseref=$_rs_base
+	else
+		_ero_base_namespace="refs/remotes/$_ero_remote"
+		if [ "$_ero_offline" -eq 1 ]; then _ero_base_namespace=refs/heads; fi
+		_ero_baseref=$(review_cached_base "$_ero_base" "$_ero_base_namespace" || true)
+	fi
 	if [ "$_ero_delta" -eq 1 ]; then
 		if [ -n "$_ero_draft_range" ] && [ "$_ero_prev" != "$_rs_previous" ]; then
 			die 'last review point changed; prepare the review again'
@@ -5144,8 +5130,7 @@ compare_resolve() {
 }
 
 compare_literal_commit() {
-	case "$1" in -*) die "unknown commit: $1" ;; esac
-	git rev-parse --verify --quiet "$1^{commit}" || die "unknown commit: $1"
+	review_commit_oid "$1" || die "unknown commit: $1"
 }
 
 # Branch choices use the refs available in the repository. Fetch selectors
@@ -5207,13 +5192,14 @@ review_fetch_isolated() {
 	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags --no-recurse-submodules ${_rfi_head:+"$_rfi_head"} -- "$@"
 }
 
-# Resolve a tracking name back to its server branch without a fetch. Outside the
-# configured destinations (e.g. a single-branch clone), use the name literally.
-# Overlapping mappings need the server's advertised branches. A caller that
-# already listed them can pass the ref names as the third argument.
-review_remote_branch() {
+# Maps a tracking name using the server's advertised refs and the configured
+# fetch refspecs. Status 2 means absent (stdout names the missing ref); 3 means
+# excluded. Ambiguous mappings fail separately from either case.
+review_remote_ref() {
 	_rrb_specs=$(git config --get-all "remote.$1.fetch") || [ "$?" -eq 1 ] || return 1
-	_rrb_matches=$(printf '%s\n' "$_rrb_specs" | LC_ALL=C awk -v tracking="refs/remotes/$1/$2" '
+	_rrb_status=0
+	_rrb_ref=$(printf '%s\n' "$3" . "$_rrb_specs" | LC_ALL=C awk \
+		-v tracking="refs/remotes/$1/$2" -v fallback="refs/heads/$2" '
 		function accepts(pattern, ref,   star, prefix, suffix) {
 			star = index(pattern, "*")
 			if (!star) return ref == pattern
@@ -5223,12 +5209,33 @@ review_remote_branch() {
 				substr(ref, 1, length(prefix)) == prefix &&
 				substr(ref, length(ref) - length(suffix) + 1) == suffix
 		}
-		function branch_ref(ref) {
-			if (ref == "" || index(ref, "refs/") == 1 || ref == "HEAD" ||
-				(ref ~ /^[[:xdigit:]]+$/ && (length(ref) == 40 || length(ref) == 64))) return ref
-			return "refs/heads/" ref
+		function oid(name) {
+			return name ~ /^[[:xdigit:]]+$/ && (length(name) == 40 || length(name) == 64)
 		}
-		/^\^/ { excluded[++count] = branch_ref(substr($0, 2)); next }
+		# Resolve abbreviated fetch sources in Git refname order,
+		# independently for each refspec.
+		function exact_source(name,   prefix, i, ref) {
+			if (name == "") return "HEAD"
+			if (oid(name)) return name
+			split("refs/ refs/tags/ refs/heads/ refs/remotes/", prefix, " ")
+			if (name in advertised) return name
+			for (i = 1; i <= 4; i++) {
+				ref = prefix[i] name
+				if (ref in advertised) return ref
+			}
+			ref = "refs/remotes/" name "/HEAD"
+			if (ref in advertised) return ref
+			if (name == "HEAD" || index(name, "refs/") == 1) return name
+			if (name ~ /^(heads|tags|remotes)\//) return "refs/" name
+			return "refs/heads/" name
+		}
+		$0 == "." { config = 1; next }
+		!config { if (NF) advertised[$0] = 1; next }
+		/^\^/ {
+			rule = substr($0, 2)
+			excluded[++count] = index(rule, "*") ? rule : exact_source(rule)
+			next
+		}
 		{
 			sub(/^\+/, "")
 			if (split($0, parts, ":") != 2 || !accepts(parts[2], tracking)) next
@@ -5238,38 +5245,136 @@ review_remote_branch() {
 				stem = substr(tracking, star, length(tracking) - length(parts[2]) + 1)
 				star = index(source, "*")
 				source = substr(source, 1, star - 1) stem substr(source, star + 1)
+			} else {
+				source = exact_source(source)
 			}
-			candidates[branch_ref(source)] = 1
+			candidates[source] = 1
+			mapped = 1
 		}
 		END {
+			if (!mapped) candidates[fallback] = 1
 			for (source in candidates) {
+				present = (source in advertised) || oid(source)
 				for (i = 1; i <= count; i++) if (accepts(excluded[i], source)) break
-				if (i > count && index(source, "refs/heads/") == 1) { print source; found = 1 }
-				mapped = 1
+				if (i <= count) {
+					if (present) excluded_live = 1
+				} else if (present) {
+					live = source
+					if (++live_count > 1) exit 4
+				} else if (missing == "" || source < missing) {
+					missing = source
+				}
 			}
-			if (mapped && !found) print "unavailable"
-		}') || return 1
-	case "$_rrb_matches" in
-	'') printf 'refs/heads/%s\n' "$2" ;;
-	unavailable) die "fetch refspecs for $1 do not map $1/$2 to an eligible remote branch" ;;
-	*'
-'*)
-		if [ "$#" -eq 3 ]; then
-			_rrb_heads=$3
+			if (live_count) { print live; exit }
+			if (missing == "" || excluded_live) exit 3
+			print missing
+			exit 2
+		}') || _rrb_status=$?
+	case "$_rrb_status" in
+	0|2) printf '%s\n' "$_rrb_ref"; return "$_rrb_status" ;;
+	3) return 3 ;;
+	4) die "ambiguous fetch refspecs for $1/$2" ;;
+	*) return 1 ;;
+	esac
+}
+
+review_remote_refs() {
+	_rr_refs=$(git ls-remote -- "$1") || return 1
+	printf '%s\n' "$_rr_refs" | cut -f 2
+}
+
+review_commit_oid() {
+	case "$1" in ''|-*) return 1 ;; esac
+	git rev-parse --verify --quiet "$1^{commit}"
+}
+
+# The cached base is also used by config and walkthrough outside a prepared
+# range. Git evaluates the whole expression, including ancestry operators.
+review_cached_base() {
+	case "$1" in '') return 1 ;; esac
+	review_commit_oid "$2/$1" || review_commit_oid "$1"
+}
+
+review_tracking_target() {
+	_rtt_ref="refs/remotes/$1/$2"
+	_rtt_target=$(git symbolic-ref --quiet "$_rtt_ref" || true)
+	case "${_rtt_target:-$_rtt_ref}" in
+	"refs/remotes/$1/"*) printf '%s\n' "${_rtt_target:-$_rtt_ref}" ;;
+	esac
+}
+
+# Plan a fetch for a revision. Git will evaluate the expression after the
+# objects arrive. Here we only identify a named ref that has to be present
+# under a private name first, leaving ancestry syntax intact.
+review_revision_fetch() {
+	_rrv_root=${2%%[~^]*}
+	_rrv_suffix=${2#"$_rrv_root"}
+	_rrv_ref='' _rrv_tracking=0
+	case "$_rrv_root" in ''|-*) return 0 ;; esac
+
+	# A full review prefers the configured remote's copy of a short base.
+	if [ "$3" = base ]; then
+		case "$_rrv_root" in
+		refs/*|heads/*|remotes/*|tags/*|"$1/"*) ;;
+		*)
+			if git check-ref-format "refs/remotes/$1/$_rrv_root"; then
+				_rrv_tracking_ref=$(review_tracking_target "$1" "$_rrv_root")
+				if [ -n "$_rrv_tracking_ref" ]; then
+					_rrv_status=0
+					_rrv_ref=$(review_remote_ref "$1" "${_rrv_tracking_ref#"refs/remotes/$1/"}" "$4") || _rrv_status=$?
+					case "$_rrv_status" in
+					0) _rrv_tracking=1; return ;;
+					2|3) _rrv_ref='' ;;
+					*) return 1 ;;
+					esac
+				fi
+			fi ;;
+		esac
+	fi
+
+	# A tag can arrive with this fetch and outrank a same-named local branch.
+	# Preserve an existing local tag, as normal automatic tag following does.
+	case "$_rrv_root" in
+	refs/tags/*) _rrv_tag=$_rrv_root ;;
+	tags/*) _rrv_tag="refs/$_rrv_root" ;;
+	refs/*|heads/*|remotes/*) _rrv_tag='' ;;
+	*) _rrv_tag="refs/tags/$_rrv_root" ;;
+	esac
+	if [ -n "$_rrv_tag" ] && git check-ref-format "$_rrv_tag" &&
+		! git show-ref --verify --quiet "$_rrv_tag" &&
+		! git show-ref --verify --quiet "refs/$_rrv_root" &&
+		printf '%s\n' "$4" | grep -Fxq -e "$_rrv_tag"; then
+		_rrv_ref=$_rrv_tag
+		return
+	fi
+
+	_rrv_symbolic=$(git rev-parse --symbolic-full-name --verify --quiet "$_rrv_root" 2>/dev/null || true)
+	case "${_rrv_symbolic:-$_rrv_root}" in
+	"refs/remotes/$1/"*) _rrv_name=${_rrv_symbolic:-$_rrv_root}; _rrv_name=${_rrv_name#"refs/remotes/$1/"} ;;
+	"remotes/$1/"*) _rrv_name=${_rrv_root#"remotes/$1/"} ;;
+	"$1"|"$1/"*)
+		for _rrv_namespace in refs refs/tags refs/heads; do
+			if git show-ref --verify --quiet "$_rrv_namespace/$_rrv_root"; then return 0; fi
+		done
+		if [ "$_rrv_root" = "$1" ]; then
+			# The symref still identifies the target when it is missing locally.
+			git symbolic-ref --quiet "refs/remotes/$1/HEAD" >/dev/null || return 0
+			_rrv_name=HEAD
 		else
-			# shellcheck disable=SC2086 # valid refnames are newline-delimited and contain no glob characters
-			_rrb_refs=$(git ls-remote --heads --refs -- "$1" $_rrb_matches) || die "could not list branches on $1"
-			_rrb_heads=$(printf '%s\n' "$_rrb_refs" | cut -f 2)
-		fi
-		_rrb_live=$(printf '%s\n' "$_rrb_heads" | grep -Fx -e "$_rrb_matches" || true)
-		case "$_rrb_live" in
-		*'
-'*) die "ambiguous fetch refspecs for $1/$2" ;;
-		'') printf '%s\n' "${_rrb_matches%%'
-'*}" ;; # Every mapped source is absent. Keep the normal missing-branch path.
-		*) printf '%s\n' "$_rrb_live" ;;
-		esac ;;
-	*) printf '%s\n' "$_rrb_matches" ;;
+			_rrv_name=${_rrv_root#"$1/"}
+		fi ;;
+	*) return 0 ;;
+	esac
+	git check-ref-format "refs/remotes/$1/$_rrv_name" || return 0
+	_rrv_tracking_ref=$(review_tracking_target "$1" "$_rrv_name")
+	[ -n "$_rrv_tracking_ref" ] || return 0
+	_rrv_tracking=1
+	_rrv_status=0
+	_rrv_ref=$(review_remote_ref "$1" "${_rrv_tracking_ref#"refs/remotes/$1/"}" "$4") || _rrv_status=$?
+	case "$_rrv_status" in
+	0) return 0 ;;
+	2|3) _rrv_ref='' ;;
+	*) return 1 ;;
 	esac
 }
 
@@ -5339,7 +5444,17 @@ compare_fetch_spec() {
 		! git remote | grep -Fxq -e "$_compare_remote"; then
 		die "unknown remote branch: $1"
 	fi
-	_compare_branch=$(review_remote_branch "$_compare_remote" "$_compare_branch") || exit 1
+	_compare_ref_status=0
+	if [ "${_compare_listed_remote:-}" != "$_compare_remote" ]; then
+		_compare_listed_refs=$(review_remote_refs "$_compare_remote") || die "could not list refs on $_compare_remote"
+		_compare_listed_remote=$_compare_remote
+	fi
+	_compare_branch=$(review_remote_ref "$_compare_remote" "$_compare_branch" "$_compare_listed_refs") || _compare_ref_status=$?
+	case "$_compare_ref_status" in
+	0) ;;
+	2|3) die "could not resolve remote ref: $1" ;;
+	*) exit 1 ;;
+	esac
 }
 
 compare_prepare_cleanup() {

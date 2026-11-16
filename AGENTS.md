@@ -128,6 +128,13 @@ adoptar sus archivos.
   `reviewworkflow.advice` (default **encendido**; ver *Advice* abajo). Las tres son claves
   `git config` por repo, por diseño.
 
+Start, Compare y Forget comparten `review_remote_ref` para mapear un nombre de seguimiento
+a una ref del servidor, incluidas refs de PR. Start selecciona las refs, trae solo esas refs a
+destinos privados y resuelve las expresiones con Git sobre los objetos ya disponibles.
+El rango preparado fija los OID que consumen las ofertas, el borrador y Start. Para Delta y
+`--from`, una base configurada que falta no impide revisar el rango. Si está disponible,
+permite excluir los cambios ya integrados.
+
 **Archivos del walkthrough** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
 en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en ningún momento y
 `finish` no se los puede llevar a `review-fixes/`:

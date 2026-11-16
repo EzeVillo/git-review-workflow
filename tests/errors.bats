@@ -490,6 +490,39 @@ step_review_two_with_edits() {
 	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
 }
 
+@test "prepared offline draft preserves its local range through build and start" {
+	bats_require_minimum_version 1.5.0
+	make_two_commit_feature
+	git branch -f feature/two refs/heads/feature/two^
+	pinned=$(git rev-parse refs/heads/feature/two)
+	git remote set-url origin "$TMP/unavailable"
+
+	run git review start --prepare --offline -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	git branch -f feature/two refs/remotes/origin/feature/two
+
+	run --separate-stderr git review walkthrough draft --porcelain --offline "--start-prepared=$token" -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$output" = $'merged\t0\t1\t0' ]
+	draft=.git/review-walkthrough/feature/two.md
+	[ "$(sed -n '/^## ?\. /p' "$draft")" = '## ?. a.txt' ]
+	git review start --release -- "$token"
+	printf '# Walkthrough\n\n## 1. a.txt\nwhy\n' >"$draft"
+
+	run git review walkthrough draft --build --offline -- feature/two
+	[ "$status" -eq 0 ]
+	run git review config --porcelain --from-draft --offline -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '/^start-draft-range/p')" = $'start-draft-range\t1' ]
+	run git review start --from-draft --offline -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewtip)" = "$pinned" ]
+	[ "$(git config branch.review/feature/two.reviewmode)" = walk ]
+	[ "$(git diff --cached --name-only)" = a.txt ]
+}
+
 @test "prepared start pins the explicit lower bound even after its branch moves" {
 	make_two_commit_feature
 	git branch boundary develop
@@ -612,6 +645,27 @@ EOF
 	[ "$(git rev-parse refs/heads/feature/x)" = "$before" ]
 	[ "$(git rev-parse HEAD)" = "$review_before" ]
 	[ "$(git write-tree)" = "$index_before" ]
+}
+
+@test "finish fast-forwards a PR branch configured to squash merges" {
+	push_pr2
+	git branch -f feature/x refs/remotes/origin/feature/x~1
+	before=$(git rev-parse refs/heads/feature/x)
+	git config branch.feature/x.mergeOptions --squash
+	git review start feature/x
+	tip=$(git config branch.review/feature/x.reviewtip)
+
+	run git review finish --update-source
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = feature/x ]
+	[ "$(git rev-parse HEAD)" = "$tip" ]
+	[ -z "$(git status --porcelain)" ]
+	[ "$(git config branch.feature/x.mergeOptions)" = --squash ]
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = review/feature/x ]
+	[ "$(git rev-parse refs/heads/feature/x)" = "$before" ]
 }
 
 # ── review clean behaviours ───────────────────────────────────────────────────

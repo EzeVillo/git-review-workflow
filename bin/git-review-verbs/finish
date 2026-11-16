@@ -727,7 +727,10 @@ if [ "$onto" -eq 1 ]; then
 			die "local $src changed during finish; recover with git review finish --abort"
 		fi
 		git config "branch.$cur.reviewundosourcemove" 1
-		if ! git -c merge.autostash=false merge --ff-only --quiet "$tip"; then
+		# Branch merge options can request a squash, which succeeds without moving HEAD.
+		if ! git -c merge.autostash=false merge --ff-only --no-squash --quiet "$tip" ||
+			[ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||
+			[ "$(git rev-parse --verify HEAD)" != "$tip" ]; then
 			die "could not fast-forward $src; recover with git review finish --abort"
 		fi
 	elif git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then

@@ -317,10 +317,12 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
 - Start trae las revisiones remotas solicitadas a refs privadas y respeta los
   refspecs de fetch configurados, incluidas las refs de PR mapeadas a ramas de
   seguimiento. Las revisiones como `--base origin/main~1` o
-  `--from origin/checkpoint` se resuelven sobre el historial recién traído. Si
-  `--base` o `--from` nombran un tag, Start puede traerlo sin agregar un tag local.
-  La revisión preparada fija el tip, la base y cualquier commit de `--from`
-  antes de ofrecer modos de lectura.
+  `--from origin/checkpoint@{0}` se resuelven como si se hubiera hecho fetch de
+  la rama de seguimiento, sin actualizar su ref ni su reflog. Para la base,
+  el nombre de una rama tiene prioridad frente a la misma abreviatura Git,
+  como `tags/release`. Si `--base` o `--from` nombran un tag, Start puede traerlo
+  sin agregar un tag local. La revisión preparada fija el tip, la base y
+  cualquier commit de `--from` antes de ofrecer modos de lectura.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que

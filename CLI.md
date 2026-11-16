@@ -309,10 +309,12 @@ Has two independent axes — **range** (where the review starts) and **layout**
   fails on a detached HEAD or while on a `review/*` branch.
 - Start fetches the requested remote revisions to private refs and honors
   configured fetch refspecs, including PR refs mapped to tracking branches.
-  Revisions such as `--base origin/main~1` or `--from origin/checkpoint`
-  resolve against the fetched history. A tag named by `--base` or `--from`
-  can be fetched without adding a local tag. Prepared reviews pin the tip,
-  base and any `--from` commit before offering reading layouts.
+  Revisions such as `--base origin/main~1` or `--from origin/checkpoint@{0}`
+  resolve as if the tracking branch had been fetched, without updating its
+  ref or reflog. A base branch name takes precedence over the same text used
+  as a Git abbreviation, such as `tags/release`. A tag named by `--base` or
+  `--from` can be fetched without adding a local tag. Prepared reviews pin
+  the tip, base and any `--from` commit before offering reading layouts.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review

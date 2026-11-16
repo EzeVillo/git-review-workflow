@@ -5303,32 +5303,42 @@ review_tracking_target() {
 	esac
 }
 
+# The tracking ref provides the local history and the fetch refspec provides
+# the server name. Keep both even when they have different spellings.
+review_revision_tracking() {
+	_rrv_tracking_ref=''
+	git check-ref-format "refs/remotes/$1/$2" || return 2
+	_rrv_tracking_ref=$(review_tracking_target "$1" "$2")
+	[ -n "$_rrv_tracking_ref" ] || return 2
+	_rrv_ref=$(review_remote_ref "$1" "${_rrv_tracking_ref#"refs/remotes/$1/"}" "$3") || {
+		_rrv_status=$?
+		_rrv_ref=''
+		return "$_rrv_status"
+	}
+}
+
 # Plan a fetch for a revision. Git will evaluate the expression after the
 # objects arrive. Here we only identify a named ref that has to be present
-# under a private name first, leaving ancestry syntax intact.
+# under a private name first, leaving the revision operators intact.
 review_revision_fetch() {
 	_rrv_root=${2%%[~^]*}
+	case "$_rrv_root" in
+	*'@{u}'|*'@{upstream}'|*'@{push}') ;; # These identify refs through Git config.
+	?*'@{'*'}') _rrv_root=${_rrv_root%'@{'*} ;;
+	esac
 	_rrv_suffix=${2#"$_rrv_root"}
-	_rrv_ref='' _rrv_tracking=0
+	_rrv_ref='' _rrv_tracking_ref=''
 	case "$_rrv_root" in ''|-*) return 0 ;; esac
 
-	# A full review prefers the configured remote's copy of a short base.
+	# Same precedence as review_cached_base. A branch name can look like an
+	# abbreviated Git ref (tags/release), so try the prefixed namespace first.
 	if [ "$3" = base ]; then
-		case "$_rrv_root" in
-		refs/*|heads/*|remotes/*|tags/*|"$1/"*) ;;
-		*)
-			if git check-ref-format "refs/remotes/$1/$_rrv_root"; then
-				_rrv_tracking_ref=$(review_tracking_target "$1" "$_rrv_root")
-				if [ -n "$_rrv_tracking_ref" ]; then
-					_rrv_status=0
-					_rrv_ref=$(review_remote_ref "$1" "${_rrv_tracking_ref#"refs/remotes/$1/"}" "$4") || _rrv_status=$?
-					case "$_rrv_status" in
-					0) _rrv_tracking=1; return ;;
-					2|3) _rrv_ref='' ;;
-					*) return 1 ;;
-					esac
-				fi
-			fi ;;
+		_rrv_result=0
+		review_revision_tracking "$1" "$_rrv_root" "$4" || _rrv_result=$?
+		case "$_rrv_result" in
+		0) return 0 ;;
+		2|3) _rrv_tracking_ref='' ;;
+		*) return 1 ;;
 		esac
 	fi
 
@@ -5365,17 +5375,99 @@ review_revision_fetch() {
 		fi ;;
 	*) return 0 ;;
 	esac
-	git check-ref-format "refs/remotes/$1/$_rrv_name" || return 0
-	_rrv_tracking_ref=$(review_tracking_target "$1" "$_rrv_name")
-	[ -n "$_rrv_tracking_ref" ] || return 0
-	_rrv_tracking=1
-	_rrv_status=0
-	_rrv_ref=$(review_remote_ref "$1" "${_rrv_tracking_ref#"refs/remotes/$1/"}" "$4") || _rrv_status=$?
-	case "$_rrv_status" in
-	0) return 0 ;;
-	2|3) _rrv_ref='' ;;
+	_rrv_result=0
+	review_revision_tracking "$1" "$_rrv_name" "$4" || _rrv_result=$?
+	case "$_rrv_result" in
+	0|2|3) return 0 ;;
 	*) return 1 ;;
 	esac
+}
+
+# Record just the prospective tracking update in a disposable ref and let
+# Git decide which side of it a date selects. The real history stays in Git's
+# own ref backend, including entries that git reflog show skips (e.g. tags).
+review_fetched_reflog_date() (
+	_rfr_cached=$1 _rfr_fresh=$2 _rfr_selector=$3
+	_rfr_zero=$(printf '%s' "$_rfr_fresh" | sed 's/./0/g')
+	_rfr_now=$(GIT_COMMITTER_DATE='' git -c user.name='Git Review' -c user.email='git-review@localhost' var GIT_COMMITTER_IDENT) || return 1
+	_rfr_dir=$(mktemp -d) || return 1
+	trap 'rm -rf "$_rfr_dir"' 0
+	# Do not let an enclosing worktree or reftable configuration select the store.
+	# shellcheck disable=SC2046
+	unset $(git rev-parse --local-env-vars)
+	_rfr_hash=sha1
+	if [ "${#_rfr_fresh}" -eq 64 ]; then _rfr_hash=sha256; fi
+	GIT_DEFAULT_HASH=$_rfr_hash GIT_DEFAULT_REF_FORMAT=files git init -q --bare --template= "$_rfr_dir" || return 1
+	_rfr_ref=refs/heads/selected
+	mkdir -p "$_rfr_dir/refs/heads" "$_rfr_dir/logs/refs/heads" || return 1
+	printf '%s\n' "$_rfr_fresh" >"$_rfr_dir/$_rfr_ref" || return 1
+	printf '%s %s %s\tfetch\n' "${_rfr_cached:-$_rfr_zero}" "$_rfr_fresh" "$_rfr_now" >"$_rfr_dir/logs/$_rfr_ref" || return 1
+	git --git-dir="$_rfr_dir" rev-parse --verify --quiet "$_rfr_ref$_rfr_selector" 2>/dev/null
+)
+
+# Resolve a selector in the history a normal tracking update would expose.
+review_fetched_reflog_oid() (
+	_rfr_tracking=$1 _rfr_fresh=$2 _rfr_selector=$3
+	_rfr_cached=$(git show-ref --hash --verify "$_rfr_tracking" 2>/dev/null || true)
+	if [ "$_rfr_fresh" = "$_rfr_cached" ]; then
+		git rev-parse --verify --quiet "$_rfr_tracking$_rfr_selector" 2>/dev/null
+		return
+	fi
+	_rfr_has_log=0
+	if git reflog exists "$_rfr_tracking"; then
+		_rfr_has_log=1
+	else
+		_rfr_log_mode=$(git config --get core.logAllRefUpdates || printf '%s' auto)
+		case "$_rfr_log_mode" in
+		[Aa][Ll][Ww][Aa][Yy][Ss]) ;;
+		auto) [ "$(git rev-parse --is-bare-repository)" = false ] || return 1 ;;
+		*) [ "$(git config --bool --get core.logAllRefUpdates)" = true ] || return 1 ;;
+		esac
+	fi
+	if [ "$_rfr_selector" = '@{0}' ]; then printf '%s\n' "$_rfr_fresh"; return; fi
+
+	# Git interprets decimal values >= 100000000 as timestamps. An index
+	# before the new entry is one lower in the original log.
+	_rfr_entry=${_rfr_selector#'@{'}
+	_rfr_entry=${_rfr_entry%'}'}
+	_rfr_index=$(printf '%s\n' "$_rfr_entry" | LC_ALL=C awk '/^[0-9]+$/ && $0 + 0 < 100000000 {printf "%.0f\n", $0 - 1}')
+	case "$_rfr_index" in
+	-1) printf '%s\n' "$_rfr_fresh" ;;
+	'')
+		_rfr_selected=$(review_fetched_reflog_date "$_rfr_cached" "$_rfr_fresh" "$_rfr_selector") || return 1
+		if [ "$_rfr_selected" = "$_rfr_fresh" ] || [ "$_rfr_has_log" -eq 0 ]; then
+			printf '%s\n' "$_rfr_selected"
+		else
+			git rev-parse --verify --quiet "$_rfr_tracking$_rfr_selector" 2>/dev/null
+		fi ;;
+	*)
+		if [ "$_rfr_has_log" -eq 1 ]; then
+			git rev-parse --verify --quiet "$_rfr_tracking@{$_rfr_index}" 2>/dev/null
+		else
+			[ "$_rfr_index" = 0 ] && [ -n "$_rfr_cached" ] || return 1
+			printf '%s\n' "$_rfr_cached"
+		fi ;;
+	esac
+)
+
+# Only fetched roots are substituted. Git evaluates the remaining operators
+# in the caller's object store, and literal names use its normal precedence.
+review_resolve_revision() {
+	if [ -z "$2" ]; then
+		[ -z "$3" ] || return 1
+		review_commit_oid "$1"
+		return
+	fi
+	_rrs_revision=$2 _rrs_suffix=$4
+	case "$3:$_rrs_suffix" in
+	?*:'@{'*'}'*)
+		_rrs_reflog=${_rrs_suffix%%'}'*}'}'
+		_rrs_tip=$(git show-ref --hash --verify "$2") || return 1
+		_rrs_revision=$(review_fetched_reflog_oid "$3" "$_rrs_tip" "$_rrs_reflog") || return 1
+		_rrs_suffix=${_rrs_suffix#"$_rrs_reflog"}
+		;;
+	esac
+	review_commit_oid "$_rrs_revision$_rrs_suffix"
 }
 
 start_prepared_ref() {

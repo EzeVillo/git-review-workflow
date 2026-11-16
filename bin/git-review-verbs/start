@@ -235,7 +235,7 @@ _rs_remote_source=''
 _rs_remote_base=''
 _rs_remote_from=''
 _rs_base_label=local
-_rs_from_revision=$from
+_rs_from_ref='' _rs_from_tracking='' _rs_from_suffix=''
 _rs_cleanup() {
 	if [ -n "$_rs_remote_source" ]; then git update-ref -d "$_rs_tmp-tip" || true; fi
 	if [ -n "$_rs_remote_base" ]; then git update-ref -d "$_rs_tmp-base" || true; fi
@@ -284,24 +284,26 @@ else
 			set -- "$_rs_remote_source:$srcref"
 		fi
 
-		_rs_base_revision=$base
+		_rs_base_ref='' _rs_base_tracking='' _rs_base_suffix=''
 		if [ -n "$base" ]; then
 			review_revision_fetch "$remote" "$base" base "$_rs_advertised" || exit 1
 			_rs_remote_base=$_rrv_ref
-			if [ "$_rrv_tracking" -eq 1 ]; then _rs_base_revision=''; fi
+			_rs_base_tracking=$_rrv_tracking_ref
+			_rs_base_suffix=$_rrv_suffix
 			if [ -n "$_rs_remote_base" ]; then
-				set -- "$@" "$_rs_remote_base:$_rs_tmp-base"
-				_rs_base_revision="$_rs_tmp-base$_rrv_suffix"
-				if [ "$_rrv_tracking" -eq 1 ]; then _rs_base_label=remote; fi
+				_rs_base_ref=$_rs_tmp-base
+				set -- "$@" "$_rs_remote_base:$_rs_base_ref"
+				if [ -n "$_rs_base_tracking" ]; then _rs_base_label=remote; fi
 			fi
 		fi
 		if [ -n "$from" ]; then
 			review_revision_fetch "$remote" "$from" from "$_rs_advertised" || exit 1
 			_rs_remote_from=$_rrv_ref
-			if [ "$_rrv_tracking" -eq 1 ]; then _rs_from_revision=''; fi
+			_rs_from_tracking=$_rrv_tracking_ref
+			_rs_from_suffix=$_rrv_suffix
 			if [ -n "$_rs_remote_from" ]; then
-				set -- "$@" "$_rs_remote_from:$_rs_tmp-from"
-				_rs_from_revision="$_rs_tmp-from$_rrv_suffix"
+				_rs_from_ref=$_rs_tmp-from
+				set -- "$@" "$_rs_remote_from:$_rs_from_ref"
 			fi
 		fi
 
@@ -313,7 +315,7 @@ else
 		fi
 
 		# A literal revision may only exist after the requested history arrives.
-		baseref=$(review_commit_oid "$_rs_base_revision" || true)
+		baseref=$(review_resolve_revision "$base" "$_rs_base_ref" "$_rs_base_tracking" "$_rs_base_suffix" || true)
 	fi
 fi
 if [ "$_rs_base_label" = remote ]; then
@@ -363,7 +365,7 @@ elif [ -n "$from" ]; then
 		[ -n "$_rs_from" ] || die 'prepared lower bound is unavailable; prepare the review again'
 		pinned_from=$_rs_from
 	else
-		pinned_from="$(review_commit_oid "$_rs_from_revision")" || die "unknown commit: $from"
+		pinned_from=$(review_resolve_revision "$from" "$_rs_from_ref" "$_rs_from_tracking" "$_rs_from_suffix") || die "unknown commit: $from"
 	fi
 	start=$pinned_from
 	git merge-base --is-ancestor "$start" "$tip" ||

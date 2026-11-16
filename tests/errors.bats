@@ -648,6 +648,125 @@ step_review_two_with_edits() {
 	done
 }
 
+@test "base branch names take precedence over abbreviated Git namespaces" {
+	make_two_commit_feature
+	base=$(git rev-parse feature/two^)
+	git tag release develop
+	for name in tags/release heads/stable remotes/stable origin/stable; do
+		git --git-dir="$ORIGIN" update-ref "refs/heads/$name" "$base"
+		git fetch -q origin
+		git config reviewworkflow.base "$name"
+
+		run git review config --porcelain -- feature/two
+		[ "$status" -eq 0 ]
+		[[ "$output" == *$'offer\twhole\tavailable'* ]]
+		run git review start --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$base" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		git review abort
+
+		run git review start --prepare -- feature/two
+		[ "$status" -eq 0 ]
+		token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+		[ -n "$token" ]
+		run git review walkthrough draft --force "--start-prepared=$token" -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(sed -n '/^## ?\. /p' .git/review-walkthrough/feature/two.md)" = '## ?. b.txt' ]
+		run git review start "--prepared=$token" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$base" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		git review abort
+		git review start --release -- "$token"
+	done
+}
+
+@test "start resolves a fetched reflog tip without changing the cached compare or reflog" {
+	bats_require_minimum_version 1.5.0
+	make_two_commit_feature
+	cached=$(git rev-parse feature/two^)
+	lower=$(git rev-parse develop)
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$lower"
+	git config --add remote.origin.fetch '+refs/heads/checkpoint:refs/remotes/origin/boundary'
+	tracking=refs/remotes/origin/boundary
+	selector='origin/boundary@{0}'
+	git -c core.logAllRefUpdates=false update-ref "$tracking" "$cached"
+	! git reflog exists "$tracking"
+	run --separate-stderr git -c core.logAllRefUpdates=false review start --from "$selector" --no-walk -- feature/two
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'unknown commit: origin/boundary@{0}'* ]]
+	[ "$(git branch --show-current)" = develop ]
+
+	run git review start --from "$selector" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	git review abort
+	! git reflog exists "$tracking"
+
+	git update-ref -d "$tracking"
+	git update-ref --create-reflog "$tracking" "$cached"
+	before=$(git reflog show --format='%H %gs' "$tracking")
+
+	run git review compare --prepare --porcelain -- "$selector" fetch:origin:boundary
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git rev-parse "refs/worktree/review-compare/pending/$token^1")" = "$cached" ]
+	[ "$(git rev-parse "refs/worktree/review-compare/pending/$token^2")" = "$lower" ]
+	git review compare --release -- "$token"
+
+	run git review start --base "$selector" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	git review abort
+
+	run git review start --prepare --from "$selector" -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$cached"
+	run git review start "--prepared=$token" --from "$selector" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	[ "$(git rev-parse "$tracking")" = "$cached" ]
+	[ "$(git reflog show --format='%H %gs' "$tracking")" = "$before" ]
+}
+
+@test "start resolves numbered and dated reflog selectors like a normal fetch" {
+	make_two_commit_feature
+	first=$(git rev-parse develop)
+	second=$(git rev-parse feature/two^)
+	fresh=$(git rev-parse feature/two)
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$fresh"
+	tracking=refs/remotes/origin/checkpoint
+	GIT_COMMITTER_DATE='2020-01-01T00:00:00Z' git update-ref --create-reflog "$tracking" "$first"
+	git tag -a checkpoint-tag -m checkpoint "$second"
+	cached=$(git rev-parse refs/tags/checkpoint-tag)
+	GIT_COMMITTER_DATE='2021-01-01T00:00:00Z' git update-ref "$tracking" "$cached"
+	before=$(git rev-parse "$tracking@{0}" "$tracking@{1}")
+
+	for selector in 'origin/checkpoint@{1}^{tag}' 'origin/checkpoint@{2021-06-01}^{tag}' 'origin/checkpoint@{1622505600}^{tag}'; do
+		run git review start --from "$selector" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$second" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		git review abort
+	done
+	for selector in 'origin/checkpoint@{2}' 'origin/checkpoint@{1}^' 'origin/checkpoint@{2020-06-01}'; do
+		run git review start --from "$selector" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$first" ]
+		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+		git review abort
+	done
+	[ "$(git rev-parse "$tracking")" = "$cached" ]
+	[ "$(git rev-parse "$tracking@{0}" "$tracking@{1}")" = "$before" ]
+}
+
 @test "start resolves a fresh remote lower bound and pins it when prepared" {
 	make_two_commit_feature
 	cached=$(git rev-parse feature/two^)

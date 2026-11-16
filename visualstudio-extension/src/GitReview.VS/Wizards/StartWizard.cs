@@ -82,7 +82,7 @@ public static class StartWizard
         // The range step only exists when there is a delta marker to compare against:
         // offering "only what is new" without one is offering a validation error.
         var range = ReviewRange.Full;
-        var deltas = await LoadDeltasAsync(cli, cwd, branch, ct).ConfigureAwait(true);
+        var deltas = await LoadDeltasAsync(cli, cwd, branch, source, ct).ConfigureAwait(true);
         if (ConfigPorcelain.DeltaForSource(deltas, source.Id()) is not null)
         {
             var rangeIdx = GitReviewDialogs.Choose(
@@ -321,6 +321,7 @@ public static class StartWizard
         CliInvoker cli,
         string cwd,
         string branch,
+        ReviewSource source,
         CancellationToken ct)
     {
         var result = await cli.InvokeAsync(
@@ -328,6 +329,13 @@ public static class StartWizard
             new[] { "--porcelain", "--deltas-only", "--", branch },
             cwd,
             cancellationToken: ct).ConfigureAwait(true);
+        if (result.ExitCode != 0 && result.Stderr.Contains("unknown option --deltas-only"))
+        {
+            var args = new List<string> { "--porcelain" };
+            args.AddRange(LayoutOffers.OfferConfigFlags(source, ReviewRange.Full));
+            args.AddRange(new[] { "--", branch });
+            result = await cli.InvokeAsync("config", args, cwd, cancellationToken: ct).ConfigureAwait(true);
+        }
         if (result.ExitCode != 0) return null;
         try
         {

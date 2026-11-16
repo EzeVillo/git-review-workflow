@@ -1,5 +1,8 @@
 import * as assert from "node:assert";
 import * as cp from "node:child_process";
+import {existsSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import * as vscode from "vscode";
 import {getTestApi} from "./helpers/extensionApi";
 import {
@@ -7,6 +10,7 @@ import {
     addSelfOrigin,
     addWalkthrough,
     createBranchWithChanges,
+    createBranchWithCommits,
     git,
     gitReview,
     removeOrigin,
@@ -147,6 +151,46 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "step");
         assert.strictEqual(state.state?.position, 1);
+    });
+
+    it("opens only new changes when the CLI lacks the delta-only query", async () => {
+        const branch = "us1-legacy-delta";
+        createBranchWithCommits(repo, branch, [
+            {file: "already-reviewed.txt", content: "first\n", message: "First change"},
+            {file: "new-change.txt", content: "second\n", message: "Second change"},
+        ]);
+        git(["checkout", branch], repo.dir);
+        const previousTip = git(["rev-parse", "HEAD^"], repo.dir).trim();
+        git(["config", `reviewworkflowlocal.${branch}.reviewed`, previousTip], repo.dir);
+
+        const temp = mkdtempSync(join(tmpdir(), "grv-legacy-cli-"));
+        const dispatcher = join(temp, "git-review-legacy.sh");
+        writeFileSync(dispatcher, [
+            "#!/bin/sh",
+            'case "$1:${2:-}:${3:-}" in',
+            '  config:--porcelain:--deltas-only) touch "$(dirname "$0")/delta-probe"; echo "error: unknown option --deltas-only" >&2; exit 1 ;;',
+            "  start:--prepare:*) echo 'error: unknown option --prepare' >&2; exit 1 ;;",
+            "  --version::) echo 0.10.0; exit 0 ;;",
+            "esac",
+            'exec git review "$@"',
+            "",
+        ].join("\n"), {mode: 0o755});
+        const config = vscode.workspace.getConfiguration("gitReview");
+        const originalPath = config.inspect<string>("path")?.globalValue;
+        try {
+            await config.update("path", dispatcher, vscode.ConfigurationTarget.Global);
+            await (await getTestApi()).refresh();
+            await withScriptedWizard(pickCurrent, "Whole diff", () =>
+                vscode.commands.executeCommand("gitReview.startReview"),
+                {sourceLabel: "Offline", rangeLabel: "Only what is new"}
+            );
+            assert.ok(existsSync(join(temp, "delta-probe")), "the legacy CLI rejected the delta-only query");
+            assert.strictEqual(git(["branch", "--show-current"], repo.dir).trim(), `review/${branch}`);
+            assert.strictEqual(git(["diff", "--cached", "--name-only"], repo.dir).trim(), "new-change.txt");
+        } finally {
+            await config.update("path", originalPath, vscode.ConfigurationTarget.Global);
+            rmSync(temp, {recursive: true, force: true});
+        }
     });
 
     it("ignorar el walkthrough (--no-walk): whole aunque el PR traiga uno, a diferencia de automatico", async () => {

@@ -12,6 +12,26 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.11.0] — 2026-11-16
+
+### Added
+
+- Advance a behind local PR branch to the reviewed tip with
+  `git review finish --update-source`, then stage your corrections on it.
+  Undo restores the previous local tip along with the review.
+- Compare can prepare an exact pair of revisions and fetch the current
+  version of a branch selected for either side.
+
+### Changed
+
+- Start fetches the requested remote revisions into private refs and leaves
+  tracking branches in place. The reading options and the review use the same
+  pinned tip and base. A prepared `--from` also pins the lower bound.
+- Drafting for an active review uses its pinned revisions. Delta drafts use
+  the last review point from before that session.
+- `git review forget --delta --stale` checks the remote's branch list, including
+  branches outside a single-branch clone's fetch refspec.
+
 ## [0.10.0] — 2026-11-10
 
 ### Added

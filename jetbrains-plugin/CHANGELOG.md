@@ -7,6 +7,17 @@ The CLI it drives has its own
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [0.6.0] — 2026-11-16
+
+Requires `git review` CLI 0.10.0 or newer. Refreshing remote revisions in
+Compare and updating a behind PR branch in Finish require CLI 0.11.0.
+
+- Compare asks which revision to review first. Choose a local branch, its
+  last-fetched copy, or the current remote version for either side.
+- Start offers reading layouts for the revisions it will actually open.
+- Finish offers to update a behind local PR branch before applying corrections.
+- Add comment stays visible below the scrollable review.
+
 ## [0.5.0] — 2026-11-10
 
 Requires `git review` CLI 0.10.0 or newer.

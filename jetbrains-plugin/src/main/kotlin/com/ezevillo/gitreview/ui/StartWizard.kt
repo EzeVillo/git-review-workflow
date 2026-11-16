@@ -116,11 +116,18 @@ object StartWizard {
         // Range only when a delta marker exists for this source (same as VS Code).
         var range = ReviewRange.FULL
         val deltaProbe = Bg.sync(project, "git review config") {
-            service.cliInvoker.invoke(
+            val reply = service.cliInvoker.invoke(
                 "config",
                 listOf("--porcelain", "--deltas-only", "--", branch),
                 cwd,
             )
+            if (reply.exitCode != 0 && reply.stderr.contains("unknown option --deltas-only")) {
+                service.cliInvoker.invoke(
+                    "config",
+                    listOf("--porcelain") + offerConfigFlags(source, ReviewRange.FULL) + listOf("--", branch),
+                    cwd,
+                )
+            } else reply
         }
         var deltas = if (deltaProbe.exitCode == 0) {
             try {

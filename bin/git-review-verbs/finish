@@ -364,8 +364,24 @@ do_abort() {
 	comments_lock_branch "$rb" || exit 1
 	trap 'comments_unlock' 0
 	comments_finish_undo "$rb" || exit 1
-	if [ "$cur" != "$rb" ]; then
-		git checkout -q -f "$rb"
+	source_rewound=0
+	if [ -n "$source_before" ] && [ "$source_move" = 1 ] &&
+		{ [ "$source_now" = "$source_target" ] || { [ "$force" -eq 1 ] && [ -n "$outhead" ]; }; }; then
+		# Hold the PR checkout until the guarded ref update is done. Releasing
+		# it first would let another worktree check out the tip we are rewinding.
+		if [ "$cur" != "$asrc" ]; then git switch -q "$asrc"; fi
+		[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ] ||
+			die "could not take over the PR branch $asrc to undo finish"
+		git update-ref "refs/heads/$asrc" "$source_before" "$source_now"
+		cur=$asrc
+		source_rewound=1
+	fi
+	if [ "$cur" != "$rb" ] && ! git checkout -q -f "$rb"; then
+		if [ "$source_rewound" -eq 1 ] &&
+			[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ]; then
+			git update-ref "refs/heads/$asrc" "$source_now" "$source_before"
+		fi
+		exit 1
 	fi
 	git reset -q --hard "$head"
 	git read-tree -m -u "$wttree"
@@ -393,11 +409,7 @@ do_abort() {
 		if [ "$srccreated" = "1" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
 			git branch -D "$asrc" >/dev/null
-		elif [ -n "$source_before" ] && [ "$source_move" = 1 ]; then
-			if [ "$source_now" = "$source_target" ] || { [ "$force" -eq 1 ] && [ -n "$outhead" ]; }; then
-				git update-ref "refs/heads/$asrc" "$source_before" "$source_now"
-			fi
-		elif [ -n "$outhead" ] &&
+		elif [ -n "$outhead" ] && [ -z "$source_before" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
 			git update-ref "refs/heads/$asrc" "$outhead"
 		fi
@@ -700,22 +712,23 @@ fi
 
 if [ "$onto" -eq 1 ]; then
 	if [ "$update_source" -eq 1 ]; then
-		# Comparing the old OID prevents overwriting a concurrent local commit.
-		finish_require_source_worktree "$src"
-		# Preflight may have preceded a long step replay. Recheck before moving
-		# the local branch and preserve the undo point if the checkout fails.
-		git config "branch.$cur.reviewundosourcemove" 1
-		if ! git update-ref -m 'git review finish: fast-forward PR branch' "refs/heads/$src" "$tip" "$finish_source_head"; then
-			git config --unset "branch.$cur.reviewundosourcemove" || true
+		# With no corrections the index already holds the tip's tree. Align the
+		# review HEAD so switching to the older PR does not carry a staged diff.
+		if [ "$has_edits" -eq 0 ]; then
+			git reset -q --soft "$tip"
+		fi
+		# Claim the branch through Git before moving it. Its checkout protects
+		# the other worktrees while Git fast-forwards the ref, index and files.
+		if ! git switch -q "$src"; then
+			die "could not switch to $src; recover with git review finish --abort"
+		fi
+		if [ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||
+			[ "$(git rev-parse --verify HEAD)" != "$finish_source_head" ]; then
 			die "local $src changed during finish; recover with git review finish --abort"
 		fi
-		if ! git switch -q "$src"; then
-			if finish_source_worktree_available "$src"; then
-				if git update-ref -m 'git review finish: restore after checkout failure' "refs/heads/$src" "$finish_source_head" "$tip"; then
-					git config --unset "branch.$cur.reviewundosourcemove" || true
-				fi
-			fi
-			die "could not switch to $src; recover with git review finish --abort"
+		git config "branch.$cur.reviewundosourcemove" 1
+		if ! git -c merge.autostash=false merge --ff-only --quiet "$tip"; then
+			die "could not fast-forward $src; recover with git review finish --abort"
 		fi
 	elif git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
 		if [ "$(git rev-parse --verify "refs/heads/$src")" != "$tip" ]; then

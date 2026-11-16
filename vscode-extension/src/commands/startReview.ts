@@ -429,11 +429,18 @@ export async function startReview(
     // Primera lectura por rama: deltas de ambos orígenes (sin flags de
     // origen) para decidir si hay paso de rango. Las ofertas se piden después
     // con el contexto completo (source + range).
-    const deltaProbe = await invokeGitReview(
+    let deltaProbe = await invokeGitReview(
         "config",
         ["--porcelain", "--deltas-only", "--", branch.name],
         {...options, network: false}
     );
+    if (deltaProbe.exitCode !== 0 && deltaProbe.stderr.includes("unknown option --deltas-only")) {
+        deltaProbe = await invokeGitReview(
+            "config",
+            ["--porcelain", ...offerConfigFlags(source, "full"), "--", branch.name],
+            {...options, network: false}
+        );
+    }
     let deltas: DeltaRecord[] | undefined;
     if (!deltaProbe.errorCode && deltaProbe.exitCode === 0) {
         deltas = parseConfigPorcelain(deltaProbe.stdout).deltas;

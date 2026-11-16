@@ -549,6 +549,71 @@ step_review_two_with_edits() {
 	[ -z "$(git -C "$TMP/other" status --porcelain)" ]
 }
 
+@test "finish leaves the PR tip intact when another worktree takes the branch during finish" {
+	bats_require_minimum_version 1.5.0
+	push_pr2
+	git branch -f feature/x origin/feature/x~1
+	before=$(git rev-parse refs/heads/feature/x)
+	git worktree add -q --detach "$TMP/other" develop
+	git review start feature/x
+	printf 'a\nB\nc\nd\ne\nfix\n' >app.txt
+	index_before=$(git write-tree)
+	review_before=$(git rev-parse HEAD)
+
+	export FINISH_TEST_GIT="$(command -v git)"
+	export FINISH_TEST_WORKTREE="$TMP/other"
+	mkdir "$TMP/wrapper"
+	cat >"$TMP/wrapper/git" <<'EOF'
+#!/bin/sh
+set -eu
+case "$*" in
+	"switch -q feature/x"|"update-ref -m git review finish: fast-forward PR branch refs/heads/feature/x "*)
+		"$FINISH_TEST_GIT" -C "$FINISH_TEST_WORKTREE" switch -q feature/x
+		;;
+esac
+exec "$FINISH_TEST_GIT" "$@"
+EOF
+	chmod +x "$TMP/wrapper/git"
+	run --separate-stderr env PATH="$TMP/wrapper:$PATH" sh "$BATS_TEST_DIRNAME/../bin/git-review" finish --update-source
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'could not switch to feature/x'* ]]
+	[ "$(git branch --show-current)" = review/feature/x ]
+	[ "$(git -C "$TMP/other" branch --show-current)" = feature/x ]
+	[ "$(git -C "$TMP/other" rev-parse HEAD)" = "$before" ]
+	[ -z "$(git -C "$TMP/other" status --porcelain)" ]
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$review_before" ]
+	[ "$(git write-tree)" = "$index_before" ]
+	[ "$(tail -n 1 app.txt)" = fix ]
+}
+
+@test "finish can update a behind PR branch without review edits" {
+	push_pr2
+	git branch -f feature/x origin/feature/x~1
+	before=$(git rev-parse refs/heads/feature/x)
+	git review start feature/x
+	tip=$(git config branch.review/feature/x.reviewtip)
+	review_before=$(git rev-parse HEAD)
+	index_before=$(git write-tree)
+
+	run git review finish --update-source
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'no review changes to apply'* ]]
+	[ "$(git branch --show-current)" = feature/x ]
+	[ "$(git rev-parse HEAD)" = "$tip" ]
+	[ -z "$(git status --porcelain)" ]
+	git switch -q develop
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = review/feature/x ]
+	[ "$(git rev-parse refs/heads/feature/x)" = "$before" ]
+	[ "$(git rev-parse HEAD)" = "$review_before" ]
+	[ "$(git write-tree)" = "$index_before" ]
+}
+
 # ── review clean behaviours ───────────────────────────────────────────────────
 
 @test "review clean with no branch deletes every review branch" {

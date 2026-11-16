@@ -307,7 +307,7 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `origin/<branch>` — if that differs from your checked-out branch you get a note,
   since you would be reviewing a different snapshot than you have. With no branch,
   fails on a detached HEAD or while on a `review/*` branch.
-- Start fetches the requested remote branches to private refs and leaves local and remote-tracking branches in place. Prepared reviews pin the tip and base before offering reading layouts. With `--from`, they also pin the commit selected as the lower bound.
+- Start fetches the requested remote branches to private refs and honors fetch refspecs that rename tracking branches. If a base tag is missing locally, Start fetches that tag to a private ref too. Prepared reviews pin the tip and base before offering reading layouts. With `--from`, they also pin the commit selected as the lower bound.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review
@@ -419,7 +419,7 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
 
 Compare keeps both original revision names and their resolved commit IDs in `status`, in every reading mode and after saving/resuming. Moving a branch later does not change the comparison already opened.
 
-In the interactive flow, **What do you want to review?** asks for `<b>` first. **Compare against what?** asks for `<a>`. Each branch name appears once. For each branch, you can choose the local version, a remote-tracking copy from the last fetch, or fetch the current version from that remote. You can also enter a tag, a commit, or an exact ref. Compare fetches only the branches selected for refresh and uses the same two pinned commits to offer reading layouts and open the diff. Compare's fetch leaves local branches and refs like `origin/feature` in place.
+In the interactive flow, **What do you want to review?** asks for `<b>` first. **Compare against what?** asks for `<a>`. Each branch name appears once. For each branch, you can choose the local version, a remote-tracking copy from the last fetch, or fetch the current version from that remote. The refresh uses the fetch refspec to find the branch behind a renamed tracking ref. You can also enter a tag, a commit, or an exact ref. Compare fetches only the branches selected for refresh and uses the same two pinned commits to offer reading layouts and open the diff. Compare's fetch leaves local branches and refs like `origin/feature` in place.
 
 Only usable walkthroughs and keys appear, alongside creating, resuming or updating your own reading order when needed. These drafts are independent of Start drafts and work with branches, tags and commits, without a configured base.
 
@@ -1109,9 +1109,10 @@ forget it yourself.
   and the `--local` one if present.
 - `--all` — forget every recorded marker (leaves `reviewworkflow.base` alone).
 - `--stale` — forget markers for branches that no longer exist. Checks remote
-  markers against the configured remote's branch list and `--local` markers
-  against local branches. Leaves tracking refs as they are. If the remote query
-  fails, no markers are removed.
+  markers against the configured remote's branch list, using the fetch refspec
+  to resolve renamed tracking branches. Checks `--local` markers against local
+  branches. Leaves tracking refs as they are. If the remote query fails, no
+  markers are removed.
 - `--dry-run` — with `--stale`, list what would be forgotten without doing it.
   Rejected with the other modes, where the target is already explicit.
 

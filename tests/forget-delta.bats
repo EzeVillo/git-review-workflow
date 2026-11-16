@@ -216,6 +216,31 @@ mark() {
 	[ "$(git for-each-ref refs/remotes/)" = "$before" ]
 }
 
+@test "review forget --delta --stale checks the upstream of a renamed tracking branch" {
+	git config --replace-all remote.origin.fetch '+refs/heads/feature/x:refs/remotes/origin/alias'
+	git fetch -q origin
+	git review start --no-walk alias
+	git review finish
+	git review clean --keep-fixes alias
+	tip=$(git config reviewworkflow.alias.reviewed)
+	[ "$tip" = "$(git --git-dir="$ORIGIN" rev-parse refs/heads/feature/x)" ]
+	tracking=$(git for-each-ref refs/remotes/)
+
+	run git review forget --delta --stale
+	[ "$status" -eq 0 ]
+	[ "$output" = 'no stale delta markers (every branch still exists)' ]
+	[ "$(git config reviewworkflow.alias.reviewed)" = "$tip" ]
+
+	git --git-dir="$ORIGIN" update-ref refs/heads/alias "$tip"
+	git --git-dir="$ORIGIN" update-ref -d refs/heads/feature/x
+	run git review forget --delta --stale
+	[ "$status" -eq 0 ]
+	[ "$output" = 'forgot delta marker for alias (origin/feature/x no longer exists)' ]
+	! git config --get reviewworkflow.alias.reviewed
+	[ -z "$(git for-each-ref refs/review-delta/)" ]
+	[ "$(git for-each-ref refs/remotes/)" = "$tracking" ]
+}
+
 @test "review forget --delta --stale aborts on a failed remote query and removes nothing" {
 	mark feature/x
 	git remote remove origin

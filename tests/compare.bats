@@ -77,6 +77,49 @@
 	! git cat-file -e "$new_tip^{commit}" 2>/dev/null
 }
 
+@test "compare refreshes the upstream of a renamed tracking branch" {
+	remote="$TMP/remote.git"
+	git init -q --bare "$remote"
+	git remote add isolated "$remote"
+	git config --replace-all remote.isolated.fetch '+actual:refs/remotes/isolated/alias'
+	git push -q isolated 'v1.0:refs/heads/actual' 'v2.0:refs/heads/alias'
+	git fetch -q isolated
+	cached=$(git rev-parse refs/remotes/isolated/alias)
+	tip=$(git rev-parse v2.0^)
+	git --git-dir="$remote" update-ref refs/heads/actual "$tip"
+
+	run git review compare --sources --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'compare-source\talias\tremote\tisolated\tfetch:isolated:alias'* ]]
+	[[ "$output" == *$'compare-source\talias\tcached\tisolated\trefs/remotes/isolated/alias'* ]]
+	run git review compare --prepare --porcelain -- refs/remotes/isolated/alias fetch:isolated:alias
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review compare "--prepared=$token" --no-walk -- refs/remotes/isolated/alias fetch:isolated:alias
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/isolated/alias.reviewtip)" = "$tip" ]
+	[ "$(git rev-parse refs/remotes/isolated/alias)" = "$cached" ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+	git review compare --release -- "$token"
+
+	# The normal wildcard can coexist with a rename when only one source exists.
+	git config --add remote.isolated.fetch '+refs/heads/*:refs/remotes/isolated/*'
+	run git review compare --prepare --porcelain -- refs/remotes/isolated/alias fetch:isolated:alias
+	[ "$status" -eq 1 ]
+	[ "$output" = 'error: ambiguous fetch refspecs for isolated/alias' ]
+	[ -z "$(git for-each-ref refs/worktree/review-compare/pending/)" ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+
+	git --git-dir="$remote" update-ref -d refs/heads/alias
+	run git review compare --prepare --porcelain -- refs/remotes/isolated/alias fetch:isolated:alias
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git rev-parse "refs/worktree/review-compare/pending/$token^2")" = "$tip" ]
+	[ "$(git rev-parse refs/remotes/isolated/alias)" = "$cached" ]
+}
+
 @test "compare clean only drops the refs owned by the removed session" {
 	for target in c1 v2.0; do
 		if [ "$target" = c1 ]; then git tag c1 v2.0^; fi

@@ -314,7 +314,7 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   revisa `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
   revisando un snapshot distinto al que tenés. Con la rama omitida, falla con HEAD
   detached o estando sobre una rama `review/*`.
-- Start trae las ramas remotas solicitadas a refs privadas y mantiene las ramas locales y de seguimiento en su posición. Una revisión preparada fija el tip y la base antes de ofrecer modos de lectura. Con `--from`, también fija el commit elegido como límite inferior.
+- Start trae las ramas remotas solicitadas a refs privadas y respeta los refspecs de fetch que cambian el nombre de las ramas de seguimiento. Si el tag base falta en el repositorio local, Start también lo trae a una ref privada. Una revisión preparada fija el tip y la base antes de ofrecer modos de lectura. Con `--from`, también fija el commit elegido como límite inferior.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que
@@ -431,7 +431,7 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
 
 Compare conserva los nombres de ambas revisiones y sus commits resueltos en `status`, en todos los modos y después de guardar/retomar. Mover una rama después no cambia la comparación ya abierta.
 
-En el flujo interactivo, **What do you want to review?** pide primero `<b>`. **Compare against what?** pide `<a>`. Cada nombre de rama aparece una vez. Para cada rama podés elegir la versión local, la copia de un remoto del último fetch o traer la versión actual de ese remoto. También podés escribir un tag, un commit o una referencia exacta. Compare descarga sólo las ramas elegidas para actualizar y usa los dos commits fijados para mostrar las opciones de lectura y abrir el diff. El fetch de Compare conserva las ramas locales y las referencias como `origin/feature` en sus commits actuales.
+En el flujo interactivo, **What do you want to review?** pide primero `<b>`. **Compare against what?** pide `<a>`. Cada nombre de rama aparece una vez. Para cada rama podés elegir la versión local, la copia de un remoto del último fetch o traer la versión actual de ese remoto. Para actualizar una ref de seguimiento con otro nombre, el fetch usa el refspec para identificar su rama en el remoto. También podés escribir un tag, un commit o una referencia exacta. Compare descarga sólo las ramas elegidas para actualizar y usa los dos commits fijados para mostrar las opciones de lectura y abrir el diff. El fetch de Compare conserva las ramas locales y las referencias como `origin/feature` en sus commits actuales.
 
 Sólo aparecen walkthroughs y esenciales utilizables, junto con crear, retomar o actualizar tu propio orden de lectura cuando corresponde. Estos borradores son independientes de los de Start y funcionan con ramas, tags y commits, sin base configurada.
 
@@ -1138,9 +1138,11 @@ quieras olvidarlo vos.
   `--local` si existe.
 - `--all` — olvidar todos los marcadores (no toca `reviewworkflow.base`).
 - `--stale` — olvida los marcadores de ramas que ya no existen. Contrasta los
-  marcadores remotos con la lista de ramas del remoto configurado y los de
-  `--local` con las ramas locales. Mantiene las refs de seguimiento tal como
-  están. Si falla la consulta remota, conserva todos los marcadores.
+  marcadores remotos con la lista de ramas del remoto configurado y usa el
+  refspec de fetch para resolver las ramas de seguimiento con otro nombre.
+  Contrasta los marcadores de `--local` con las ramas locales. Mantiene las
+  refs de seguimiento tal como están. Si falla la consulta remota, conserva
+  todos los marcadores.
 - `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
   los otros modos, donde el objetivo ya es explícito.
 

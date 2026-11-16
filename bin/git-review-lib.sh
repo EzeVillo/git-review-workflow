@@ -5149,7 +5149,7 @@ compare_literal_commit() {
 }
 
 # Branch choices use the refs available in the repository. Fetch selectors
-# identify a server branch independently of the corresponding tracking name.
+# keep the tracking name as their identity, including for renamed refspecs.
 compare_sources() {
 	_cs_remotes=$(git remote) || return 1
 	porcelain_row compare-sources 1
@@ -5205,6 +5205,72 @@ review_fetch_isolated() {
 	_rfi_head=''
 	if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then _rfi_head='--no-write-fetch-head'; fi
 	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags --no-recurse-submodules ${_rfi_head:+"$_rfi_head"} -- "$@"
+}
+
+# Resolve a tracking name back to its server branch without a fetch. Outside the
+# configured destinations (e.g. a single-branch clone), use the name literally.
+# Overlapping mappings need the server's advertised branches. A caller that
+# already listed them can pass the ref names as the third argument.
+review_remote_branch() {
+	_rrb_specs=$(git config --get-all "remote.$1.fetch") || [ "$?" -eq 1 ] || return 1
+	_rrb_matches=$(printf '%s\n' "$_rrb_specs" | LC_ALL=C awk -v tracking="refs/remotes/$1/$2" '
+		function accepts(pattern, ref,   star, prefix, suffix) {
+			star = index(pattern, "*")
+			if (!star) return ref == pattern
+			prefix = substr(pattern, 1, star - 1)
+			suffix = substr(pattern, star + 1)
+			return length(ref) >= length(prefix) + length(suffix) &&
+				substr(ref, 1, length(prefix)) == prefix &&
+				substr(ref, length(ref) - length(suffix) + 1) == suffix
+		}
+		function branch_ref(ref) {
+			if (ref == "" || index(ref, "refs/") == 1 || ref == "HEAD" ||
+				(ref ~ /^[[:xdigit:]]+$/ && (length(ref) == 40 || length(ref) == 64))) return ref
+			return "refs/heads/" ref
+		}
+		/^\^/ { excluded[++count] = branch_ref(substr($0, 2)); next }
+		{
+			sub(/^\+/, "")
+			if (split($0, parts, ":") != 2 || !accepts(parts[2], tracking)) next
+			source = parts[1]
+			star = index(parts[2], "*")
+			if (star) {
+				stem = substr(tracking, star, length(tracking) - length(parts[2]) + 1)
+				star = index(source, "*")
+				source = substr(source, 1, star - 1) stem substr(source, star + 1)
+			}
+			candidates[branch_ref(source)] = 1
+		}
+		END {
+			for (source in candidates) {
+				for (i = 1; i <= count; i++) if (accepts(excluded[i], source)) break
+				if (i > count && index(source, "refs/heads/") == 1) { print source; found = 1 }
+				mapped = 1
+			}
+			if (mapped && !found) print "unavailable"
+		}') || return 1
+	case "$_rrb_matches" in
+	'') printf 'refs/heads/%s\n' "$2" ;;
+	unavailable) die "fetch refspecs for $1 do not map $1/$2 to an eligible remote branch" ;;
+	*'
+'*)
+		if [ "$#" -eq 3 ]; then
+			_rrb_heads=$3
+		else
+			# shellcheck disable=SC2086 # valid refnames are newline-delimited and contain no glob characters
+			_rrb_refs=$(git ls-remote --heads --refs -- "$1" $_rrb_matches) || die "could not list branches on $1"
+			_rrb_heads=$(printf '%s\n' "$_rrb_refs" | cut -f 2)
+		fi
+		_rrb_live=$(printf '%s\n' "$_rrb_heads" | grep -Fx -e "$_rrb_matches" || true)
+		case "$_rrb_live" in
+		*'
+'*) die "ambiguous fetch refspecs for $1/$2" ;;
+		'') printf '%s\n' "${_rrb_matches%%'
+'*}" ;; # Every mapped source is absent. Keep the normal missing-branch path.
+		*) printf '%s\n' "$_rrb_live" ;;
+		esac ;;
+	*) printf '%s\n' "$_rrb_matches" ;;
+	esac
 }
 
 start_prepared_ref() {
@@ -5273,6 +5339,7 @@ compare_fetch_spec() {
 		! git remote | grep -Fxq -e "$_compare_remote"; then
 		die "unknown remote branch: $1"
 	fi
+	_compare_branch=$(review_remote_branch "$_compare_remote" "$_compare_branch") || exit 1
 }
 
 compare_prepare_cleanup() {
@@ -5308,13 +5375,13 @@ compare_prepare() {
 	if [ -n "$_compare_a_remote" ] && [ "$_compare_a_remote" = "$_compare_b_remote" ]; then
 		if [ "$_compare_a_branch" = "$_compare_b_branch" ]; then die "$a and $b select the same remote branch; nothing to compare"; fi
 		review_fetch_isolated "$_compare_a_remote" \
-			"refs/heads/$_compare_a_branch:$_compare_pending-base" "refs/heads/$_compare_b_branch:$_compare_pending-target"
+			"$_compare_a_branch:$_compare_pending-base" "$_compare_b_branch:$_compare_pending-target"
 	else
 		if [ -n "$_compare_a_remote" ]; then
-			review_fetch_isolated "$_compare_a_remote" "refs/heads/$_compare_a_branch:$_compare_pending-base"
+			review_fetch_isolated "$_compare_a_remote" "$_compare_a_branch:$_compare_pending-base"
 		fi
 		if [ -n "$_compare_b_remote" ]; then
-			review_fetch_isolated "$_compare_b_remote" "refs/heads/$_compare_b_branch:$_compare_pending-target"
+			review_fetch_isolated "$_compare_b_remote" "$_compare_b_branch:$_compare_pending-target"
 		fi
 	fi
 	if [ -n "$_compare_a_remote" ]; then acommit=$(compare_literal_commit "$_compare_pending-base"); fi

@@ -542,6 +542,7 @@ if [ "$stale" -eq 1 ]; then
 	fi
 
 	any=0
+	unresolved=0
 	while read -r key _; do
 		[ -n "$key" ] || continue
 		parse_marker "$key"
@@ -550,12 +551,17 @@ if [ "$stale" -eq 1 ]; then
 			git rev-parse --verify --quiet "refs/heads/$msrc" >/dev/null && continue
 			forget_delta "$key" "$msrc" " (local; $msrc no longer exists)"
 		else
-			printf '%s\n' "$remote_heads" | grep -Fxq -e "refs/heads/$msrc" && continue
-			forget_delta "$key" "$msrc" " ($remote/$msrc no longer exists)"
+			if ! remote_head=$(review_remote_branch "$remote" "$msrc" "$remote_heads"); then
+				unresolved=1
+				continue
+			fi
+			printf '%s\n' "$remote_heads" | grep -Fxq -e "$remote_head" && continue
+			forget_delta "$key" "$msrc" " ($remote/${remote_head#refs/heads/} no longer exists)"
 		fi
 		any=1
 	done <"$tmp"
 
+	[ "$unresolved" -eq 0 ] || exit 1
 	[ "$any" -eq 1 ] || echo "no stale delta markers (every branch still exists)"
 	exit 0
 fi

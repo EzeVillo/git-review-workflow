@@ -427,6 +427,55 @@ step_review_two_with_edits() {
 	[ "$(git rev-parse refs/heads/feature/x)" = "$ahead" ]
 }
 
+@test "prepared start resolves mapped remote source and base branches" {
+	bats_require_minimum_version 1.5.0
+	make_two_commit_feature
+	tip=$(git rev-parse feature/two)
+	base=$(git rev-parse feature/two^)
+	git push -q origin "$base:refs/heads/integration"
+	git config --replace-all remote.origin.fetch '+refs/heads/feature/*:refs/remotes/origin/reviewable/*'
+	git config --add remote.origin.fetch '+refs/heads/integration:refs/remotes/origin/develop'
+	git config reviewworkflow.base origin/develop
+	git fetch -q origin
+	tracking=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)
+	git push -q origin develop:refs/heads/reviewable/two
+
+	run git review start --prepare -- reviewable/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review start "--prepared=$token" --no-walk -- reviewable/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/reviewable/two.reviewtip)" = "$tip" ]
+	[ "$(git config branch.review/reviewable/two.reviewbasecommit)" = "$base" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)" = "$tracking" ]
+}
+
+@test "start fetches a newly published base tag without updating public refs" {
+	make_two_commit_feature
+	base=$(git rev-parse feature/two^)
+	git -c protocol.file.allow=always clone -q --branch develop "$ORIGIN" "$TMP/reader"
+	git tag -a v-next -m 'next release' "$base"
+	git tag unrelated develop
+	git push -q origin refs/tags/v-next refs/tags/unrelated
+	cd "$TMP/reader"
+	tracking=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)
+
+	for selector in v-next refs/tags/v-next; do
+		git config reviewworkflow.base "$selector"
+		run git review start --no-walk feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$base" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		[ -z "$(git tag --list)" ]
+		[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)" = "$tracking" ]
+		run git review abort
+		[ "$status" -eq 0 ]
+		[ -z "$(git for-each-ref --format='%(refname)' refs/worktree/review-start/)" ]
+	done
+}
+
 @test "prepared start pins the fetched tip without updating tracking refs" {
 	cached=$(git rev-parse refs/remotes/origin/feature/x)
 	local_base=$(git rev-parse refs/remotes/origin/develop)

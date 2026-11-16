@@ -235,12 +235,16 @@ _rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$delta$loc
 _rs_pack=''
 _rs_prepared=0
 _rs_tmp=''
-_rs_fetch_base=0
+_rs_remote_source=''
+_rs_remote_base=''
+_rs_remote_tag=''
 _rs_base_label=local
 _rs_cleanup() {
 	if [ -n "$_rs_tmp" ]; then
-		if [ "$local_mode" -eq 0 ]; then git update-ref -d "$_rs_tmp-tip" || true; fi
-		if [ "$_rs_fetch_base" -eq 1 ]; then git update-ref -d "$_rs_tmp-base" || true; fi
+		if [ -n "$_rs_remote_source" ]; then git update-ref -d "$_rs_tmp-tip" || true; fi
+		if [ -n "$_rs_remote_base" ] && [ "$_rs_remote_base" != "$_rs_remote_source" ]; then
+			git update-ref -d "$_rs_tmp-base" || true
+		fi
 		if [ "$_rs_prepared" -eq 0 ]; then git update-ref -d "$_rs_tmp" || true; fi
 		if [ "${_rs_lease_started:-0}" -eq 1 ]; then git update-ref -d "$_rs_tmp-lease" || true; fi
 	fi
@@ -274,63 +278,87 @@ if [ -z "${_rs_saved_range:-}" ]; then
 		if [ "$offline_mode" -eq 1 ]; then
 			baseref=$(git rev-parse --verify --quiet "refs/heads/$base^{commit}" || true)
 		else
-			_rs_remote_base=$base
+			_rs_base_branch=$base
 			_rs_explicit_remote=0
 			case "$base" in
-			"refs/remotes/$remote/"*) _rs_remote_base=${base#"refs/remotes/$remote/"}; _rs_explicit_remote=1 ;;
+			refs/tags/*) _rs_base_branch='' ;;
+			"refs/remotes/$remote/"*) _rs_base_branch=${base#"refs/remotes/$remote/"}; _rs_explicit_remote=1 ;;
 			"$remote/"*)
 				if ! git show-ref --verify --quiet "refs/heads/$base"; then
-					_rs_remote_base=${base#"$remote/"}
+					_rs_base_branch=${base#"$remote/"}
 					_rs_explicit_remote=1
 				fi ;;
 			esac
-			if git check-ref-format "refs/heads/$_rs_remote_base"; then _rs_fetch_base=1; fi
+			if git check-ref-format "refs/heads/$_rs_base_branch"; then
+				_rs_remote_base=$(review_remote_branch "$remote" "$_rs_base_branch") || exit 1
+			fi
 		fi
 		if [ -z "$baseref" ] && [ "${_rs_explicit_remote:-0}" -eq 0 ]; then
 			baseref=$(git rev-parse --verify --quiet "$base^{commit}" || true)
+			if [ -z "$baseref" ] && [ "$offline_mode" -eq 0 ]; then
+				case "$base" in refs/tags/*) _rs_remote_tag=$base ;; *) _rs_remote_tag="refs/tags/$base" ;; esac
+				if ! git check-ref-format "$_rs_remote_tag"; then _rs_remote_tag=''; fi
+			fi
 		fi
 	fi
-	if [ "$local_mode" -eq 0 ] || [ "$_rs_fetch_base" -eq 1 ]; then
+	if [ "$local_mode" -eq 0 ]; then
+		_rs_remote_source=$(review_remote_branch "$remote" "$src") || exit 1
+	fi
+	if [ -z "$_rs_remote_base" ]; then
+		_rs_remote_base=$_rs_remote_tag
+		_rs_remote_tag=''
+	fi
+	if [ -n "$_rs_remote_source$_rs_remote_base" ]; then
 		_rs_lease=$(compare_lease_commit 'Prepare start review' </dev/null)
 		git update-ref "$_rs_tmp-lease" "$_rs_lease"
 		_rs_lease_started=1
 	fi
 	set --
-	if [ "$local_mode" -eq 0 ]; then
-		set -- "refs/heads/$src:$_rs_tmp-tip"
+	if [ -n "$_rs_remote_source" ]; then
+		set -- "$_rs_remote_source:$_rs_tmp-tip"
 	fi
-	if [ "$_rs_fetch_base" -eq 1 ]; then
-		if [ "$local_mode" -eq 0 ] && [ "$_rs_remote_base" = "$src" ]; then
-			_rs_fetch_base=0
+	if [ -n "$_rs_remote_base" ]; then
+		if [ "$_rs_remote_base" = "$_rs_remote_source" ]; then
 			_rs_base_label=remote
 			baseref="$_rs_tmp-tip"
 		else
-			_rs_refspec="refs/heads/$_rs_remote_base:$_rs_tmp-base"
+			_rs_refspec="$_rs_remote_base:$_rs_tmp-base"
 			_rs_output=''
 			if ! _rs_output=$(review_fetch_isolated "$remote" "$@" "$_rs_refspec" 2>&1); then
 				# The base can be a local branch or a literal revision. Only
-				# fall back when the server confirms that the branch is absent.
+				# fall back when the server confirms the first choice is absent.
 				_rs_probe=0
-				git ls-remote --exit-code --heads -- "$remote" "refs/heads/$_rs_remote_base" >/dev/null || _rs_probe=$?
-				if [ "$_rs_probe" -eq 0 ] && [ "$local_mode" -eq 0 ]; then
+				git ls-remote --exit-code --refs -- "$remote" "$_rs_remote_base" >/dev/null || _rs_probe=$?
+				if [ "$_rs_probe" -eq 0 ] && [ -n "$_rs_remote_source" ]; then
 					_rs_src_probe=0
-					git ls-remote --exit-code --heads -- "$remote" "refs/heads/$src" >/dev/null || _rs_src_probe=$?
+					git ls-remote --exit-code --heads -- "$remote" "$_rs_remote_source" >/dev/null || _rs_src_probe=$?
 					if [ "$_rs_src_probe" -eq 2 ]; then die "$srclabel not found"; fi
 				fi
 				if [ "$_rs_probe" -ne 2 ]; then printf '%s\n' "$_rs_output" >&2; die "could not update from $remote"; fi
+				if [ -n "$_rs_remote_tag" ]; then
+					_rs_probe=0
+					git ls-remote --exit-code --tags --refs -- "$remote" "$_rs_remote_tag" >/dev/null || _rs_probe=$?
+					case "$_rs_probe" in
+					0) set -- "$@" "$_rs_remote_tag:$_rs_tmp-base"; baseref="$_rs_tmp-base" ;;
+					2) ;;
+					*) die "could not update from $remote" ;;
+					esac
+				fi
 			else
 				set --
 				baseref="$_rs_tmp-base"
-				_rs_base_label=remote
+				case "$_rs_remote_base" in refs/heads/*) _rs_base_label=remote ;; esac
 			fi
 		fi
 	fi
 	if [ "$#" -gt 0 ]; then
 		_rs_output=''
 		if ! _rs_output=$(review_fetch_isolated "$remote" "$@" 2>&1); then
-			_rs_probe=0
-			git ls-remote --exit-code --heads -- "$remote" "refs/heads/$src" >/dev/null || _rs_probe=$?
-			if [ "$_rs_probe" -eq 2 ]; then die "$srclabel not found"; fi
+			if [ -n "$_rs_remote_source" ]; then
+				_rs_probe=0
+				git ls-remote --exit-code --heads -- "$remote" "$_rs_remote_source" >/dev/null || _rs_probe=$?
+				if [ "$_rs_probe" -eq 2 ]; then die "$srclabel not found"; fi
+			fi
 			printf '%s\n' "$_rs_output" >&2
 			die "could not update from $remote"
 		fi

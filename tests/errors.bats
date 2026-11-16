@@ -808,6 +808,78 @@ step_review_two_with_edits() {
 	[ "$(git diff --cached --name-only)" = b.txt ]
 }
 
+@test "start refreshes exact fetch destinations and preserves literal comparisons" {
+	make_two_commit_feature
+	cached=$(git rev-parse feature/two^)
+	lower=$(git rev-parse develop)
+	destination=refs/integration/checkpoint
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$cached"
+	git config --add remote.origin.fetch '+refs/heads/checkpoint:refs/integration/checkpoint'
+	git config --add remote.origin.fetch '+refs/heads/checkpoint:refs/remotes/origin/boundary'
+	git fetch -q origin
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$lower"
+	refs_before=$(git for-each-ref --format='%(refname) %(objectname)' refs/integration refs/remotes)
+	fetch_head=$(cat .git/FETCH_HEAD)
+
+	for option in --base --from; do
+		run git review start "$option" "$destination" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$lower" ]
+		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+		git review abort
+
+		run git review start --prepare "$option" "$destination" -- feature/two
+		[ "$status" -eq 0 ]
+		token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+		[ -n "$token" ]
+		run git review start "--prepared=$token" "$option" "$destination" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$lower" ]
+		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+		git review abort
+		git review start --release -- "$token"
+	done
+
+	run git review compare --prepare --porcelain -- "$destination" fetch:origin:boundary
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	ref="refs/worktree/review-compare/pending/$token"
+	[ "$(git rev-parse "$ref^1")" = "$cached" ]
+	[ "$(git rev-parse "$ref^2")" = "$lower" ]
+	git review compare --release -- "$token"
+	git config reviewworkflow.boundary.reviewed "$cached"
+	run git review forget --delta --stale
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflow.boundary.reviewed)" = "$cached" ]
+
+	! git reflog exists "$destination"
+	run git review start --from "$destination@{0}" --no-walk -- feature/two
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unknown commit: $destination@{0}"* ]]
+	[ "$(git branch --show-current)" = develop ]
+	run git -c core.logAllRefUpdates=always review start --from "$destination@{0}" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	git review abort
+	! git reflog exists "$destination"
+
+	run git review start --from integration/checkpoint --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	git review abort
+	[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/integration refs/remotes)" = "$refs_before" ]
+	[ "$(cat .git/FETCH_HEAD)" = "$fetch_head" ]
+
+	git update-ref -d "$destination"
+	run git review start --from "$destination" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	! git show-ref --verify --quiet "$destination"
+}
+
 @test "prepared start pins the fetched tip without updating tracking refs" {
 	cached=$(git rev-parse refs/remotes/origin/feature/x)
 	local_base=$(git rev-parse refs/remotes/origin/develop)

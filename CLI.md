@@ -309,6 +309,8 @@ Has two independent axes — **range** (where the review starts) and **layout**
   fails on a detached HEAD or while on a `review/*` branch.
 - Start fetches the requested remote revisions to private refs and honors
   configured fetch refspecs, including PR refs mapped to tracking branches.
+  `--base` and `--from` also honor an exact fetch destination outside
+  `refs/remotes/`, such as `refs/integration/checkpoint`.
   Revisions such as `--base origin/main~1` or `--from origin/checkpoint@{0}`
   resolve as if the tracking branch had been fetched, without updating its
   ref or reflog. A base branch name takes precedence over the same text used

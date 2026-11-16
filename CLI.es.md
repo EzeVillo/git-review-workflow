@@ -316,7 +316,9 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   detached o estando sobre una rama `review/*`.
 - Start trae las revisiones remotas solicitadas a refs privadas y respeta los
   refspecs de fetch configurados, incluidas las refs de PR mapeadas a ramas de
-  seguimiento. Las revisiones como `--base origin/main~1` o
+  seguimiento. `--base` y `--from` también respetan un destino exacto de fetch
+  fuera de `refs/remotes/`, como `refs/integration/checkpoint`.
+  Las revisiones como `--base origin/main~1` o
   `--from origin/checkpoint@{0}` se resuelven como si se hubiera hecho fetch de
   la rama de seguimiento, sin actualizar su ref ni su reflog. Para la base,
   el nombre de una rama tiene prioridad frente a la misma abreviatura Git,

@@ -5192,14 +5192,18 @@ review_fetch_isolated() {
 	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags --no-recurse-submodules ${_rfi_head:+"$_rfi_head"} -- "$@"
 }
 
-# Maps a tracking name using the server's advertised refs and the configured
-# fetch refspecs. Status 2 means absent (stdout names the missing ref); 3 means
-# excluded. Ambiguous mappings fail separately from either case.
 review_remote_ref() {
-	_rrb_specs=$(git config --get-all "remote.$1.fetch") || [ "$?" -eq 1 ] || return 1
-	_rrb_status=0
-	_rrb_ref=$(printf '%s\n' "$3" . "$_rrb_specs" | LC_ALL=C awk \
-		-v tracking="refs/remotes/$1/$2" -v fallback="refs/heads/$2" '
+	review_fetch_source "$1" "refs/remotes/$1/$2" "$3" "refs/heads/$2" "$1/$2"
+}
+
+# Map a local destination using advertised refs and the remote's fetch
+# refspecs. Only a branch selector supplies a fallback. Status 2 means the
+# source is absent (stdout names it), 3 means excluded, and 5 means unmapped.
+review_fetch_source() {
+	_rfs_specs=$(git config --get-all "remote.$1.fetch") || [ "$?" -eq 1 ] || return 1
+	_rfs_status=0
+	_rfs_ref=$(printf '%s\n' "$3" . "$_rfs_specs" | LC_ALL=C awk \
+		-v destination="$2" -v fallback="${4:-}" '
 		function accepts(pattern, ref,   star, prefix, suffix) {
 			star = index(pattern, "*")
 			if (!star) return ref == pattern
@@ -5238,11 +5242,11 @@ review_remote_ref() {
 		}
 		{
 			sub(/^\+/, "")
-			if (split($0, parts, ":") != 2 || !accepts(parts[2], tracking)) next
+			if (split($0, parts, ":") != 2 || !accepts(parts[2], destination)) next
 			source = parts[1]
 			star = index(parts[2], "*")
 			if (star) {
-				stem = substr(tracking, star, length(tracking) - length(parts[2]) + 1)
+				stem = substr(destination, star, length(destination) - length(parts[2]) + 1)
 				star = index(source, "*")
 				source = substr(source, 1, star - 1) stem substr(source, star + 1)
 			} else {
@@ -5252,7 +5256,10 @@ review_remote_ref() {
 			mapped = 1
 		}
 		END {
-			if (!mapped) candidates[fallback] = 1
+			if (!mapped) {
+				if (fallback == "") exit 5
+				candidates[fallback] = 1
+			}
 			for (source in candidates) {
 				present = (source in advertised) || oid(source)
 				for (i = 1; i <= count; i++) if (accepts(excluded[i], source)) break
@@ -5269,11 +5276,11 @@ review_remote_ref() {
 			if (missing == "" || excluded_live) exit 3
 			print missing
 			exit 2
-		}') || _rrb_status=$?
-	case "$_rrb_status" in
-	0|2) printf '%s\n' "$_rrb_ref"; return "$_rrb_status" ;;
-	3) return 3 ;;
-	4) die "ambiguous fetch refspecs for $1/$2" ;;
+		}') || _rfs_status=$?
+	case "$_rfs_status" in
+	0|2) printf '%s\n' "$_rfs_ref"; return "$_rfs_status" ;;
+	3|5) return "$_rfs_status" ;;
+	4) die "ambiguous fetch refspecs for ${5:-$2}" ;;
 	*) return 1 ;;
 	esac
 }
@@ -5317,6 +5324,17 @@ review_revision_tracking() {
 	}
 }
 
+review_revision_destination() {
+	git check-ref-format "$2" || return 5
+	_rrv_status=0
+	_rrv_ref=$(review_fetch_source "$1" "$2" "$3") || _rrv_status=$?
+	case "$_rrv_status" in
+	0) _rrv_tracking_ref=$2 ;;
+	2|3) _rrv_ref=''; _rrv_tracking_ref=$2 ;;
+	*) return "$_rrv_status" ;;
+	esac
+}
+
 # Plan a fetch for a revision. Git will evaluate the expression after the
 # objects arrive. Here we only identify a named ref that has to be present
 # under a private name first, leaving the revision operators intact.
@@ -5341,6 +5359,16 @@ review_revision_fetch() {
 		*) return 1 ;;
 		esac
 	fi
+
+	# A fully qualified ref can be a fetch destination even without a local
+	# copy. Honor that mapping before considering automatic tag following.
+	case "$_rrv_root" in
+	"refs/remotes/$1/"*) ;;
+	refs/*)
+		if review_revision_destination "$1" "$_rrv_root" "$4"; then return 0
+		else [ "$?" -eq 5 ] || return 1
+		fi ;;
+	esac
 
 	# A tag can arrive with this fetch and outrank a same-named local branch.
 	# Preserve an existing local tag, as normal automatic tag following does.
@@ -5373,6 +5401,13 @@ review_revision_fetch() {
 		else
 			_rrv_name=${_rrv_root#"$1/"}
 		fi ;;
+	refs/*)
+		# Git expanded a local name or upstream to a configured destination
+		# outside this remote's conventional tracking namespace.
+		if [ -n "$_rrv_symbolic" ] && [ "$_rrv_symbolic" != "$_rrv_root" ]; then
+			review_revision_destination "$1" "$_rrv_symbolic" "$4" || [ "$?" -eq 5 ]
+		fi
+		return ;;
 	*) return 0 ;;
 	esac
 	_rrv_result=0
@@ -5420,8 +5455,16 @@ review_fetched_reflog_oid() (
 		_rfr_log_mode=$(git config --get core.logAllRefUpdates || printf '%s' auto)
 		case "$_rfr_log_mode" in
 		[Aa][Ll][Ww][Aa][Yy][Ss]) ;;
-		auto) [ "$(git rev-parse --is-bare-repository)" = false ] || return 1 ;;
-		*) [ "$(git config --bool --get core.logAllRefUpdates)" = true ] || return 1 ;;
+		*)
+			case "$_rfr_tracking" in
+			refs/heads/*|refs/remotes/*|refs/notes/*|HEAD) ;;
+			*) return 1 ;;
+			esac
+			if [ "$_rfr_log_mode" = auto ]; then
+				[ "$(git rev-parse --is-bare-repository)" = false ] || return 1
+			else
+				[ "$(git config --bool --get core.logAllRefUpdates)" = true ] || return 1
+			fi ;;
 		esac
 	fi
 	if [ "$_rfr_selector" = '@{0}' ]; then printf '%s\n' "$_rfr_fresh"; return; fi

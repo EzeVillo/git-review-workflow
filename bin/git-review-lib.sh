@@ -5402,13 +5402,14 @@ review_expired_preparations() {
 	_compare_cutoff=$(git rev-parse --since='1 day ago') || return 1
 	printf '%s\n' "$_compare_pending_refs" |
 		while read -r _compare_oid _compare_ref _compare_date; do
-			case "$_compare_ref" in *-base|*-target|*-tip) continue ;; esac
+			case "$_compare_ref" in *-base|*-target|*-tip|*-from) continue ;; esac
 			case "$_compare_date" in ''|*[!0-9]*) continue ;; esac
 			if [ "$_compare_date" -lt "${_compare_cutoff#--max-age=}" ]; then
 				case "$_compare_ref" in *-lease)
 					git update-ref -d "${_compare_ref%-lease}-base" || return 1
 					git update-ref -d "${_compare_ref%-lease}-target" || return 1
 					git update-ref -d "${_compare_ref%-lease}-tip" || return 1
+				git update-ref -d "${_compare_ref%-lease}-from" || return 1
 					;;
 				esac
 				git update-ref -d "$_compare_ref" "$_compare_oid" || return 1

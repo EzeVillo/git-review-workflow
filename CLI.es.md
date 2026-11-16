@@ -314,7 +314,13 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   revisa `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
   revisando un snapshot distinto al que tenés. Con la rama omitida, falla con HEAD
   detached o estando sobre una rama `review/*`.
-- Start trae las ramas remotas solicitadas a refs privadas y respeta los refspecs de fetch que cambian el nombre de las ramas de seguimiento. Si el tag base falta en el repositorio local, Start también lo trae a una ref privada. Una revisión preparada fija el tip y la base antes de ofrecer modos de lectura. Con `--from`, también fija el commit elegido como límite inferior.
+- Start trae las ramas remotas solicitadas a refs privadas y respeta los
+  refspecs de fetch que cambian el nombre de las ramas de seguimiento. Una
+  revisión del remoto configurado, como `--base origin/main~1` o
+  `--from origin/checkpoint`, se resuelve sobre la rama recién traída y deja
+  intacta la ref de seguimiento. Si el tag base falta en el repositorio local,
+  Start también lo trae a una ref privada. Una revisión preparada fija el tip,
+  la base y cualquier commit de `--from` antes de ofrecer modos de lectura.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que

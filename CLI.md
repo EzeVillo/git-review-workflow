@@ -307,7 +307,12 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `origin/<branch>` — if that differs from your checked-out branch you get a note,
   since you would be reviewing a different snapshot than you have. With no branch,
   fails on a detached HEAD or while on a `review/*` branch.
-- Start fetches the requested remote branches to private refs and honors fetch refspecs that rename tracking branches. If a base tag is missing locally, Start fetches that tag to a private ref too. Prepared reviews pin the tip and base before offering reading layouts. With `--from`, they also pin the commit selected as the lower bound.
+- Start fetches the requested remote branches to private refs and honors fetch
+  refspecs that rename tracking branches. A configured-remote revision such as
+  `--base origin/main~1` or `--from origin/checkpoint` resolves against the
+  fetched branch while the tracking ref stays in place. If a base tag is missing
+  locally, Start fetches that tag to a private ref too. Prepared reviews pin the
+  tip, base and any `--from` commit before offering reading layouts.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review

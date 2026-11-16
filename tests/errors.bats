@@ -476,6 +476,67 @@ step_review_two_with_edits() {
 	done
 }
 
+@test "start resolves ancestry of a fresh remote base without updating tracking refs" {
+	make_two_commit_feature
+	base=$(git rev-parse feature/two^)
+	git push -q origin "$base:refs/heads/integration"
+	git config --add remote.origin.fetch '+refs/heads/integration:refs/remotes/origin/baseline'
+	git fetch -q origin
+	tracking=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)
+	git --git-dir="$ORIGIN" update-ref refs/heads/integration "$(git rev-parse feature/two)"
+
+	for selector in origin/baseline~1 refs/remotes/origin/baseline^; do
+		run git review start feature/two --base "$selector" --no-walk
+		[ "$status" -eq 0 ]
+		[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$base" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)" = "$tracking" ]
+		git review abort
+		[ -z "$(git for-each-ref refs/worktree/review-start/)" ]
+	done
+}
+
+@test "start resolves a fresh remote lower bound and pins it when prepared" {
+	make_two_commit_feature
+	cached=$(git rev-parse feature/two^)
+	lower=$(git rev-parse develop)
+	git push -q origin "$cached:refs/heads/checkpoint"
+	git config --add remote.origin.fetch '+refs/heads/checkpoint:refs/remotes/origin/boundary'
+	git fetch -q origin
+	tracking=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$lower"
+	git config branch.develop.merge refs/heads/checkpoint
+
+	for selector in origin/boundary '@{upstream}'; do
+		run git review start feature/two --from "$selector" --no-walk
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$lower" ]
+		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+		git review abort
+		[ -z "$(git for-each-ref refs/worktree/review-start/)" ]
+	done
+
+	run git review start --prepare --from refs/remotes/origin/boundary -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git for-each-ref --format='%(refname)' refs/worktree/review-start/)" = "refs/worktree/review-start/pending/$token" ]
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$cached"
+	git remote set-url origin "$TMP/unavailable"
+	run git review start "--prepared=$token" --from refs/remotes/origin/boundary --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$lower" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes)" = "$tracking" ]
+
+	git review abort
+	git review start --release -- "$token"
+	run git review start feature/two --offline --from origin/boundary --no-walk
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$cached" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+}
+
 @test "prepared start pins the fetched tip without updating tracking refs" {
 	cached=$(git rev-parse refs/remotes/origin/feature/x)
 	local_base=$(git rev-parse refs/remotes/origin/develop)

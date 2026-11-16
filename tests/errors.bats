@@ -824,6 +824,7 @@ step_review_two_with_edits() {
 	for option in --base --from; do
 		run git review start "$option" "$destination" --no-walk -- feature/two
 		[ "$status" -eq 0 ]
+		if [ "$option" = --base ]; then [[ "$output" == *"ready (vs $destination)"* ]]; fi
 		[ "$(git rev-parse HEAD)" = "$lower" ]
 		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
 		git review abort
@@ -834,6 +835,7 @@ step_review_two_with_edits() {
 		[ -n "$token" ]
 		run git review start "--prepared=$token" "$option" "$destination" --no-walk -- feature/two
 		[ "$status" -eq 0 ]
+		if [ "$option" = --base ]; then [[ "$output" == *"ready (vs $destination)"* ]]; fi
 		[ "$(git rev-parse HEAD)" = "$lower" ]
 		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
 		git review abort

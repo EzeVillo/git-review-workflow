@@ -293,7 +293,9 @@ else
 			if [ -n "$_rs_remote_base" ]; then
 				_rs_base_ref=$_rs_tmp-base
 				set -- "$@" "$_rs_remote_base:$_rs_base_ref"
-				if [ -n "$_rs_base_tracking" ]; then _rs_base_label=remote; fi
+				case "$_rs_base_tracking" in
+				"refs/remotes/$remote/"*) _rs_base_label=remote ;;
+				esac
 			fi
 		fi
 		if [ -n "$from" ]; then

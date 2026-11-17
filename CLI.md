@@ -571,9 +571,11 @@ git review start feature/checkout                      # enters walk mode on you
   cutoff, even when you pass
   the branch explicitly. `--local`, `--offline` and `--delta` select the
   source or range as they do in `start`. Never fetches.
-- When a draft has a pinned range, `draft --build` and `start --from-draft`
-  reuse it from any branch, including an explicit base that differs from
-  `reviewworkflow.base`. Pass the same source and delta flags as the draft.
+- Inside the matching review, `draft --build` validates and saves the range
+  of that review. From another branch, it validates the draft's saved range.
+  `start --from-draft` reopens that saved range, including an explicit base
+  that differs from `reviewworkflow.base`. Pass the same source and delta
+  flags as the draft.
 - `--build` applies the same validation `build` does for the author's sidecar:
   placeholders, drift, duplicate paths, `> key` with a value. It's a quality
   gate, not a gate — an unvalidated draft is already readable.

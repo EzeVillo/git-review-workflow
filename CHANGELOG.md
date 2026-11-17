@@ -36,6 +36,8 @@ This file starts at 0.2.1. Earlier versions are only in the
   the last review point from before that session.
 - Drafts keep their explicit base when validated and reopened from another
   branch. Drafts for names like `topic` and `topic/next` can coexist.
+- Validating a draft inside an active review updates its saved range to that
+  review. Start honors Git replacement refs and custom graft files.
 - `git review forget --delta --stale` checks the remote's refs, including
   branches outside a single-branch clone's fetch refspec.
 

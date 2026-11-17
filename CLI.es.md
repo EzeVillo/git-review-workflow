@@ -587,10 +587,11 @@ git review start feature/checkout                      # entra en walk con tu or
   `--from` fijados por la review, aunque indiques la rama explícitamente.
   `--local`, `--offline` y
   `--delta` seleccionan el origen o rango como en `start`. Nunca hace fetch.
-- Cuando un borrador tiene un rango fijado, `draft --build` y
-  `start --from-draft` lo usan desde cualquier rama, incluso si la base
-  explícita difiere de `reviewworkflow.base`. Pasá los mismos flags de origen
-  y delta del borrador.
+- Dentro de la review correspondiente, `draft --build` valida y guarda el
+  rango de esa review. Desde otra rama valida el rango guardado del borrador.
+  `start --from-draft` reabre ese rango, incluso si la base explícita difiere
+  de `reviewworkflow.base`. Pasá los mismos flags de origen y delta del
+  borrador.
 - `--build` aplica la misma validación que `build` sobre el sidecar del autor:
   placeholders, drift, paths duplicados, `> key` con valor. Es un control de
   calidad, no una compuerta: un borrador sin validar ya se puede leer.

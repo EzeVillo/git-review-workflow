@@ -1822,6 +1822,18 @@ Git evalúa los selectores completos después del fetch. Así un destino que aca
 
 Las ofertas, el borrador y la apertura usan los commits fijados por la preparación. Un cutoff explícito de Start se conserva al preparar un borrador, al retomarlo y al validar su contenido. Los tokens de Start validan el selector original. El contexto del borrador valida la rama, la base y el modo y usa el cutoff guardado por OID. Las refs de sesión conservan el rango durante Save, Continue y Undo. Las refs del último punto revisado mantienen el commit alcanzable hasta reemplazarlo o ejecutar Forget. El resultado de Finish conserva los commits que necesitan los comentarios privados, aun después de Clean.
 
+La resolución de Start debe coincidir con la de Git desde el worktree del
+usuario tras el fetch. La vista conserva el entorno de lectura de los objetos
+y su ascendencia, incluidos los reemplazos y el archivo de grafts. Para
+`GIT_NO_REPLACE_OBJECTS`, Git distingue una variable ausente de una variable
+vacía. Las pruebas comparan con Git nativo el OID elegido y el diff staged, y
+comprueban que las refs de seguimiento y FETCH_HEAD reales se conserven.
+
+El rango de la review activa tiene prioridad al crear o validar su borrador.
+Una validación exitosa guarda ese rango con el Markdown. Desde otra rama,
+`draft --build` y `start --from-draft` usan el rango guardado aunque el PR haya
+vuelto a cambiar.
+
 Finish consulta los destinos antes de tocar el índice. La rama local puede recibir las ediciones si falta o ya apunta al tip revisado. Si está atrasada, actualizarla es una elección explícita que usa un fast-forward con verificación del commit anterior. Una rama adelantada, divergente o en uso en otro worktree deja disponible el destino separado. Undo conserva el tip anterior y verifica el resultado antes de restaurarlo. El push se hace desde Git cuando el revisor decide publicar.
 
 ## 19. Portabilidad de comentarios y duración del CI

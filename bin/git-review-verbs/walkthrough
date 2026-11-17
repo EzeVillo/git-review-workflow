@@ -531,7 +531,10 @@ if [ "$sub" = draft ]; then
 	_start_draft_from=''
 	if [ -n "$start_prepared" ]; then
 		_start_draft_anchor=$(start_prepared_ref "$start_prepared")
-	elif [ "$build_draft" -eq 1 ]; then
+	elif [ "$build_draft" -eq 1 ] && { [ "$from_review" -eq 0 ] || [ "$active_readonly" = 1 ]; }; then
+		# Outside its review, validate the saved draft without moving its range.
+		# Inside it, the current review supplies the range even if a draft from
+		# an earlier review still exists.
 		_start_draft_anchor=$(start_find_draft_ref "$branch" || true)
 	fi
 	_start_draft_pack=''
@@ -548,12 +551,13 @@ if [ "$sub" = draft ]; then
 		_start_session_pack=$(git show-ref --hash --verify "$_start_session_anchor" 2>/dev/null || true)
 		if [ -n "$_start_session_pack" ]; then
 			_start_draft_identity=$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline")
-			_start_session_identity=$(git log -1 --format='%s' "$_start_session_pack" --)
+			_start_session_identity=$(git --no-replace-objects log -1 --format='%s' "$_start_session_pack" --)
 			if [ "${_start_session_identity%% *}" = "$_start_draft_identity" ]; then
 				start_read_range "$_start_session_anchor" "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline"
-				_start_draft_pack=$_rs_pack
-				srcref=$_rs_tip
-				_start_draft_from=$_rs_from
+				if [ "$_rs_tip" = "$srcref" ]; then
+					_start_draft_pack=$_rs_pack
+					_start_draft_from=$_rs_from
+				fi
 			fi
 		fi
 	fi
@@ -574,14 +578,15 @@ if [ "$sub" = draft ]; then
 		fi
 	fi
 
+	prev=''
 	if [ "$delta_mode" -eq 1 ]; then
-		prev="$(git config "$markerkey" || true)"
-		# Start has already advanced the marker for the live review. When
-		# drafting that same tip, use the point from before Start advanced it.
+		# The review owns its delta even if the repository's marker moves.
 		if [ "$from_review" -eq 1 ] && [ "$active_readonly" != 1 ] &&
-			[ "$active_local" = "$draft_local" ] && [ "$prev" = "$tip" ] &&
+			[ "$active_local" = "$draft_local" ] &&
 			[ "$tip" = "$(git config "branch.$rb.reviewtip" || true)" ]; then
 			prev="$(git config "branch.$rb.reviewprevreviewed" || true)"
+		else
+			prev="$(git config "$markerkey" || true)"
 		fi
 		if [ -n "$_start_draft_anchor" ] && [ "$prev" != "$_rs_previous" ]; then die 'last review point changed; prepare the review again'; fi
 		[ -n "$prev" ] ||
@@ -1225,14 +1230,14 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		fi
 		emit_skeleton >"$tmp"
 		if [ -n "${_start_draft_pack:-}" ]; then
-		_start_draft_ref=$(start_draft_ref "$branch")
-		git update-ref "$_start_draft_ref" "$_start_draft_pack"
-		elif [ "$compare_mode" -eq 0 ]; then
-			start_drop_draft "$branch"
+			start_publish_draft "$branch" "$_start_draft_pack" "$tmp" "$targetpath"
+		else
+			case "$sub:$compare_mode" in
+			draft:0) start_drop_draft "$branch" ;;
+			draft:1) compare_keep_draft ;;
+			esac
+			mv "$tmp" "$targetpath"
 		fi
-		if [ "$compare_mode" -eq 1 ]; then compare_keep_draft; fi
-		mv "$tmp" "$targetpath"
-	if [ -n "${_start_draft_pack:-}" ]; then start_drop_legacy_draft "$branch"; fi
 		trap - EXIT INT TERM
 	fi
 
@@ -1807,13 +1812,25 @@ fi
 		}
 	'
 } >"$tmp"
-mv "$tmp" "$targetpath"
+if [ "$sub:$compare_mode:${from_review:-0}" = draft:0:1 ] && [ "$active_readonly" != 1 ] &&
+	[ -z "$_start_draft_pack" ]; then
+	# Older reviews and some offline sessions have branch metadata without a
+	# session manifest. The range just validated can still be pinned.
+	_start_draft_identity=$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline")
+	_start_draft_pack=$(start_range_commit "$_start_draft_identity" local "$base" \
+		"$tip" "$baseref" "$prev" "$_start_draft_from")
+fi
+if [ -n "${_start_draft_pack:-}" ]; then
+	start_publish_draft "$branch" "$_start_draft_pack" "$tmp" "$targetpath"
+else
+	mv "$tmp" "$targetpath"
+fi
 
 if [ "$sub" = draft ] && [ "$compare_mode" -eq 1 ]; then
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review compare --draft $branch now reads it"
 elif [ "$sub" = draft ]; then
 	_start_reopen_flags=$draftflags
-	if [ -n "$_start_draft_anchor" ] && [ -z "$start_prepared" ]; then
+	if [ -n "$_start_draft_pack" ]; then
 		_start_reopen_flags=" --from-draft$draftflags --"
 	fi
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start$_start_reopen_flags $branch now reads it"

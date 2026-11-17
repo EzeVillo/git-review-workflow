@@ -1003,6 +1003,63 @@ step_review_two_with_edits() {
 	[ "$(git rev-parse refs/remotes/origin/checkpoint)" = "$cutoff" ]
 }
 
+@test "start resolves and pins the same parents as Git with replacement refs" {
+	make_two_commit_feature
+	git fetch -q origin develop
+	tip=$(git rev-parse feature/two)
+	first=$(git rev-parse feature/two^)
+	base=$(git rev-parse develop)
+	replacement=$(git commit-tree "$tip^{tree}" -p "$base" -p "$first" -m reordered-parents)
+	git replace "$tip" "$replacement"
+	git update-ref "refs/other-replacements/$tip" "$replacement"
+	selector=origin/feature/two^
+	fetch_before=$(cat .git/FETCH_HEAD)
+	refs_before=$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes refs/other-replacements)
+
+	for replacement_mode in default disabled custom; do
+		unset GIT_NO_REPLACE_OBJECTS GIT_REPLACE_REF_BASE
+		case "$replacement_mode" in
+			default) want_cutoff=$base; want_paths=$'a.txt\nb.txt' ;;
+			disabled) export GIT_NO_REPLACE_OBJECTS=; want_cutoff=$first; want_paths=b.txt ;;
+			custom) export GIT_REPLACE_REF_BASE=refs/other-replacements/; want_cutoff=$base; want_paths=$'a.txt\nb.txt' ;;
+		esac
+		cutoff=$(git rev-parse --verify "$selector")
+		[ "$cutoff" = "$want_cutoff" ]
+		run git review start --prepare --from "$selector" -- feature/two
+		[ "$status" -eq 0 ]
+		token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+		[ -n "$token" ]
+		run git review start "--prepared=$token" --from "$selector" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git config branch.review/feature/two.reviewrangefrom)" = "$cutoff" ]
+		[ "$(git diff --cached --name-only)" = "$want_paths" ]
+		git review abort
+		git review start --release -- "$token"
+		if [ "$replacement_mode" = disabled ]; then git replace -d "$tip"; fi
+	done
+	[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes refs/other-replacements)" = "$refs_before" ]
+	[ "$(cat .git/FETCH_HEAD)" = "$fetch_before" ]
+}
+
+@test "start resolves ancestry from the graft file used by Git" {
+	make_two_commit_feature
+	tip=$(git rev-parse feature/two)
+	first=$(git rev-parse feature/two^)
+	base=$(git rev-parse develop)
+	export GIT_GRAFT_FILE="$TMP/review.grafts"
+	printf '%s %s %s\n' "$tip" "$base" "$first" >"$GIT_GRAFT_FILE"
+	git config advice.graftFileDeprecated false
+	selector=origin/feature/two^
+	cutoff=$(git rev-parse --verify "$selector")
+	[ "$cutoff" = "$base" ]
+
+	run git review start --from "$selector" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewrangefrom)" = "$cutoff" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	[ "$(cat "$GIT_GRAFT_FILE")" = "$tip $base $first" ]
+}
+
 @test "temporary fetch honors worktree config and preserves linked ref stores" {
 	make_two_commit_feature
 	cutoff=$(git rev-parse feature/two^)
@@ -1157,6 +1214,61 @@ step_review_two_with_edits() {
 	[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$alternate" ]
 	[ "$(git config branch.review/feature/two.reviewmode)" = walk ]
 	[ "$(git diff --cached --name-only)" = b.txt ]
+}
+
+@test "build validates an active draft against the open review and pins that range" {
+	make_two_commit_feature
+	first=$(git rev-parse feature/two^)
+	tip=$(git rev-parse feature/two)
+	git push -q --force origin "$first:refs/heads/feature/two"
+	git review start --no-walk -- feature/two
+	git review walkthrough draft
+	draft=.git/review-walkthrough/feature/two.md
+	[ "$(sed -n '/^## ?\. /p' "$draft")" = '## ?. a.txt' ]
+	git review abort
+
+	git push -q origin "$tip:refs/heads/feature/two"
+	git review start --no-walk -- feature/two
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	saved_range=$(git for-each-ref --format='%(objectname)' refs/worktree/review-start/draft-key/)
+	[ -n "$saved_range" ]
+	printf '# Walkthrough\n\n## 1. a.txt\nFirst change.\n' >"$draft"
+	draft_oid=$(git hash-object "$draft")
+	run git review walkthrough draft --build
+	[ "$status" -eq 1 ]
+	[ "$output" = 'error: changed in the PR but missing from the walkthrough: b.txt' ]
+	[ "$(git hash-object "$draft")" = "$draft_oid" ]
+	[ "$(git for-each-ref --format='%(objectname)' refs/worktree/review-start/draft-key/)" = "$saved_range" ]
+
+	printf '# Walkthrough\n\n## 1. a.txt\nFirst change.\n\n## 2. b.txt\nSecond change.\n' >"$draft"
+	run git review walkthrough draft --build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'git review start --from-draft -- feature/two now reads it'* ]]
+	git review abort
+
+	git push -q --force origin "$first:refs/heads/feature/two"
+	run git review config --porcelain --from-draft -- feature/two
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\twalk\trecommended'* ]]
+	run git review start --from-draft --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewtip)" = "$tip" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+}
+
+@test "drafting for an active delta keeps the review's previous point" {
+	make_two_commit_feature
+	first=$(git rev-parse feature/two^)
+	git config reviewworkflow.feature/two.reviewed "$first"
+	git review start --delta --no-walk -- feature/two
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	git config reviewworkflow.feature/two.reviewed "$(git rev-parse develop)"
+
+	run git review walkthrough draft --delta
+	[ "$status" -eq 0 ]
+	draft=.git/review-walkthrough/feature/two.md
+	[ "$(sed -n '/^## ?\. /p' "$draft")" = '## ?. b.txt' ]
+	[ "$(git config branch.review/feature/two.reviewprevreviewed)" = "$first" ]
 }
 
 @test "a legacy draft range remains usable and is replaced on the next draft update" {

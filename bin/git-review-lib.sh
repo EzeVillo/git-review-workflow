@@ -5446,19 +5446,20 @@ review_view_open() {
 }
 
 review_view_git() (
-	_rvg_alternates=${GIT_ALTERNATE_OBJECT_DIRECTORIES-}
-	_rvg_no_replace=${GIT_NO_REPLACE_OBJECTS-}
-	_rvg_replace_base=${GIT_REPLACE_REF_BASE-}
+	# Keep Git's object and ancestry inputs as supplied by the caller. In
+	# particular, a present but empty GIT_NO_REPLACE_OBJECTS disables replacements.
+	# Git's writable paths belong to the view, even with caller overrides.
 	for _rvg_var in $(git rev-parse --local-env-vars); do
-		case "$_rvg_var" in GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT) ;; *) unset "$_rvg_var" ;; esac
+		case "$_rvg_var" in
+		GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_GRAFT_FILE|GIT_NO_REPLACE_OBJECTS|GIT_REPLACE_REF_BASE) ;;
+		*) unset "$_rvg_var" ;;
+		esac
 	done
 	if [ "$_review_view_global" -eq 1 ]; then
 		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$_review_view/global-config"
 		export GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL
 	fi
 	GIT_OBJECT_DIRECTORY="$_review_view_objects" \
-	GIT_ALTERNATE_OBJECT_DIRECTORIES="$_rvg_alternates" GIT_NO_REPLACE_OBJECTS="$_rvg_no_replace" \
-	GIT_REPLACE_REF_BASE="${_rvg_replace_base:-refs/replace/}" \
 	git -C "$_review_view_top" --git-dir="$_review_view_gitdir" \
 		-c core.bare=true -c extensions.worktreeConfig=false -c core.logAllRefUpdates="$_review_view_log" \
 		-c core.hooksPath="$_review_view/hooks" -c maintenance.auto=false -c gc.auto=0 -c fetch.writeCommitGraph=false \
@@ -5533,6 +5534,27 @@ start_prepared_ref() {
 
 start_range_identity() {
 	printf '%s\n' "$@" | git hash-object --stdin
+}
+
+# start_range_commit <identity> <base-label> <base-selector> <tip> <base-oid>
+#                    <previous> <cutoff> [<draft-identity>]
+# Pin distinct endpoints, including cutoffs reached through replacements or
+# grafts. The last review point is optional for a full review and can be missing.
+start_range_commit() {
+	_src_base_selector=$3 _src_tip=$4 _src_base=$5 _src_previous=$6 _src_from=$7
+	_src_subject="$1 $2 $_src_tip ${_src_base:--} ${_src_previous:--} ${_src_from:--}${8:+ $8}"
+	if [ -n "$_src_previous" ] && ! git cat-file -e "$_src_previous^{commit}" 2>/dev/null; then _src_previous=''; fi
+	_src_parents=' '
+	set --
+	for _src_parent in "$_src_tip" "$_src_base" "$_src_previous" "$_src_from"; do
+		case "$_src_parent" in '') continue ;; esac
+		case "$_src_parents" in *" $_src_parent "*) continue ;; esac
+		_src_parents="$_src_parents$_src_parent "
+		set -- "$@" -p "$_src_parent"
+	done
+	compare_lease_commit "$_src_subject
+
+base=$_src_base_selector." "$@" </dev/null
 }
 
 # Arguments after the ref are the remote, branch, base, cutoff and mode flags.
@@ -5779,6 +5801,24 @@ start_drop_legacy_draft() {
 start_drop_draft() {
 	_sdd_ref=$(start_draft_ref "$1") || return 1
 	if git show-ref --verify --quiet "$_sdd_ref"; then git update-ref -d "$_sdd_ref" || return 1; fi
+	start_drop_legacy_draft "$1"
+}
+
+# Publish the same range with the skeleton or validated Markdown. Preserve
+# the previous range if the Markdown cannot replace its destination.
+start_publish_draft() {
+	_spd_ref=$(start_draft_ref "$1") || return 1
+	_spd_previous=$(git show-ref --hash --verify "$_spd_ref" 2>/dev/null || true)
+	[ ! -d "$4" ] || die "draft destination is a directory: $4"
+	git update-ref "$_spd_ref" "$2" "$_spd_previous" || return 1
+	if ! mv "$3" "$4"; then
+		if [ -n "$_spd_previous" ]; then
+			git update-ref "$_spd_ref" "$_spd_previous" "$2" || return 1
+		else
+			git update-ref -d "$_spd_ref" "$2" || return 1
+		fi
+		return 1
+	fi
 	start_drop_legacy_draft "$1"
 }
 

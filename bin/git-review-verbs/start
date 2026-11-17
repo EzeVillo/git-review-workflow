@@ -358,22 +358,12 @@ fi
 # every decision from here on describes the same walkthrough.
 walk_use_draft "$src"
 
-start_range_commit() {
-	_src_subject=$1
-	shift
-	compare_lease_commit "$_src_subject
-
-base=$base." "$@" </dev/null
-}
-
 if [ "$prepare" -eq 1 ]; then
 	# The manifest pins both endpoints, even when a selector is a movable ref.
-	set -- -p "$tip"
-	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
-	if [ "$delta" -eq 1 ] && [ "$prev" != "$baseref" ] && [ "$prev" != "$tip" ]; then set -- "$@" -p "$prev"; fi
 	_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$_rs_mode_flags")
 	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
-	_rs_pack=$(start_range_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--} $_rs_draft_identity" "$@")
+	_rs_pack=$(start_range_commit "$_rs_identity" "$_rs_base_label" "$base" \
+		"$tip" "$baseref" "$prev" "$pinned_from" "$_rs_draft_identity")
 	git update-ref "$_rs_tmp" "$_rs_pack"
 	_ero_branch=$src
 	_ero_tip=$tip
@@ -393,12 +383,8 @@ start_keep_range() {
 	# A walkthrough inherits an explicit cutoff as an OID, rather than taking
 	# the selector again. The pending token above still validates that selector.
 	_rs_session_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
-	set -- -p "$tip"
-	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
-	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && [ "$prev" != "$baseref" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
-		set -- "$@" -p "$prev"
-	fi
-	_rs_session=$(start_range_commit "$_rs_session_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@")
+	_rs_session=$(start_range_commit "$_rs_session_identity" "$_rs_base_label" "$base" \
+		"$tip" "$baseref" "$prev" "$pinned_from")
 	git update-ref "refs/worktree/review-start/session/$src" "$_rs_session"
 }
 

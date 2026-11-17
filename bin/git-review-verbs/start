@@ -379,14 +379,15 @@ if [ "$prepare" -eq 1 ]; then
 	exit 0
 fi
 
-start_keep_range() {
-	if [ "$offline_mode" -eq 1 ] && [ "$base_explicit" -eq 0 ] && [ -z "${_rs_saved_range:-}$pinned_from" ]; then return 0; fi
-	# A walkthrough inherits an explicit cutoff as an OID, rather than taking
-	# the selector again. The pending token above still validates that selector.
-	_rs_session_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
-	_rs_session=$(start_range_commit "$_rs_session_identity" "$_rs_base_label" "$base" \
-		"$tip" "$baseref" "$prev" "$pinned_from")
-	git update-ref "refs/worktree/review-start/session/$src" "$_rs_session"
+start_open_review() {
+	_rs_session=''
+	if [ "$offline_mode" -eq 0 ] || [ "$base_explicit" -eq 1 ] || [ -n "${_rs_saved_range:-}$pinned_from" ]; then
+		# A walkthrough inherits an explicit cutoff as an OID.
+		_rs_session_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
+		_rs_session=$(start_range_commit "$_rs_session_identity" "$_rs_base_label" "$base" \
+			"$tip" "$baseref" "$prev" "$pinned_from")
+	fi
+	review_open_branch start "$src" "$1" "$_rs_session"
 }
 
 # draft_command: the git review walkthrough draft invocation for this review,
@@ -431,7 +432,7 @@ if [ "$step" -eq 1 ]; then
 		echo "note: $wtdesc; --step ignores it and reviews commit by commit"
 	fi
 
-	git switch -q -c "$rb" "$first" || die "could not create $rb"
+	start_open_review "$first"
 	git reset --soft HEAD^
 	git config "branch.$rb.reviewsource" "$src"
 	git config "branch.$rb.reviewbase" "$base"
@@ -452,7 +453,6 @@ if [ "$step" -eq 1 ]; then
 	if [ "$local_mode" -eq 1 ]; then
 		git config "branch.$rb.reviewlocal" "1"
 	fi
-	start_keep_range
 	review_set_delta "$markerkey" "$tip"
 	if [ -n "$returnbranch" ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
@@ -522,7 +522,7 @@ elif [ "$keys_only" -eq 1 ]; then
 	die "--keys requires a walkthrough on the PR; none found (or use without --keys)"
 fi
 
-git switch -q -c "$rb" "$tip" || die "could not create $rb"
+start_open_review "$tip"
 git reset -q --soft "$lower"
 
 git config "branch.$rb.reviewsource" "$src"
@@ -542,7 +542,6 @@ fi
 if [ "$local_mode" -eq 1 ]; then
 	git config "branch.$rb.reviewlocal" "1"
 fi
-start_keep_range
 review_set_delta "$markerkey" "$tip"
 if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"

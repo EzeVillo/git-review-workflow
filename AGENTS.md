@@ -137,6 +137,12 @@ los OID que consumen las ofertas, el borrador y Start. Para Delta y
 `--from`, una base configurada que falta no impide revisar el rango. Si está disponible,
 permite excluir los cambios ya integrados.
 
+Start y Compare fijan los rangos de sesión en refs privadas del worktree con una
+clave plana por nombre. Cuando la sesión tiene rango fijado, la ref y la rama
+se crean en la misma transacción antes del checkout. Se siguen leyendo las
+refs anteriores. Las operaciones apuntadas sobre refs de ediciones o Undo
+seleccionan únicamente las refs que pertenecen a esa rama.
+
 **Archivos del walkthrough** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
 en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en ningún momento y
 `finish` no se los puede llevar a `review-fixes/`:
@@ -148,6 +154,10 @@ en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en
 | `<gitdir>/review-walkthrough/<src>.md` | gitdir | El **borrador del revisor** |
 | `<gitdir>/review-saved-walkthrough/<src>.md` | gitdir | El borrador archivado por `save` |
 | `<git-common-dir>/review-walkthrough-guide.md` | gitdir | La guía de autoría **propia** |
+
+Los borradores conservan las rutas existentes. Cuando un componente `.md`
+podría ocupar la ruta de otro borrador, el archivo vive bajo
+`.names/<src>/.draft.md` en su mismo almacén, activo o archivado.
 
 **Registros porcelain** — `config --porcelain` emite `draft`, `guide` y `walkthrough`;
 `status --porcelain` emite `draft` de presencia; `list --porcelain` emite `branch-draft`. Las guías

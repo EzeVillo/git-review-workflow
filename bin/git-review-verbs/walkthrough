@@ -547,11 +547,9 @@ if [ "$sub" = draft ]; then
 	elif [ "$from_review" -eq 1 ]; then
 		srcref="$(git config "branch.$rb.reviewtip" || printf '%s' "$srcref")"
 		_start_draft_from="$(git config "branch.$rb.reviewrangefrom" || true)"
-		_start_session_anchor="refs/worktree/review-start/session/${rb#review/}"
-		_start_session_pack=$(git show-ref --hash --verify "$_start_session_anchor" 2>/dev/null || true)
-		if [ -n "$_start_session_pack" ]; then
+		if _start_session_anchor=$(review_find_session start "${rb#review/}"); then
 			_start_draft_identity=$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline")
-			_start_session_identity=$(git --no-replace-objects log -1 --format='%s' "$_start_session_pack" --)
+			_start_session_identity=$(git --no-replace-objects log -1 --format='%s' "$_start_session_anchor" --)
 			if [ "${_start_session_identity%% *}" = "$_start_draft_identity" ]; then
 				start_read_range "$_start_session_anchor" "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline"
 				if [ "$_rs_tip" = "$srcref" ]; then
@@ -627,10 +625,11 @@ if [ "$sub" = draft ]; then
 
 	fi
 
+	walk_gitdir_init
 	draftpath="$(walk_draft_path "$branch")"
 	# Reported instead of the absolute path: shorter, and it is where the reviewer
 	# will look. The absolute one is what gets opened, either way.
-	draftrel="\$GIT_DIR/review-walkthrough/$branch.md"
+	draftrel="\$GIT_DIR/${draftpath#"$_walk_gitdir/"}"
 
 	# The origin and range flags this run resolved with, echoed back into the
 	# commands the messages below suggest. Without them --build would validate the

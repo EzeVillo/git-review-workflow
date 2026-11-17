@@ -2142,7 +2142,7 @@ comments_retain_compare() {
 	_crc_kind=$(comments_field "$cc_dir/manifest" kind) || return 1
 	[ "$_crc_kind" = compare ] || return 0
 	compare_retain_objects=0
-	if git show-ref --verify --quiet "refs/worktree/review-compare/session/${_cc_branch#*/}" ||
+	if review_find_session compare "${_cc_branch#*/}" >/dev/null ||
 		git show-ref --verify --quiet "refs/worktree/review-compare/comments/$cc_context"; then
 		compare_retain_objects=1
 	fi
@@ -2386,7 +2386,7 @@ comments_finish_complete() {
 	comments_preflight_branch "$_cfc_review" || return 1
 	if [ -z "$cc_session" ] || [ -z "$cc_context" ]; then return 0; fi
 	review_retain_objects=0
-	if git show-ref --verify --quiet "refs/worktree/review-start/session/${_cfc_review#*/}"; then review_retain_objects=1; fi
+	if review_find_session start "${_cfc_review#*/}" >/dev/null; then review_retain_objects=1; fi
 	cm_context=$cc_context cm_dir=$cc_dir
 	_cfc_failed=0 _cfc_publish_failed=0
 	cm_delivery_branch=$_cfc_output cm_delivery_source=$_cfc_review
@@ -2670,7 +2670,7 @@ comments_remove_custody() (
 		if [ -n "$_crc_result" ]; then _crc_session=$(comments_field "$_crc_result/manifest" session) || exit 1; fi
 		_crc_retained_ref="refs/worktree/review-start/comments/$cc_context"
 		review_retain_objects=0
-		if git show-ref --verify --quiet "refs/worktree/review-start/session/${_crc_branch#*/}"; then review_retain_objects=1; fi
+		if review_find_session start "${_crc_branch#*/}" >/dev/null; then review_retain_objects=1; fi
 		if [ -z "$_crc_result" ] || [ "$_crc_session" != "$cc_session" ]; then
 			comments_publish "$cc_context" "$cc_dir" || exit 1
 			_crc_result=$(comments_result_dir "$cc_context") || exit 1
@@ -3567,7 +3567,8 @@ walk_each_draft() {
 	set --
 	while IFS= read -r _wed_src; do
 		[ -n "$_wed_src" ] || continue
-		set -- "$@" "$_walk_gitdir_abs/review-walkthrough/$_wed_src.md"
+		walk_draft_file "$_walk_gitdir_abs/review-walkthrough" "$_wed_src"
+		set -- "$@" "$_walk_draft_file"
 	done <<EOF
 $_wed_srcs
 EOF
@@ -3581,7 +3582,10 @@ EOF
 	walk_draft_progress "$@" | while IFS="$(printf '\t')" read -r _wed_path _wed_ann _wed_tot _wed_source _wed_range _wed_tip _wed_title; do
 		[ -n "$_wed_path" ] || continue
 		_wed_name="${_wed_path#"$_walk_gitdir_abs/review-walkthrough/"}"
-		_wed_name="${_wed_name%.md}"
+		case "$_wed_name" in
+		.names/*) _wed_name=${_wed_name#.names/}; _wed_name=${_wed_name%/.draft.md} ;;
+		*) _wed_name=${_wed_name%.md} ;;
+		esac
 		walk_draft_state "$_wed_name" "$_wed_source" "$_wed_tip" \
 			"$_wed_ann" "$_wed_tot" "$_wed_marks"
 		"$_wed_cb" "$_wed_name" "$_wed_path" "$_wed_ann" "$_wed_tot" \
@@ -3618,13 +3622,14 @@ walk_reviewed_draft_list() {
 # Where the reviewer's own walkthrough for <src> lives while a review is in play:
 # inside the working tree's gitdir, per AGENTS.md's prose-files table (invisible
 # to git status, start's dirty check and finish's git add -A). Same idiom as
-# COMMIT_EDITMSG/MERGE_MSG. A branch name holding '/' becomes a subdirectory, as
-# it does under refs/; callers that write must mkdir -p.
+# COMMIT_EDITMSG/MERGE_MSG. Preserve accessible legacy document paths so open
+# editors and existing drafts keep working.
 #
 # --git-dir (not --git-common-dir): a review is per working tree, so is its draft.
 walk_draft_path() {
 	walk_gitdir_init
-	printf '%s/review-walkthrough/%s.md' "$_walk_gitdir" "$1"
+	walk_draft_file "$_walk_gitdir/review-walkthrough" "$1"
+	printf '%s' "$_walk_draft_file"
 }
 
 # walk_saved_draft_path <src>
@@ -3633,7 +3638,24 @@ walk_draft_path() {
 # it belongs to, and the reviewer learns one rule instead of two.
 walk_saved_draft_path() {
 	walk_gitdir_init
-	printf '%s/review-saved-walkthrough/%s.md' "$_walk_gitdir" "$1"
+	walk_draft_file "$_walk_gitdir/review-saved-walkthrough" "$1"
+	printf '%s' "$_walk_draft_file"
+}
+
+# The legacy file for topic occupies the directory needed by topic.md/next.
+# In .names, every branch component is a directory. Git forbids components
+# beginning with a dot, so the hidden leaf cannot be a branch component.
+walk_draft_file() {
+	_walk_draft_file="$1/$2.md"
+	if [ -f "$1/.names/$2/.draft.md" ]; then
+		_walk_draft_file="$1/.names/$2/.draft.md"
+		return
+	fi
+	[ ! -f "$_walk_draft_file" ] || return 0
+	case "$2" in
+	*.[Mm][Dd]/*) _walk_draft_file="$1/.names/$2/.draft.md" ;;
+	*) if [ -d "$_walk_draft_file" ]; then _walk_draft_file="$1/.names/$2/.draft.md"; fi ;;
+	esac
 }
 
 # walk_draft_list
@@ -3647,9 +3669,7 @@ walk_saved_draft_path() {
 # POSIX, and under Git Bash a stray PATH resolves it to Windows' own find.exe.
 walk_draft_list() {
 	walk_gitdir_init
-	_wdl_root="$_walk_gitdir/review-walkthrough"
-	[ -d "$_wdl_root" ] || return 0
-	_walk_draft_list_dir "$_wdl_root" ""
+	walk_list_drafts "$_walk_gitdir/review-walkthrough"
 }
 
 # walk_saved_draft_list
@@ -3660,29 +3680,38 @@ walk_draft_list() {
 # forget --saved needs the ref, and clean is hands-off in there by design.
 walk_saved_draft_list() {
 	walk_gitdir_init
-	_wdl_root="$_walk_gitdir/review-saved-walkthrough"
-	[ -d "$_wdl_root" ] || return 0
-	_walk_draft_list_dir "$_wdl_root" ""
+	walk_list_drafts "$_walk_gitdir/review-saved-walkthrough"
 }
 
-# _walk_draft_list_dir <dir> <prefix>  (walk_draft_list's recursion)
+# _walk_draft_list_dir <dir> <prefix> <root> <legacy|names>
 # The loop variables are reused by the nested call on purpose: each is reassigned
 # at the top of every iteration and never read across the recursive call, while
 # <dir>/<prefix> are positional parameters, which each call frame keeps its own.
 _walk_draft_list_dir() {
+	if [ "$4" = names ] && [ -f "$1/.draft.md" ]; then printf '%s\n' "${2%/}"; fi
 	for _wdl_entry in "$1"/*; do
 		# An unmatched glob stays literal in POSIX sh; -e is what tells the two
 		# apart, and it also skips a dangling symlink.
 		[ -e "$_wdl_entry" ] || continue
 		_wdl_name="${_wdl_entry##*/}"
 		if [ -d "$_wdl_entry" ]; then
-			_walk_draft_list_dir "$_wdl_entry" "$2$_wdl_name/"
-		elif [ -f "$_wdl_entry" ]; then
+			_walk_draft_list_dir "$_wdl_entry" "$2$_wdl_name/" "$3" "$4"
+		elif [ "$4" = legacy ] && [ -f "$_wdl_entry" ]; then
 			case "$_wdl_name" in
-			*.md) printf '%s%s\n' "$2" "${_wdl_name%.md}" ;;
+			*.md)
+				if [ ! -f "$3/.names/$2${_wdl_name%.md}/.draft.md" ]; then
+					printf '%s%s\n' "$2" "${_wdl_name%.md}"
+				fi
+				;;
 			esac
 		fi
 	done
+}
+
+walk_list_drafts() {
+	[ -d "$1" ] || return 0
+	_walk_draft_list_dir "$1" '' "$1" legacy
+	_walk_draft_list_dir "$1/.names" '' "$1" names
 }
 
 # walk_use_draft <src>
@@ -5693,14 +5722,121 @@ review_unset_delta() {
 	if git show-ref --verify --quiet "$_rud_ref"; then git update-ref -d "$_rud_ref"; fi
 }
 
-review_drop_session() {
-	_rds_ref="refs/worktree/review-start/session/$1"
-	if _rds_oid=$(git show-ref --hash --verify "$_rds_ref" 2>/dev/null) &&
-		! git show-ref --verify --quiet "refs/heads/review/$1" &&
-		! git show-ref --verify --quiet "refs/heads/review-saved/$1"; then
-		git update-ref -d "$_rds_ref" "$_rds_oid" || return 1
-		printf '%s\n' "$1"
+# User-supplied names can be prefixes of one another even while both ranges
+# are still in use. Keep every named range at a single, flat ref component.
+review_named_range_key() {
+	printf '%s' "$1" | git hash-object --stdin
+}
+
+# Edit and undo refs have exactly one leaf beneath their owning branch name.
+# for-each-ref matches prefixes, including refs owned by longer branch names.
+review_branch_refs() {
+	_rbr_prefix="refs/review-$1/$2/"
+	_rbr_refs=$(git for-each-ref --format='%(refname)' "$_rbr_prefix") || return 1
+	for _rbr_ref in $_rbr_refs; do
+		case "${_rbr_ref#"$_rbr_prefix"}" in */*) continue ;; esac
+		printf '%s\n' "$_rbr_ref"
+	done
+}
+
+# Git cannot store two branch names when one is the other's directory.
+# Save and Continue check that before moving comments, drafts or banked edits.
+review_require_branch_slot() {
+	_rrbs_namespace=${1%%/*}
+	_rrbs_refs=$(git for-each-ref --format='%(refname:lstrip=2)' "refs/heads/$_rrbs_namespace/") || return 1
+	for _rrbs_ref in $_rrbs_refs; do
+		case "$_rrbs_ref" in "$1/"*) die "cannot create $1: branch $_rrbs_ref already exists" ;; esac
+		case "$1" in "$_rrbs_ref/"*) die "cannot create $1: branch $_rrbs_ref already exists" ;; esac
+	done
+}
+
+review_session_ref() {
+	_rsr_key=$(review_named_range_key "$2") || return 1
+	printf 'refs/worktree/review-%s/session-key/%s\n' "$1" "$_rsr_key"
+}
+
+review_find_session() {
+	_rfs_session=$(review_session_ref "$1" "$2") || return 1
+	if ! git show-ref --verify --quiet "$_rfs_session"; then
+		_rfs_session="refs/worktree/review-$1/session/$2"
+		git show-ref --verify --quiet "$_rfs_session" || return 1
 	fi
+	printf '%s\n' "$_rfs_session"
+}
+
+# Create the branch and pin its range together before switching. Creating a
+# branch with switch -c can update the index before Git rejects a ref conflict.
+review_open_branch() {
+	_rob_branch="refs/heads/review/$2"
+	_rob_ref='' _rob_old=''
+	if [ -n "${4:-}" ]; then
+		_rob_ref=$(review_session_ref "$1" "$2") || die "could not name review range for $2"
+		_rob_old=$(git show-ref --hash --verify "$_rob_ref" 2>/dev/null || true)
+	fi
+	{
+		printf 'create %s %s\n' "$_rob_branch" "$3"
+		if [ -n "$_rob_old" ]; then
+			printf 'update %s %s %s\n' "$_rob_ref" "$4" "$_rob_old"
+		elif [ -n "$_rob_ref" ]; then
+			printf 'create %s %s\n' "$_rob_ref" "$4"
+		fi
+	} | git update-ref --no-deref -m "branch: Created from $3" --stdin ||
+		die "could not create review/$2"
+	if git switch --no-guess -q "review/$2"; then return 0; fi
+	# A failing post-checkout hook may report failure after HEAD moved.
+	# Remove only the refs we installed when the branch was never checked out.
+	if [ "$(git symbolic-ref --quiet HEAD || true)" != "$_rob_branch" ]; then
+		{
+			printf 'delete %s %s\n' "$_rob_branch" "$3"
+			if [ -n "$_rob_old" ]; then
+				printf 'update %s %s %s\n' "$_rob_ref" "$_rob_old" "$4"
+			elif [ -n "$_rob_ref" ]; then
+				printf 'delete %s %s\n' "$_rob_ref" "$4"
+			fi
+		} | git update-ref --no-deref --stdin || die "could not undo creation of review/$2"
+	fi
+	die "could not switch to review/$2"
+}
+
+review_drop_session() {
+	if git show-ref --verify --quiet "refs/heads/review/$2" ||
+		git show-ref --verify --quiet "refs/heads/review-saved/$2"; then return 0; fi
+	_rds_keyed=$(review_session_ref "$1" "$2") || return 1
+	for _rds_ref in "$_rds_keyed" "refs/worktree/review-$1/session/$2"; do
+		if _rds_oid=$(git show-ref --hash --verify "$_rds_ref" 2>/dev/null); then
+			git update-ref --no-deref -d "$_rds_ref" "$_rds_oid" || return 1
+			printf '%s\n' "$_rds_ref"
+		fi
+	done
+}
+
+review_prune_sessions() {
+	_rps_refs=$(git for-each-ref --format='%(objectname) %(refname)' \
+		refs/worktree/review-start/session-key/ refs/worktree/review-compare/session-key/ \
+		refs/worktree/review-start/session/ refs/worktree/review-compare/session/) || return 1
+	[ -n "$_rps_refs" ] || return 0
+	_rps_names=$(git for-each-ref --format='%(refname:lstrip=3)' refs/heads/review/ refs/heads/review-saved/) || return 1
+	_rps_keys=' '
+	for _rps_name in $_rps_names; do
+		_rps_key=$(review_named_range_key "$_rps_name") || return 1
+		_rps_keys="$_rps_keys$_rps_key "
+	done
+	while read -r _rps_oid _rps_ref; do
+		case "$_rps_ref" in
+		refs/worktree/review-start/session-key/*|refs/worktree/review-compare/session-key/*)
+			case "$_rps_keys" in *" ${_rps_ref##*/} "*) continue ;; esac
+			;;
+		*)
+			_rps_name=${_rps_ref#refs/worktree/review-*/session/}
+			if git show-ref --verify --quiet "refs/heads/review/$_rps_name" ||
+				git show-ref --verify --quiet "refs/heads/review-saved/$_rps_name"; then continue; fi
+			;;
+		esac
+		git update-ref --no-deref -d "$_rps_ref" "$_rps_oid" || return 1
+		printf '%s\n' "$_rps_ref"
+	done <<EOF
+$_rps_refs
+EOF
 }
 
 compare_fetch_spec() {
@@ -5806,21 +5942,6 @@ compare_release() {
 	git update-ref -d "$_compare_release_ref"
 }
 
-compare_keep_session() {
-	[ -n "${compare_prepared_ref:-}" ] || return 0
-	git update-ref "refs/worktree/review-compare/session/$1" "$compare_pack_oid"
-}
-
-compare_drop_session() {
-	_compare_session_ref="refs/worktree/review-compare/session/$1"
-	if _compare_session_oid=$(git show-ref --hash --verify "$_compare_session_ref" 2>/dev/null) &&
-		! git show-ref --verify --quiet "refs/heads/review/$1" &&
-		! git show-ref --verify --quiet "refs/heads/review-saved/$1"; then
-		git update-ref -d "$_compare_session_ref" "$_compare_session_oid" || return 1
-		printf '%s\n' "$1"
-	fi
-}
-
 compare_keep_comment_revisions() {
 	_compare_comment_ref=$2
 	_compare_first_document=$1
@@ -5859,7 +5980,7 @@ compare_keep_draft() {
 start_draft_ref() {
 	# Drafts for 'topic' and 'topic/next' can coexist on disk. A flat key lets
 	# their range refs coexist even after the original branch was deleted.
-	_sdr_key=$(printf '%s' "$1" | git hash-object --stdin) || return 1
+	_sdr_key=$(review_named_range_key "$1") || return 1
 	printf 'refs/worktree/review-start/draft-key/%s\n' "$_sdr_key"
 }
 
@@ -6169,7 +6290,8 @@ review_status_porcelain() {
 	# this record by label and ignore trailing fields, unlike `state`.
 	if [ "$mode" = walk ] && walk_is_draft "${walk_draft_src:-$src}"; then
 		walk_gitdir_abs_init
-		porcelain_row draft "$_walk_gitdir_abs/review-walkthrough/${walk_draft_src:-$src}.md"
+		walk_draft_file "$_walk_gitdir_abs/review-walkthrough" "${walk_draft_src:-$src}"
+		porcelain_row draft "$_walk_draft_file"
 	fi
 	if [ "$mode" = step ] || [ "$mode" = walk ]; then porcelain_row capability navigation-state; fi
 	review_guard_capture "$cur" "${_review_head:-${_walk_lower:-}}"

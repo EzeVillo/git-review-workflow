@@ -1837,6 +1837,24 @@ Una validación exitosa guarda ese rango con el Markdown. Desde otra rama,
 `draft --build` y `start --from-draft` usan el rango guardado aunque el PR haya
 vuelto a cambiar.
 
+Start y Compare comparten la creación de la rama y la ref que fija su rango.
+Una revisión guardada de `topic` puede coexistir con una activa de
+`topic/next`. Ambas necesitan fijar su rango en el mismo worktree, así que
+la ref usa una clave plana derivada del nombre. Se conservan la lectura y la
+limpieza de las refs de sesión anteriores. Git crea la rama y fija su rango en
+una transacción antes de cambiar el checkout. Así una colisión de refs falla
+con HEAD, el índice y los archivos intactos. Save y Continue comprueban antes
+de transferir el estado si la rama de destino choca por prefijo en su
+namespace. El mantenimiento de ediciones y Undo identifica al dueño exacto
+de cada ref, incluso si los nombres de dos ramas comparten prefijo.
+
+Un nombre como `topic.md/next` también puede chocar con el archivo de
+`topic`. En los casos que necesitan una ruta alternativa, el nombre
+completo es un directorio bajo `.names` y el Markdown vive en `.draft.md`.
+Git excluye los componentes que empiezan por un punto, así que esa hoja
+no ocupa el nombre de otra rama. El inventario y la custodia de borradores
+usan el mismo resolvedor de rutas y conservan las rutas existentes.
+
 Finish consulta los destinos antes de tocar el índice. La rama local puede recibir las ediciones si falta o ya apunta al tip revisado. Si está atrasada, actualizarla es una elección explícita que usa un fast-forward con verificación del commit anterior. Una rama adelantada, divergente o en uso en otro worktree deja disponible el destino separado. Undo conserva el tip anterior y verifica el resultado antes de restaurarlo. El push se hace desde Git cuando el revisor decide publicar.
 
 ## 19. Portabilidad de comentarios y duración del CI

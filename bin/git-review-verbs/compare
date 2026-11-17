@@ -182,19 +182,18 @@ if [ "$step" -eq 1 ]; then
 	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
 	first="$(printf '%s\n' "$commits" | sed -n '1p')"
 
-	git switch -q -c "$rb" "$first" || die "could not create $rb"
+	review_open_branch compare "$name" "$first" "${compare_pack_oid:-}"
+	git config "branch.$rb.reviewreadonly" "1"
 	git reset --soft HEAD^
 	git config "branch.$rb.reviewsource" "$name"
 	git config "branch.$rb.reviewbase" "$a"
 	git config "branch.$rb.reviewtip" "$bcommit"
 	git config "branch.$rb.reviewcomparebase" "$acommit"
 	git config "branch.$rb.reviewcomparetarget" "$b"
-	compare_keep_session "$name"
 	git config "branch.$rb.reviewstart" "$acommit"
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
-	git config "branch.$rb.reviewreadonly" "1"
 	# The draft's name, from the single derivation above — see the whole-mode write
 	# below. A step review reads no walkthrough but still holds custody of one.
 	git config "branch.$rb.reviewdraft" "$draftsrc"
@@ -254,7 +253,8 @@ fi
 # Whole range: create review/<name> at <b> and soft-reset to <a> so the staged diff
 # is exactly <a>..<b>, with a clean working tree — the same shape as start, minus the
 # merged-base folding (compare's bounds are explicit) and any writeback metadata.
-git switch -q -c "$rb" "$bcommit" || die "could not create $rb"
+review_open_branch compare "$name" "$bcommit" "${compare_pack_oid:-}"
+git config "branch.$rb.reviewreadonly" "1"
 git reset -q --soft "$acommit"
 
 git config "branch.$rb.reviewsource" "$name"
@@ -262,8 +262,6 @@ git config "branch.$rb.reviewbase" "$a"
 git config "branch.$rb.reviewtip" "$bcommit"
 git config "branch.$rb.reviewcomparebase" "$acommit"
 git config "branch.$rb.reviewcomparetarget" "$b"
-compare_keep_session "$name"
-git config "branch.$rb.reviewreadonly" "1"
 # Where this review's draft lives, from the single derivation above. Recorded in
 # every mode and whether or not a draft exists yet, because the surfaces that need
 # it are not the walk ones: a draft written inside a whole-mode compare, and its

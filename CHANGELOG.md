@@ -44,6 +44,14 @@ This file starts at 0.2.1. Earlier versions are only in the
 - `git review forget --delta --stale` checks the remote's refs, including
   branches outside a single-branch clone's fetch refspec.
 
+### Fixed
+
+- Start and Compare can open `topic/next` while a review of `topic` is
+  saved. Ref collisions fail before changing the checkout. Save and Continue
+  check their destination branch before moving review state.
+- Cleaning a branch by name preserves the edit bank and undo refs of branches
+  nested under that name. Drafts for `topic` and `topic.md/next` can coexist.
+
 ## [0.10.0] — 2026-11-10
 
 ### Added

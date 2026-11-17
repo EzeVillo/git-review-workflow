@@ -67,6 +67,59 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+@test "drafts with file and directory names coexist across save continue and forget" {
+	git branch topic feature/annotated
+	git branch topic.md/next feature/annotated
+	run git review walkthrough draft --offline topic
+	[ "$status" -eq 0 ]
+	run git review walkthrough draft --offline topic.md/next
+	[ "$status" -eq 0 ]
+	parent=.git/review-walkthrough/topic.md
+	child=.git/review-walkthrough/.names/topic.md/next/.draft.md
+	[ -f "$parent" ]
+	[ -f "$child" ]
+	printf '# Order\n\n## 1. b.txt\nParent draft.\n' >"$parent"
+	printf '# Order\n\n## 1. b.txt\nDescendant draft.\n' >"$child"
+
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'draft\ttopic\t'*'/review-walkthrough/topic.md'* ]]
+	[[ "$output" == *$'draft\ttopic.md/next\t'*'/review-walkthrough/.names/topic.md/next/.draft.md'* ]]
+	run git review start --offline topic.md/next
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'draft\t'*'/review-walkthrough/.names/topic.md/next/.draft.md'* ]]
+	run git review save
+	[ "$status" -eq 0 ]
+	[ ! -f "$child" ]
+	[ -f .git/review-saved-walkthrough/.names/topic.md/next/.draft.md ]
+	run git review continue topic.md/next
+	[ "$status" -eq 0 ]
+	grep -Fxq 'Descendant draft.' "$child"
+	run git review forget --draft topic.md/next
+	[ "$status" -eq 0 ]
+	[ ! -e "$child" ]
+	grep -Fxq 'Parent draft.' "$parent"
+}
+
+@test "creating a parent draft preserves a descendant at its legacy path" {
+	git branch topic feature/annotated
+	git branch topic.md/next feature/annotated
+	mkdir -p .git/review-walkthrough/topic.md
+	legacy=.git/review-walkthrough/topic.md/next.md
+	printf '# Order\n\n## 1. b.txt\nLegacy draft.\n' >"$legacy"
+
+	run git review walkthrough draft --offline topic
+	[ "$status" -eq 0 ]
+	[ -f .git/review-walkthrough/.names/topic/.draft.md ]
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'draft\ttopic\t'*'/review-walkthrough/.names/topic/.draft.md'* ]]
+	[[ "$output" == *$'draft\ttopic.md/next\t'*'/review-walkthrough/topic.md/next.md'* ]]
+	grep -Fxq 'Legacy draft.' "$legacy"
+}
+
 # Portable in-place edit (the same helper step-replay.bats carries, and for the
 # same reason): BSD/macOS sed consumes the script as -i's backup suffix, so the
 # bare `sed -i 'script' file` form errors on the macOS runner.

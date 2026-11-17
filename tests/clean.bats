@@ -89,6 +89,22 @@ teardown() {
 	[ -z "$(git for-each-ref refs/review-edits/feature/x/)" ]
 }
 
+@test "named clean preserves the edit bank and undo refs of a descendant review" {
+	git branch review/topic/next develop
+	git update-ref refs/review-edits/topic/1 refs/heads/develop
+	git update-ref refs/review-edits/topic/next/1 refs/heads/feature/x
+	git update-ref refs/review-undo/topic/head refs/heads/develop
+	git update-ref refs/review-undo/topic/next/head refs/heads/feature/x
+
+	run git review clean topic
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet refs/review-edits/topic/1
+	! git show-ref --verify --quiet refs/review-undo/topic/head
+	git show-ref --verify --quiet refs/heads/review/topic/next
+	[ "$(git rev-parse refs/review-edits/topic/next/1)" = "$(git rev-parse feature/x)" ]
+	[ "$(git rev-parse refs/review-undo/topic/next/head)" = "$(git rev-parse feature/x)" ]
+}
+
 # ── tear down the undo point fully, even on the branch we refuse to delete ──────
 
 @test "review clean removes every reviewundo* key, even for the current branch it skips" {

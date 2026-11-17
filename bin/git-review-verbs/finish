@@ -425,7 +425,7 @@ do_abort() {
 		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree reviewundosourcebefore reviewundosourcemove; do
 		git config --unset "branch.$rb.$k" 2>/dev/null || true
 	done
-	git for-each-ref --format='%(refname)' "refs/review-undo/$asrc/" |
+	review_branch_refs undo "$asrc" |
 		while read -r ref; do
 			git update-ref -d "$ref"
 		done

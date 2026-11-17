@@ -80,7 +80,7 @@ comments_discard_branch "$cur" || exit 1
 _abort_compare=$(review_config_get "branch.$cur.reviewreadonly" || true)
 git branch -D "$cur" >/dev/null
 if [ "$_abort_compare" = 1 ]; then
-	compare_drop_session "$src" >/dev/null
+	review_drop_session compare "$src" >/dev/null
 fi
 
 # Cancelled, not completed: restore the tip of your last actual review (or clear
@@ -89,10 +89,10 @@ if [ "$_abort_compare" != 1 ]; then
 	if [ -n "$prevreviewed" ]; then review_set_delta "$markerkey" "$prevreviewed"
 	else review_unset_delta "$markerkey"
 	fi
-	review_drop_session "$src" >/dev/null
+	review_drop_session start "$src" >/dev/null
 fi
 
-git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r ref; do
+review_branch_refs edits "$src" | while read -r ref; do
 	git update-ref -d "$ref"
 done
 
@@ -102,7 +102,7 @@ done
 if git rev-parse --verify --quiet "refs/heads/review-fixes/$src" >/dev/null; then
 	git branch -D "review-fixes/$src" >/dev/null
 fi
-git for-each-ref --format='%(refname)' "refs/review-undo/$src/" | while read -r ref; do
+review_branch_refs undo "$src" | while read -r ref; do
 	git update-ref -d "$ref"
 done
 

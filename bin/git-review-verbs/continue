@@ -86,6 +86,7 @@ fi
 rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb is already active; finish or abort it before resuming the saved one"
+review_require_branch_slot "$rb"
 
 # Resuming materialises a working tree, so refuse to clobber local changes
 # (tracked or untracked — same rule as start/compare).
@@ -181,7 +182,7 @@ restore_draft
 
 if [ "$mode" = "step" ]; then
 	# Bring the banked edits back to where git review next/prev expect them.
-	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
+	review_branch_refs saved-edits "$src" | while read -r ref; do
 		n="${ref##*/}"
 		git update-ref "refs/review-edits/$src/$n" "$(git rev-parse "$ref")"
 		git update-ref -d "$ref"

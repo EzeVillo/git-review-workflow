@@ -188,7 +188,7 @@ if [ "$mode" = saved ]; then
 			fi
 		fi
 
-		git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
+	review_branch_refs saved-edits "$src" | while read -r ref; do
 			git update-ref -d "$ref"
 		done
 		# The reviewer's own walkthrough draft goes with it: discarding a paused review
@@ -208,8 +208,8 @@ if [ "$mode" = saved ]; then
 			start_drop_draft "$draftsrc"
 		fi
 		git branch -D "$saved" >/dev/null
-		if [ "$_fso_compare" = 1 ]; then compare_drop_session "$src" >/dev/null
-		else review_drop_session "$src" >/dev/null
+		if [ "$_fso_compare" = 1 ]; then review_drop_session compare "$src" >/dev/null
+		else review_drop_session start "$src" >/dev/null
 		fi
 
 		echo "discarded saved review of $src"

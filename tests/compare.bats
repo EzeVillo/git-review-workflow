@@ -48,17 +48,18 @@
 	run git review compare --release -- "$token"
 	[ "$status" -eq 0 ]
 	! git show-ref --verify --quiet "refs/worktree/review-compare/pending/$token"
-	git show-ref --verify --quiet refs/worktree/review-compare/session/isolated/topic
+	session=$(compare_session_ref isolated/topic)
+	git show-ref --verify --quiet "$session"
 	run git review save
 	[ "$status" -eq 0 ]
-	git show-ref --verify --quiet refs/worktree/review-compare/session/isolated/topic
+	git show-ref --verify --quiet "$session"
 	run git review continue isolated/topic
 	[ "$status" -eq 0 ]
 	run git review comments add --document local --path app.txt --side head --start-line 2 --end-line 2 --text 'Keep this range.'
 	[ "$status" -eq 0 ]
 	run git review abort
 	[ "$status" -eq 0 ]
-	! git show-ref --verify --quiet refs/worktree/review-compare/session/isolated/topic
+	! git show-ref --verify --quiet "$session"
 	[ "$(git rev-parse refs/remotes/isolated/topic)" = "$before" ]
 	[ "$(git rev-parse refs/remotes/isolated/other)" = "$before" ]
 	git reflog expire --expire=now --expire-unreachable=now --all
@@ -135,9 +136,75 @@
 	git branch -D review/c1
 	run git review clean --keep-fixes
 	[ "$status" -eq 0 ]
-	! git show-ref --verify --quiet refs/worktree/review-compare/session/c1
-	git show-ref --verify --quiet refs/worktree/review-compare/session/v2.0
+	! git show-ref --verify --quiet "$(compare_session_ref c1)"
+	git show-ref --verify --quiet "$(compare_session_ref v2.0)"
 	[ "$(git branch --show-current)" = review/v2.0 ]
+}
+
+compare_session_ref() {
+	printf 'refs/worktree/review-compare/session-key/%s\n' "$(printf '%s' "$1" | git hash-object --stdin)"
+}
+
+prepare_comparison() {
+	run git review compare --prepare --porcelain -- v1.0 "$1"
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+}
+
+@test "prepared compare keeps a saved parent name and an active descendant read only" {
+	git branch topic v2.0
+	prepare_comparison topic
+	run git review compare "--prepared=$token" -- v1.0 topic
+	[ "$status" -eq 0 ]
+	git review compare --release -- "$token"
+	run git review save
+	[ "$status" -eq 0 ]
+	git branch -m topic topic/next
+	prepare_comparison topic/next
+	run git review compare "--prepared=$token" --step -- v1.0 topic/next
+	[ "$status" -eq 0 ]
+	git review compare --release -- "$token"
+	[ "$(git branch --show-current)" = review/topic/next ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+	[ "$(git config branch.review/topic/next.reviewreadonly)" = 1 ]
+	run --separate-stderr git review finish --destinations --porcelain
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: comparison is read-only' ]
+	[ -z "$output" ]
+	run git review clean --keep-fixes
+	[ "$status" -eq 0 ]
+	git show-ref --verify --quiet "$(compare_session_ref topic)"
+	git show-ref --verify --quiet "$(compare_session_ref topic/next)"
+	run git review abort
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet "$(compare_session_ref topic/next)"
+	run git review continue topic
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewreadonly)" = 1 ]
+}
+
+@test "prepared compare pin failure leaves checkout and preparation intact" {
+	git branch topic v2.0
+	prepare_comparison topic
+	pin=$(compare_session_ref topic)
+	# A ref descended from the would-be pin makes its transaction fail.
+	git update-ref "$pin/occupied" v1.0
+	original_head=$(git rev-parse HEAD)
+	original_index=$(git write-tree)
+	run --separate-stderr git review compare "--prepared=$token" -- v1.0 topic
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"cannot lock ref '$pin'"*'error: could not create review/topic'* ]]
+	[ "$(git branch --show-current)" = develop ]
+	[ "$(git rev-parse HEAD)" = "$original_head" ]
+	[ "$(git write-tree)" = "$original_index" ]
+	[ -z "$(git status --porcelain)" ]
+	! git show-ref --verify --quiet refs/heads/review/topic
+	git show-ref --verify --quiet "refs/worktree/review-compare/pending/$token"
+	git update-ref -d "$pin/occupied"
+	run git review compare "--prepared=$token" -- v1.0 topic
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewreadonly)" = 1 ]
 }
 
 setup() {

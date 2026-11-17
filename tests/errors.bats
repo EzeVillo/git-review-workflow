@@ -43,6 +43,111 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+start_session_ref() {
+	printf 'refs/worktree/review-start/session-key/%s\n' "$(printf '%s' "$1" | git hash-object --stdin)"
+}
+
+@test "start keeps a saved descendant and an active parent independently" {
+	git branch topic/next feature/x
+	run git review start --offline --base develop topic/next
+	[ "$status" -eq 0 ]
+	legacy=refs/worktree/review-start/session/topic/next
+	pin=$(start_session_ref topic/next)
+	git update-ref "$legacy" "$(git rev-parse "$pin")"
+	git update-ref -d "$pin"
+	run git review save
+	[ "$status" -eq 0 ]
+	git branch -m topic/next topic
+	run git review start --offline --base develop --step topic
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = review/topic ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+	[ -n "$(git config branch.review/topic.reviewcommentssession)" ]
+	run git review clean --keep-fixes
+	[ "$status" -eq 0 ]
+	git show-ref --verify --quiet "$legacy"
+	git show-ref --verify --quiet "$(start_session_ref topic)"
+	run git review abort
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet "$(start_session_ref topic)"
+	run git review continue topic/next
+	[ "$status" -eq 0 ]
+	run git review walkthrough draft --offline
+	[ "$status" -eq 0 ]
+	[ -f .git/review-walkthrough/topic/next.md ]
+	run git review abort
+	[ "$status" -eq 0 ]
+	! git show-ref --verify --quiet "$legacy"
+}
+
+@test "start pin and checkout failures leave the original tree and a retryable range" {
+	bats_require_minimum_version 1.5.0
+	pin=$(start_session_ref feature/x)
+	git update-ref "$pin/occupied" HEAD
+	original_head=$(git rev-parse HEAD)
+	original_index=$(git write-tree)
+	run --separate-stderr git review start --offline --base develop feature/x
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"cannot lock ref '$pin'"*'error: could not create review/feature/x'* ]]
+	[ "$(git branch --show-current)" = develop ]
+	[ "$(git rev-parse HEAD)" = "$original_head" ]
+	[ "$(git write-tree)" = "$original_index" ]
+	[ -z "$(git status --porcelain)" ]
+	! git show-ref --verify --quiet refs/heads/review/feature/x
+	! git config --get reviewworkflowlocal.feature/x.reviewed
+
+	git update-ref -d "$pin/occupied"
+	git branch review/feature/x/occupied HEAD
+	run --separate-stderr git review start --offline --base develop --step feature/x
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'error: could not create review/feature/x'* ]]
+	[ "$(git branch --show-current)" = develop ]
+	[ "$(git write-tree)" = "$original_index" ]
+	! git show-ref --verify --quiet "$pin"
+	git branch -D review/feature/x/occupied
+	run git review start --offline --base develop feature/x
+	[ "$status" -eq 0 ]
+	git show-ref --verify --quiet "$pin"
+}
+
+@test "save and continue reject branch prefix conflicts before moving review state" {
+	bats_require_minimum_version 1.5.0
+	git branch topic feature/x
+	git review start --offline --base develop --step topic
+	git review walkthrough draft --offline
+	draft=.git/review-walkthrough/topic.md
+	original_draft=$(git hash-object "$draft")
+	original_index=$(git write-tree)
+	original_head=$(git rev-parse HEAD)
+	session=$(git config branch.review/topic.reviewcommentssession)
+	git branch review-saved/topic/next develop
+	printf 'reviewer edit\n' >>app.txt
+	run --separate-stderr git review save
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: cannot create review-saved/topic: branch review-saved/topic/next already exists' ]
+	[ "$(git branch --show-current)" = review/topic ]
+	[ "$(git rev-parse HEAD)" = "$original_head" ]
+	[ "$(git write-tree)" = "$original_index" ]
+	[ "$(git config branch.review/topic.reviewcommentssession)" = "$session" ]
+	[ "$(git hash-object "$draft")" = "$original_draft" ]
+	! git show-ref --verify --quiet refs/review-saved-edits/topic/1
+
+	git branch -D review-saved/topic/next
+	git review save
+	git branch review/topic/next develop
+	saved_draft=.git/review-saved-walkthrough/topic.md
+	saved_edit=$(git rev-parse refs/review-saved-edits/topic/1)
+	run --separate-stderr git review continue topic
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: cannot create review/topic: branch review/topic/next already exists' ]
+	[ "$(git branch --show-current)" = develop ]
+	[ -z "$(git status --porcelain)" ]
+	[ "$(git hash-object "$saved_draft")" = "$original_draft" ]
+	[ "$(git config branch.review-saved/topic.reviewcommentssession)" = "$session" ]
+	[ "$(git rev-parse refs/review-saved-edits/topic/1)" = "$saved_edit" ]
+	[ ! -e "$draft" ]
+}
+
 # Push a second PR commit that appends a line; leaves you on develop.
 push_pr2() {
 	git switch --quiet feature/x

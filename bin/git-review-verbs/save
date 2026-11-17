@@ -75,6 +75,7 @@ fi
 saved="review-saved/$src"
 git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null &&
 	die "$saved already exists; resume it with git review continue or discard it with git review forget --saved $src"
+review_require_branch_slot "$saved"
 
 comments_lock_branch "$cur" || exit 1
 trap 'comments_transfer_rollback || true; comments_unlock' 0
@@ -188,7 +189,7 @@ if [ "$mode" = "step" ]; then
 
 	# Move the banked edits aside so git review clean (which prunes refs/review-edits/)
 	# leaves the saved review intact, and so they travel with it.
-	git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r ref; do
+	review_branch_refs edits "$src" | while read -r ref; do
 		n="${ref##*/}"
 		git update-ref "refs/review-saved-edits/$src/$n" "$(git rev-parse "$ref")"
 		git update-ref -d "$ref"

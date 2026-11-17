@@ -158,47 +158,22 @@ fi
 # silently destroy banked edits. Undo refs stay janitorial — always torn down,
 # even with the review branch still checked out (see clean.bats).
 if [ -n "$arg" ]; then
-	undons="refs/review-undo/$arg/"
+	_undo_refs=$(review_branch_refs undo "$arg")
 	undobranches="$arg"
+	_edit_refs=$(review_branch_refs edits "$arg")
 else
-	undons="refs/review-undo/"
-	undobranches="$(git for-each-ref --format='%(refname)' refs/review-undo/ |
-		sed -n 's#^refs/review-undo/\(.*\)/[^/]*$#\1#p' | sort -u)"
+	_undo_refs=$(git for-each-ref --format='%(refname)' refs/review-undo/)
+	undobranches="$(printf '%s\n' "$_undo_refs" | sed -n 's#^refs/review-undo/\(.*\)/[^/]*$#\1#p' | sort -u)"
+	_edit_refs=$(git for-each-ref --format='%(refname)' refs/review-edits/)
 fi
 
-# Edit-ref purge: named arg only when review/<arg> is gone; global walks every
-# edit ref and skips any src that still has a live review/<src>.
-# A here-doc while-read is used (not a pipe) so cleaned=1 survives the loop.
-if [ -n "$arg" ]; then
-	if ! git rev-parse --verify --quiet "refs/heads/review/$arg" >/dev/null; then
-		_edit_refs="$(git for-each-ref --format='%(refname)' "refs/review-edits/$arg/")"
-		if [ -n "$_edit_refs" ]; then
-			while IFS= read -r ref; do
-				[ -n "$ref" ] || continue
-				git update-ref -d "$ref"
-			done <<EOF
-$_edit_refs
-EOF
-			cleaned=1
-		fi
-	fi
-else
-	_edit_refs="$(git for-each-ref --format='%(refname)' refs/review-edits/)"
-	if [ -n "$_edit_refs" ]; then
-		while IFS= read -r ref; do
-			[ -n "$ref" ] || continue
-			_rest="${ref#refs/review-edits/}"
-			_esrc="${_rest%/*}"
-			if git rev-parse --verify --quiet "refs/heads/review/$_esrc" >/dev/null; then
-				continue
-			fi
-			git update-ref -d "$ref"
-			cleaned=1
-		done <<EOF
-$_edit_refs
-EOF
-	fi
-fi
+# Refs contain no shell whitespace. Preserve the edit bank of every live review.
+for ref in $_edit_refs; do
+	_rest=${ref#refs/review-edits/}
+	if git show-ref --verify --quiet "refs/heads/review/${_rest%/*}"; then continue; fi
+	git update-ref -d "$ref"
+	cleaned=1
+done
 
 # Walkthrough drafts are deliberately NOT touched, in either namespace: like the
 # --delta markers and a review paused with save, they are hand-written prose that
@@ -208,21 +183,15 @@ fi
 # --build → start).
 
 if [ -n "$arg" ]; then
-	_compare_cleaned=$(compare_drop_session "$arg")
-	_start_cleaned=$(review_drop_session "$arg")
+	_compare_cleaned=$(review_drop_session compare "$arg")
+	_start_cleaned=$(review_drop_session start "$arg")
+	[ -z "$_compare_cleaned$_start_cleaned" ] || cleaned=1
 else
-	_compare_cleaned=$(git for-each-ref --format='%(refname:lstrip=4)' refs/worktree/review-compare/session/ | while IFS= read -r name; do
-		compare_drop_session "$name"
-	done)
-	_start_cleaned=$(git for-each-ref --format='%(refname:lstrip=4)' refs/worktree/review-start/session/ | while IFS= read -r name; do
-		review_drop_session "$name"
-	done)
+	_sessions_cleaned=$(review_prune_sessions)
 	_compare_expired=$(review_expired_preparations)
-	if [ -n "$_compare_expired" ]; then cleaned=1; fi
+	if [ -n "$_sessions_cleaned$_compare_expired" ]; then cleaned=1; fi
 fi
-[ -z "$_compare_cleaned$_start_cleaned" ] || cleaned=1
 
-_undo_refs="$(git for-each-ref --format='%(refname)' "$undons")"
 if [ -n "$_undo_refs" ]; then
 	while IFS= read -r ref; do
 		[ -n "$ref" ] || continue

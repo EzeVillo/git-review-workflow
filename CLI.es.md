@@ -319,7 +319,9 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   `@{upstream}` y `origin/checkpoint@{0}`, incluidos destinos fuera de
   `refs/remotes/`. También puede traer la rama elegida y la base nombrada
   fuera del refspec de un clon de rama única. El repositorio real conserva
-  sus ramas, tags, reflogs y `FETCH_HEAD`. El nombre de una rama base tiene
+  sus ramas, tags, reflogs y `FETCH_HEAD`. Si el fetch cambiaría el límite
+  shallow o las refs de reemplazo que usa Git, Start pide hacer fetch
+  manualmente antes de preparar la review. El nombre de una rama base tiene
   prioridad frente a la misma abreviatura de Git, como `tags/release`. La
   preparación fija el tip, la base y cualquier commit de `--from` antes de
   ofrecer modos de lectura.

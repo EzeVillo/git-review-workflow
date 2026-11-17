@@ -5470,11 +5470,18 @@ review_view_fetch() {
 	review_view_git "$@" || return 1
 	# The real repository must interpret object ancestry with the same boundary.
 	if [ -f "$_rvo_shallow" ] || [ -f "$_review_view/shallow" ]; then
-		cmp -s "$_rvo_shallow" "$_review_view/shallow" || {
-			printf '%s\n' 'error: fetch changed the shallow boundary. Fetch manually and prepare the review again.' >&2
-			return 1
-		}
+		cmp -s "$_rvo_shallow" "$_review_view/shallow" ||
+			die 'fetch changed the shallow boundary. Fetch manually and prepare the review again.'
 	fi
+	# A refspec can fetch replacements as well as branches. The same OID
+	# would then name different content inside and outside the view.
+	if [ "${GIT_NO_REPLACE_OBJECTS+x}" = x ] || [ "$(git config --bool --get core.useReplaceRefs || true)" = false ]; then
+		return 0
+	fi
+	_rvf_original=$(git replace --format=medium --list) || return 1
+	_rvf_fetched=$(review_view_git replace --format=medium --list) || return 1
+	[ "$_rvf_original" = "$_rvf_fetched" ] ||
+		die 'fetch changed the replacement refs. Fetch manually and prepare the review again.'
 }
 
 review_view_start() {

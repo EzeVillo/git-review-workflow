@@ -1826,8 +1826,11 @@ La resolución de Start debe coincidir con la de Git desde el worktree del
 usuario tras el fetch. La vista conserva el entorno de lectura de los objetos
 y su ascendencia, incluidos los reemplazos y el archivo de grafts. Para
 `GIT_NO_REPLACE_OBJECTS`, Git distingue una variable ausente de una variable
-vacía. Las pruebas comparan con Git nativo el OID elegido y el diff staged, y
-comprueban que las refs de seguimiento y FETCH_HEAD reales se conserven.
+vacía. Si el fetch modifica los reemplazos que usa Git, Start pide hacer fetch
+manualmente. La review se materializa en el repositorio real, donde esos OID
+todavía apuntan a su contenido original. Las pruebas comparan con Git nativo el
+OID elegido y el diff staged, y comprueban que las refs de seguimiento y
+FETCH_HEAD reales se conserven.
 
 El rango de la review activa tiene prioridad al crear o validar su borrador.
 Una validación exitosa guarda ese rango con el Markdown. Desde otra rama,

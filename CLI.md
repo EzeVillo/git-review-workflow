@@ -312,9 +312,11 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `origin/checkpoint@{0}`, including destinations outside `refs/remotes/`.
   The selected branch and named base can also be fetched outside a
   single-branch refspec. The real repository keeps its branches, tags,
-  reflogs, and `FETCH_HEAD`. A base branch name has priority over an
-  identical Git abbreviation such as `tags/release`. Preparation pins the
-  tip, base and any `--from` commit before offering reading layouts.
+  reflogs, and `FETCH_HEAD`. If the fetch would change the shallow boundary or
+  the replacement refs Git uses, Start asks you to fetch manually before
+  preparing the review. A base branch name has priority over an identical Git
+  abbreviation such as `tags/release`. Preparation pins the tip, base and any
+  `--from` commit before offering reading layouts.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review

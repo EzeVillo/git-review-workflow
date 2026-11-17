@@ -1060,6 +1060,44 @@ step_review_two_with_edits() {
 	[ "$(cat "$GIT_GRAFT_FILE")" = "$tip $base $first" ]
 }
 
+@test "start refuses a fetch that would change its replacement refs" {
+	bats_require_minimum_version 1.5.0
+	tip=$(git rev-parse feature/x)
+	git switch -qc replacement develop
+	printf 'alternate\n' >alternate.txt
+	git add alternate.txt
+	git commit -qm alternate
+	git push -q origin "HEAD:refs/replace/$tip"
+	git switch -q develop
+	git fetch -q origin develop
+	git config --add remote.origin.fetch '+refs/replace/*:refs/replace/*'
+	refs_before=$(git for-each-ref --format='%(refname) %(objectname)')
+	fetch_before=$(git hash-object .git/FETCH_HEAD)
+
+	for flag in --no-walk --prepare; do
+		run --separate-stderr git review start "$flag" -- feature/x
+		[ "$status" -eq 1 ]
+		[ "$stdout" = '' ]
+		[ "$stderr" = 'error: fetch changed the replacement refs. Fetch manually and prepare the review again.' ]
+		[ "$(git branch --show-current)" = develop ]
+		[ "$(git for-each-ref --format='%(refname) %(objectname)')" = "$refs_before" ]
+		[ "$(git hash-object .git/FETCH_HEAD)" = "$fetch_before" ]
+		[ -z "$(git diff --cached --name-only)" ]
+	done
+
+	run git -c core.useReplaceRefs=false review start --no-walk -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+	git review abort
+
+	git fetch -q origin
+	expected=$(git diff --name-only develop origin/feature/x)
+	[ "$expected" = alternate.txt ]
+	run git review start --no-walk -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = "$expected" ]
+}
+
 @test "temporary fetch honors worktree config and preserves linked ref stores" {
 	make_two_commit_feature
 	cutoff=$(git rev-parse feature/two^)

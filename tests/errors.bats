@@ -1098,6 +1098,39 @@ step_review_two_with_edits() {
 	[ "$(git diff --cached --name-only)" = "$expected" ]
 }
 
+@test "prepared start and draft reject replacements that changed after the offers" {
+	bats_require_minimum_version 1.5.0
+	make_two_commit_feature
+	tip=$(git rev-parse feature/two)
+	base=$(git rev-parse develop)
+	replacement=$(git commit-tree "$base^{tree}" -p "$base" -m 'replacement without feature files')
+
+	run git review start --prepare -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	git replace "$tip" "$replacement"
+	[ -z "$(git diff --name-only "$base" "$tip")" ]
+	for verb in start draft; do
+		if [ "$verb" = start ]; then
+			run --separate-stderr git review start "--prepared=$token" --no-walk -- feature/two
+		else
+			run --separate-stderr git review walkthrough draft "--start-prepared=$token" -- feature/two
+		fi
+		[ "$status" -eq 1 ]
+		[ "$stderr" = 'error: review ancestry has changed; prepare the review again' ]
+		[ "$(git symbolic-ref --short HEAD)" = develop ]
+		[ -z "$(git diff --cached --name-only)" ]
+		! git show-ref --verify --quiet refs/heads/review/feature/two
+		[ ! -e .git/review-walkthrough/feature/two.md ]
+	done
+
+	git replace -d "$tip"
+	run git review start "--prepared=$token" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+}
+
 @test "temporary fetch honors worktree config and preserves linked ref stores" {
 	make_two_commit_feature
 	cutoff=$(git rev-parse feature/two^)
@@ -1126,6 +1159,186 @@ step_review_two_with_edits() {
 		! git -C "$linked" show-ref --verify --quiet "refs/remotes/origin/cutoff-$format"
 		[ "$(git -C "$reader" branch --show-current)" = develop ]
 	done
+}
+
+# Compare Start with the configured fetch in an independent repository that has
+# the same refs, worktree IDs, and starting points. Assert both the chosen OID
+# and what the reviewer actually sees in the index.
+assert_start_matches_git() {
+	local repo=$1 oracle=$2 option=$3 selector=$4 cutoff lower paths token
+	local tip=origin/feature/two branch=branch.review/feature/two
+	shift 4
+	if [ "$#" -eq 0 ]; then set -- direct prepared; fi
+	cutoff=$(git -C "$oracle" rev-parse --verify "$selector")
+	lower=$cutoff
+	if [ "$option" = --base ]; then lower=$(git -C "$oracle" merge-base "$cutoff" "$tip"); fi
+	paths=$(git -C "$oracle" diff --name-only "$lower" "$tip")
+	[ -n "$paths" ]
+
+	local entry key
+	for entry do
+		local args=()
+		if [ "$entry" = prepared ]; then
+			run git -C "$repo" review start --prepare "$option" "$selector" -- feature/two
+			[ "$status" -eq 0 ]
+			token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+			[ -n "$token" ]
+			args=("--prepared=$token")
+		fi
+		run git -C "$repo" review start ${args[@]+"${args[@]}"} "$option" "$selector" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		key=reviewrangefrom
+		if [ "$option" = --base ]; then key=reviewbasecommit; fi
+		[ "$(git -C "$repo" config "$branch.$key")" = "$cutoff" ]
+		[ "$(git -C "$repo" rev-parse HEAD)" = "$lower" ]
+		[ "$(git -C "$repo" diff --cached --name-only)" = "$paths" ]
+		git -C "$repo" review abort >/dev/null
+		if [ "$entry" = prepared ]; then git -C "$repo" review start --release -- "$token"; fi
+	done
+}
+
+@test "start resolves across the original worktree topology like Git fetch" {
+	make_two_commit_feature
+	first=$(git rev-parse feature/two^)
+	base=$(git rev-parse develop)
+	for format in files reftable; do
+		if [ "$format" = reftable ] && ! git init -h 2>&1 | grep -q -- --ref-format; then continue; fi
+		for copy in oracle reader; do
+			root="$TMP/$format/$copy"
+			GIT_DEFAULT_REF_FORMAT="$format" git clone -q --branch develop "$ORIGIN" "$root/main"
+			git -C "$root/main" config reviewworkflow.base develop
+			git -C "$root/main" worktree add -q -b sibling "$root/revision" "$base"
+			git -C "$root/main" worktree add -q -b reading "$root/active" "$first"
+			git -C "$root/revision" update-ref refs/bisect/good "$first"
+			git -C "$root/active" update-ref --create-reflog ORIG_HEAD "$base"
+			git -C "$root/active" update-ref refs/worktree/review-start/source "$first"
+			dir=$(git -C "$root/main" rev-parse --absolute-git-dir)
+			if [ "$format" = files ]; then
+				mkdir -p "$dir/custom"
+				printf '%s\n' "$first" >"$dir/custom/checkpoint"
+			fi
+			git -C "$root/active" fetch -q origin develop
+		done
+		reader="$TMP/$format/reader"
+		oracle="$TMP/$format/oracle"
+		git -C "$oracle/main" fetch -q origin
+		git -C "$oracle/active" fetch -q origin
+		fetch_path=$(git -C "$reader/active" rev-parse --absolute-git-dir)/FETCH_HEAD
+		fetch_before=$(git hash-object "$fetch_path")
+		refs_before=$(git -C "$reader/main" for-each-ref --format='%(refname) %(objectname)' refs/heads refs/remotes)
+
+		assert_start_matches_git "$reader/main" "$oracle/main" --from worktrees/revision/HEAD
+		assert_start_matches_git "$reader/active" "$oracle/active" --from worktrees/revision/HEAD
+		assert_start_matches_git "$reader/active" "$oracle/active" --base main-worktree/HEAD
+		assert_start_matches_git "$reader/active" "$oracle/active" --from worktrees/revision/refs/bisect/good
+		assert_start_matches_git "$reader/active" "$oracle/active" --from refs/worktree/review-start/source
+		if [ "$format" = files ]; then
+			assert_start_matches_git "$reader/active" "$oracle/active" --from custom/checkpoint
+		fi
+		for entry in direct prepared; do
+			# Start/abort can replace ORIG_HEAD through Git's reset machinery.
+			git -C "$reader/active" update-ref --create-reflog ORIG_HEAD "$base"
+			assert_start_matches_git "$reader/active" "$oracle/active" --from 'ORIG_HEAD@{0}' "$entry"
+		done
+		[ "$(git hash-object "$fetch_path")" = "$fetch_before" ]
+		[ "$(git -C "$reader/main" for-each-ref --format='%(refname) %(objectname)' refs/heads refs/remotes)" = "$refs_before" ]
+		[ "$(git -C "$reader/revision" rev-parse HEAD)" = "$base" ]
+		[ "$(git -C "$reader/revision" rev-parse refs/bisect/good)" = "$first" ]
+	done
+}
+
+@test "start keeps Git symlink symrefs in the isolated fetch" {
+	make_two_commit_feature
+	first=$(git rev-parse feature/two^)
+	git push -q origin "$first:refs/heads/cutoff"
+	git clone -q --branch develop "$ORIGIN" "$TMP/oracle"
+	git config reviewworkflow.base develop
+	for repo in "$WORK" "$TMP/oracle"; do
+		ln -s refs/remotes/origin/cutoff "$repo/.git/refs/heads/symlink-cutoff" 2>/dev/null || skip 'symlinks unavailable'
+		[ -L "$repo/.git/refs/heads/symlink-cutoff" ] || skip 'symlinks unavailable'
+		[ "$(git -C "$repo" symbolic-ref refs/heads/symlink-cutoff)" = refs/remotes/origin/cutoff ]
+	done
+	git -C "$TMP/oracle" fetch -q origin
+	assert_start_matches_git "$WORK" "$TMP/oracle" --from refs/heads/symlink-cutoff
+	[ -L .git/refs/heads/symlink-cutoff ]
+	[ "$(git symbolic-ref refs/heads/symlink-cutoff)" = refs/remotes/origin/cutoff ]
+}
+
+@test "start refuses configured fetch into a branch checked out in another worktree" {
+	bats_require_minimum_version 1.5.0
+	make_two_commit_feature
+	base=$(git rev-parse develop)
+	git worktree add -q -b occupied "$TMP/occupied" "$base"
+	git config --add remote.origin.fetch '+refs/heads/feature/two:refs/heads/occupied'
+	run --separate-stderr git fetch -q origin
+	[ "$status" -eq 128 ]
+	[[ "$stderr" == *"refusing to fetch into branch 'refs/heads/occupied'"* ]]
+	for flag in --no-walk --prepare; do
+		run --separate-stderr git review start "$flag" -- feature/two
+		[ "$status" -eq 1 ]
+		[ "$stdout" = '' ]
+		[[ "$stderr" == *"refusing to fetch into branch 'refs/heads/occupied'"* ]]
+		[ "$(git -C "$TMP/occupied" rev-parse HEAD)" = "$base" ]
+		[ "$(git branch --show-current)" = develop ]
+		[ -z "$(git diff --cached --name-only)" ]
+		! git show-ref --verify --quiet refs/heads/review/feature/two
+	done
+}
+
+@test "start prepares index revisions from the caller directory and alternate index" {
+	make_two_commit_feature
+	first=$(git rev-parse feature/two^)
+	index="$TMP/selection.index"
+	mkdir "$WORK/selection"
+	GIT_INDEX_FILE="$index" git read-tree HEAD
+	GIT_INDEX_FILE="$index" git update-index --add --cacheinfo "160000,$first,selection/cutoff"
+	selector=:./cutoff
+	expected=$(GIT_INDEX_FILE="$index" git -C selection rev-parse --verify "$selector")
+	[ "$expected" = "$first" ]
+	before=$(git hash-object "$index")
+
+	run env GIT_INDEX_FILE="$index" git -C selection review start --prepare --from "$selector" -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git hash-object "$index")" = "$before" ]
+	[ -z "$(git ls-files -- selection/cutoff)" ]
+
+	run git -C selection review start "--prepared=$token" --from "$selector" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewrangefrom)" = "$expected" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	[ "$(git hash-object "$index")" = "$before" ]
+}
+
+@test "start honors an external shallow boundary when Git searches commit messages" {
+	make_two_commit_feature
+	first=$(git rev-parse feature/two^)
+	base=$(git rev-parse develop)
+	message=$(git log -1 --format=%s "$first")
+	hidden=$(GIT_COMMITTER_DATE=2030-01-01T00:00:00Z git commit-tree "$base^{tree}" -p "$base" -m "$message")
+	boundary=$(git commit-tree "$base^{tree}" -p "$hidden" -m 'shallow boundary')
+	git push -q origin "$boundary:refs/heads/shallow-branch"
+	git clone -q --branch develop "$ORIGIN" "$TMP/oracle"
+	git fetch -q origin
+	[ "$(git rev-parse --verify ":/$message")" = "$hidden" ]
+	for repo in "$WORK" "$TMP/oracle"; do printf '%s\n' "$boundary" >"$repo/external-shallow"; done
+	# Neither Git nor Start should treat the external path as a normal
+	# untracked file in this fixture. Each clone has its own shallow input.
+	printf '/external-shallow\n' >>.git/info/exclude
+	export GIT_SHALLOW_FILE=external-shallow
+	git -C "$TMP/oracle" fetch -q origin
+	[ "$(git -C "$TMP/oracle" rev-parse --verify ":/$message")" = "$first" ]
+	assert_start_matches_git "$WORK" "$TMP/oracle" --base ":/$message"
+	[ "$(cat external-shallow)" = "$boundary" ]
+	[ ! -e .git/shallow ]
+
+	# An explicitly empty override ignores a configured shallow file.
+	for repo in "$WORK" "$TMP/oracle"; do cp "$repo/external-shallow" "$repo/.git/shallow"; done
+	GIT_SHALLOW_FILE=
+	[ "$(git -C "$TMP/oracle" rev-parse --verify ":/$message")" = "$hidden" ]
+	assert_start_matches_git "$WORK" "$TMP/oracle" --base ":/$message"
+	[ "$(cat .git/shallow)" = "$boundary" ]
 }
 
 @test "an explicit cutoff survives draft preparation save and reopen" {

@@ -362,8 +362,9 @@ if [ "$prepare" -eq 1 ]; then
 	# The manifest pins both endpoints, even when a selector is a movable ref.
 	_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$_rs_mode_flags")
 	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
+	_rs_ancestry=$(review_ancestry_id) || die 'could not read current review ancestry'
 	_rs_pack=$(start_range_commit "$_rs_identity" "$_rs_base_label" "$base" \
-		"$tip" "$baseref" "$prev" "$pinned_from" "$_rs_draft_identity")
+		"$tip" "$baseref" "$prev" "$pinned_from" "$_rs_draft_identity" "$_rs_ancestry")
 	git update-ref "$_rs_tmp" "$_rs_pack"
 	_ero_branch=$src
 	_ero_tip=$tip

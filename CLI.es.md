@@ -316,15 +316,18 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   detached o estando sobre una rama `review/*`.
 - Start ejecuta el fetch configurado del remoto en una vista temporal de
   Git. Git usa esa vista para resolver selectores como `origin/main~1`,
-  `@{upstream}` y `origin/checkpoint@{0}`, incluidos destinos fuera de
-  `refs/remotes/`. También puede traer la rama elegida y la base nombrada
+  `@{upstream}`, `origin/checkpoint@{0}` y `main-worktree/HEAD`, incluidas refs
+  fuera de `refs/remotes/` y refs privadas de worktrees vinculados. También
+  puede traer la rama elegida y la base nombrada
   fuera del refspec de un clon de rama única. El repositorio real conserva
   sus ramas, tags, reflogs y `FETCH_HEAD`. Si el fetch cambiaría el límite
   shallow o las refs de reemplazo que usa Git, Start pide hacer fetch
   manualmente antes de preparar la review. El nombre de una rama base tiene
   prioridad frente a la misma abreviatura de Git, como `tags/release`. La
   preparación fija el tip, la base y cualquier commit de `--from` antes de
-  ofrecer modos de lectura.
+  ofrecer modos de lectura. Si después de preparar cambian el límite shallow,
+  los grafts o las refs de reemplazo efectivas del repositorio, volvé a preparar
+  la review para ver el rango nuevo.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que

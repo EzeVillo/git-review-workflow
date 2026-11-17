@@ -26,10 +26,12 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 - Start runs the configured fetch in a temporary Git view and leaves the
   repository's refs, reflogs and `FETCH_HEAD` in place. Git resolves bases and
-  lower bounds in that view, including symbolic refs, tags, upstreams and
-  ancestry expressions such as `origin/main~1`. The reading options, draft
-  and review use the same pinned tip, base and `--from` cutoff. Incremental
-  ranges work when the configured base is absent.
+  lower bounds in that view, including symbolic refs, tags, upstreams, private
+  refs in linked worktrees and ancestry expressions such as `origin/main~1`.
+  The reading options, draft and review use the same pinned tip, base and
+  `--from` cutoff. If the effective ancestry changes after preparation, Start
+  asks you to prepare again. Incremental ranges work when the configured base
+  is absent.
 - Start, Compare and `git review forget --delta --stale` resolve renamed
   tracking branches using the same fetch refspec mapping, including PR refs.
 - Drafting for an active review uses its pinned revisions. Delta drafts use

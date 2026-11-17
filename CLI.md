@@ -308,15 +308,18 @@ Has two independent axes — **range** (where the review starts) and **layout**
   since you would be reviewing a different snapshot than you have. With no branch,
   fails on a detached HEAD or while on a `review/*` branch.
 - Start runs the remote's configured fetch in a temporary Git view. Git uses
-  that view to resolve selectors such as `origin/main~1`, `@{upstream}`, and
-  `origin/checkpoint@{0}`, including destinations outside `refs/remotes/`.
+  that view to resolve selectors such as `origin/main~1`, `@{upstream}`,
+  `origin/checkpoint@{0}`, and `main-worktree/HEAD`, including refs outside
+  `refs/remotes/` and the private refs of linked worktrees.
   The selected branch and named base can also be fetched outside a
   single-branch refspec. The real repository keeps its branches, tags,
   reflogs, and `FETCH_HEAD`. If the fetch would change the shallow boundary or
   the replacement refs Git uses, Start asks you to fetch manually before
   preparing the review. A base branch name has priority over an identical Git
   abbreviation such as `tags/release`. Preparation pins the tip, base and any
-  `--from` commit before offering reading layouts.
+  `--from` commit before offering reading layouts. If the repository's shallow
+  boundary, grafts or effective replacement refs change after preparation, run
+  the preparation again to see the new range.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review

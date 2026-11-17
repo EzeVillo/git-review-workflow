@@ -5310,6 +5310,42 @@ review_cached_base() {
 	review_commit_oid "$2/$1" || review_commit_oid "$1"
 }
 
+# Unlike --git-path index, --git-path shallow does not report an override.
+# Git reads relative overrides from the worktree root. Empty disables shallow.
+review_shallow_path() {
+	if [ "${GIT_SHALLOW_FILE+x}" != x ]; then
+		git rev-parse --git-path shallow
+		return
+	fi
+	case "$GIT_SHALLOW_FILE" in
+	''|/*|[A-Za-z]:[\\/]*) printf '%s\n' "$GIT_SHALLOW_FILE" ;;
+	*) printf '%s/%s\n' "$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)" "$GIT_SHALLOW_FILE" ;;
+	esac
+}
+
+review_uses_replacements() {
+	[ "${GIT_NO_REPLACE_OBJECTS+x}" != x ] && [ "$(git config --bool --get core.useReplaceRefs || true)" != false ]
+}
+
+# A pinned OID can still describe a different tree or ancestry after Git's
+# replacement refs, grafts or shallow boundary change. Pending Start tokens
+# bind these inputs as well as the selected OIDs.
+review_ancestry_id() (
+	_rai_shallow=$(review_shallow_path) || exit 1
+	_rai_grafts=$(git rev-parse --git-path info/grafts) || exit 1
+	_rai_replacements=''
+	if review_uses_replacements; then
+		_rai_replacements=$(git replace --format=medium --list) || exit 1
+	fi
+	_rai_files=''
+	for _rai_path in "$_rai_shallow" "$_rai_grafts"; do
+		_rai_digest=-
+		if [ -f "$_rai_path" ]; then _rai_digest=$(git hash-object --no-filters -- "$_rai_path") || exit 1; fi
+		_rai_files="$_rai_files $_rai_digest"
+	done
+	printf '%s\n' "$_rai_files" "$_rai_replacements" | git hash-object --stdin
+)
+
 # Keep the effective configuration, including includes scoped to the original
 # gitdir, worktree configuration and command-line overrides. Git's null format
 # distinguishes a valueless key from an empty value and preserves multiline values.
@@ -5327,13 +5363,13 @@ review_view_config() {
 		fi
 	fi
 	rm -f "$1/config.probe" || return 1
-	: >"$1/config" || return 1
+	: >"$_review_view_common/config" || return 1
 	: >"$1/global-config" || return 1
 	# POSIX awk is not required to handle NUL as a record separator.
 	LC_ALL=C od -An -v -tu1 "$1/config.records" |
-		REVIEW_VIEW_DIR="$1" REVIEW_VIEW_SCOPED="$_review_view_global" LC_ALL=C awk '
+		REVIEW_VIEW_DIR="$1" REVIEW_VIEW_CONFIG="$_review_view_common/config" REVIEW_VIEW_SCOPED="$_review_view_global" LC_ALL=C awk '
 		BEGIN {
-			local_config = ENVIRON["REVIEW_VIEW_DIR"] "/config"
+			local_config = ENVIRON["REVIEW_VIEW_CONFIG"]
 			global_config = ENVIRON["REVIEW_VIEW_DIR"] "/global-config"
 			scoped = ENVIRON["REVIEW_VIEW_SCOPED"] == "1"
 		}
@@ -5385,53 +5421,84 @@ review_view_config() {
 	rm -f "$1/config.records"
 }
 
+# A revision can name an arbitrary ref at the root of a gitdir, in addition
+# to refs/, reflogs and backend tables. Copy the administrative state intact.
+# Objects are shared separately. Hooks, LFS data and embedded repositories do
+# not participate in this repository's ref store.
+review_view_copy_gitdir() (
+	_rvc_source=$1 _rvc_dest=$2
+	shift 2
+	mkdir -p "$_rvc_dest" || return 1
+	for _rvc_path in "$_rvc_source"/* "$_rvc_source"/.[!.]* "$_rvc_source"/..?*; do
+		case "${_rvc_path##*/}" in
+		objects|hooks|lfs|modules|worktrees|config|config.worktree|commondir|shallow|index|*.lock) continue ;;
+		esac
+		if [ -f "$_rvc_path" ] || [ -d "$_rvc_path" ] || [ -L "$_rvc_path" ]; then
+			set -- "$@" "$_rvc_path"
+		fi
+	done
+	[ "$#" -eq 0 ] || cp -RP "$@" "$_rvc_dest/" || return 1
+	# Never leave a symlink that Git could write through to the source. Git
+	# also accepts old-style symlink symrefs, even if the link is dangling
+	# as a filesystem path. Preserve those in Git's textual form.
+	find "$_rvc_dest" -type l -exec sh -c '
+		from=$1 to=$2
+		shift 2
+		for link do
+			original=$from/${link#"$to/"}
+			target=$(readlink "$original") || exit 1
+			rm -f "$link" || exit 1
+			case "$target" in
+			refs/*) printf "ref: %s\n" "$target" >"$link" || exit 1 ;;
+			*) if [ -f "$original" ] || [ -d "$original" ]; then cp -RL "$original" "$link" || exit 1; fi ;;
+			esac
+		done
+	' sh "$_rvc_source" "$_rvc_dest" {} +
+)
+
 review_view_open() {
 	_review_view=$1
 	_rvo_common=$(git rev-parse --git-common-dir) || return 1
 	_rvo_common=$(cd "$_rvo_common" && pwd -P) || return 1
 	_rvo_gitdir=$(git rev-parse --absolute-git-dir) || return 1
 	_rvo_gitdir=$(cd "$_rvo_gitdir" && pwd -P) || return 1
-	_rvo_shallow=$(git rev-parse --git-path shallow) || return 1
 	_review_view_objects=$(git rev-parse --git-path objects) || return 1
 	_review_view_objects=$(cd "$_review_view_objects" && pwd -P) || return 1
-	_review_view_top=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+	_review_view_top=$(git rev-parse --show-toplevel 2>/dev/null || true)
 	_review_view_log=$(git config --get core.logAllRefUpdates || true)
 	if [ -z "$_review_view_log" ]; then
 		_review_view_log=true
 		if [ "$(git rev-parse --is-bare-repository)" = true ]; then _review_view_log=false; fi
 	fi
 
-	# Copy only the reference backend and revision inputs. Objects can be shared
-	# as with a normal fetch. The view owns its refs, reflogs, shallow file and
-	# FETCH_HEAD, including the current worktree's revision state.
-	mkdir -p "$_review_view/objects" "$_review_view/hooks" || return 1
+	# Preserve the main gitdir and the registered worktree IDs. Git resolves
+	# main-worktree/ and worktrees/<id>/ against this topology, including
+	# when the active worktree has a different HEAD or ref backend state.
+	_review_view_common=$_review_view/.git
+	mkdir -p "$_review_view_common/objects" "$_review_view/hooks" || return 1
+	review_view_copy_gitdir "$_rvo_common" "$_review_view_common" || return 1
 	review_view_config "$_review_view" || return 1
-	for _rvo_path in refs packed-refs logs reftable info/grafts; do
-		if [ -e "$_rvo_common/$_rvo_path" ]; then
-			mkdir -p "$_review_view/$(dirname "$_rvo_path")" || return 1
-			cp -RL "$_rvo_common/$_rvo_path" "$_review_view/$_rvo_path" || return 1
-		fi
+	for _rvo_linked in "$_rvo_common"/worktrees/* "$_rvo_common"/worktrees/.[!.]* "$_rvo_common"/worktrees/..?*; do
+		[ -d "$_rvo_linked" ] || continue
+		_rvo_dest="$_review_view_common/worktrees/${_rvo_linked##*/}"
+		review_view_copy_gitdir "$_rvo_linked" "$_rvo_dest" || return 1
+		printf '../..\n' >"$_rvo_dest/commondir" || return 1
 	done
-	mkdir -p "$_review_view/refs" || return 1
-	_review_view_gitdir=$_review_view
-	if [ "$_rvo_gitdir" != "$_rvo_common" ]; then
-		_review_view_gitdir="$_review_view/worktrees/revision"
-		mkdir -p "$_review_view_gitdir" || return 1
-		printf '../..\n' >"$_review_view_gitdir/commondir" || return 1
-		for _rvo_path in refs reftable; do
-			if [ -d "$_rvo_gitdir/$_rvo_path" ]; then
-				cp -RL "$_rvo_gitdir/$_rvo_path" "$_review_view_gitdir/$_rvo_path" || return 1
-			fi
-		done
-	fi
-	cp "$_rvo_gitdir/HEAD" "$_review_view_gitdir/HEAD" || return 1
-	for _rvo_path in FETCH_HEAD ORIG_HEAD MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD REBASE_HEAD BISECT_HEAD logs/HEAD; do
-		if [ -f "$_rvo_gitdir/$_rvo_path" ]; then
-			mkdir -p "$_review_view_gitdir/$(dirname "$_rvo_path")" || return 1
-			cp "$_rvo_gitdir/$_rvo_path" "$_review_view_gitdir/$_rvo_path" || return 1
-		fi
-	done
-	if [ -f "$_rvo_shallow" ]; then cp "$_rvo_shallow" "$_review_view/shallow" || return 1; fi
+	mkdir -p "$_review_view_common/refs" || return 1
+	case "$_rvo_gitdir" in
+	"$_rvo_common") _review_view_gitdir=$_review_view_common ;;
+	"$_rvo_common"/worktrees/*) _review_view_gitdir=$_review_view_common/${_rvo_gitdir#"$_rvo_common/"} ;;
+	*)
+		# GIT_COMMON_DIR can also be paired with a gitdir outside worktrees/.
+		_review_view_gitdir=$_review_view/active
+		review_view_copy_gitdir "$_rvo_gitdir" "$_review_view_gitdir" || return 1
+		printf '../.git\n' >"$_review_view_gitdir/commondir" || return 1 ;;
+	esac
+	_rvo_index=$(git rev-parse --git-path index) || return 1
+	if [ -f "$_rvo_index" ]; then cp "$_rvo_index" "$_review_view_gitdir/index" || return 1; fi
+
+	_rvo_shallow=$(review_shallow_path) || return 1
+	if [ -f "$_rvo_shallow" ]; then cp "$_rvo_shallow" "$_review_view_common/shallow" || return 1; fi
 	if [ "$_review_view_global" -eq 0 ]; then
 		# Older Git cannot redirect global config. Parts conditioned on the
 		# real gitdir could otherwise disappear and change the chosen commit.
@@ -5459,9 +5526,10 @@ review_view_git() (
 		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$_review_view/global-config"
 		export GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL
 	fi
+	if [ -n "$_review_view_top" ]; then set -- --work-tree="$_review_view_top" "$@"; fi
 	GIT_OBJECT_DIRECTORY="$_review_view_objects" \
-	git -C "$_review_view_top" --git-dir="$_review_view_gitdir" \
-		-c core.bare=true -c extensions.worktreeConfig=false -c core.logAllRefUpdates="$_review_view_log" \
+	git --git-dir="$_review_view_gitdir" \
+		-c extensions.worktreeConfig=false -c core.logAllRefUpdates="$_review_view_log" \
 		-c core.hooksPath="$_review_view/hooks" -c maintenance.auto=false -c gc.auto=0 -c fetch.writeCommitGraph=false \
 		"$@"
 )
@@ -5469,15 +5537,13 @@ review_view_git() (
 review_view_fetch() {
 	review_view_git "$@" || return 1
 	# The real repository must interpret object ancestry with the same boundary.
-	if [ -f "$_rvo_shallow" ] || [ -f "$_review_view/shallow" ]; then
-		cmp -s "$_rvo_shallow" "$_review_view/shallow" ||
+	if [ -f "$_rvo_shallow" ] || [ -f "$_review_view_common/shallow" ]; then
+		cmp -s "$_rvo_shallow" "$_review_view_common/shallow" ||
 			die 'fetch changed the shallow boundary. Fetch manually and prepare the review again.'
 	fi
 	# A refspec can fetch replacements as well as branches. The same OID
 	# would then name different content inside and outside the view.
-	if [ "${GIT_NO_REPLACE_OBJECTS+x}" = x ] || [ "$(git config --bool --get core.useReplaceRefs || true)" = false ]; then
-		return 0
-	fi
+	if ! review_uses_replacements; then return 0; fi
 	_rvf_original=$(git replace --format=medium --list) || return 1
 	_rvf_fetched=$(review_view_git replace --format=medium --list) || return 1
 	[ "$_rvf_original" = "$_rvf_fetched" ] ||
@@ -5498,7 +5564,7 @@ review_view_start() {
 		esac
 		# Include the selected source in the same fetch. This also covers
 		# single-branch clones and refuses a source removed since ls-remote.
-		_rvs_tracking=refs/worktree/review-start/source
+		_rvs_tracking=refs/worktree/review-start/fetched-${_review_view##*/}
 		set -- -c "remote.$_rvs_remote.fetch=$_rvs_ref:$_rvs_tracking"
 	fi
 
@@ -5544,12 +5610,12 @@ start_range_identity() {
 }
 
 # start_range_commit <identity> <base-label> <base-selector> <tip> <base-oid>
-#                    <previous> <cutoff> [<draft-identity>]
+#                    <previous> <cutoff> [<draft-identity> [<ancestry-id>]]
 # Pin distinct endpoints, including cutoffs reached through replacements or
 # grafts. The last review point is optional for a full review and can be missing.
 start_range_commit() {
 	_src_base_selector=$3 _src_tip=$4 _src_base=$5 _src_previous=$6 _src_from=$7
-	_src_subject="$1 $2 $_src_tip ${_src_base:--} ${_src_previous:--} ${_src_from:--}${8:+ $8}"
+	_src_subject="$1 $2 $_src_tip ${_src_base:--} ${_src_previous:--} ${_src_from:--}${8:+ $8}${9:+ $9}"
 	if [ -n "$_src_previous" ] && ! git cat-file -e "$_src_previous^{commit}" 2>/dev/null; then _src_previous=''; fi
 	_src_parents=' '
 	set --
@@ -5572,7 +5638,7 @@ start_read_range() {
 	_rs_range=$(git --no-replace-objects log -1 --encoding=none --format='%B' "$_rs_pack" --)
 	_rs_nl='
 '
-	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous _rs_from _rs_draft_identity <<EOF
+	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous _rs_from _rs_draft_identity _rs_ancestry <<EOF
 ${_rs_range%%"$_rs_nl"*}
 EOF
 	_rs_base_selector=$4
@@ -5591,6 +5657,11 @@ EOF
 	[ "$_rs_received" = "$_rs_expected" ] ||
 		{ [ "$_rs_read_mode" != exact ] && [ "$_rs_draft_identity" = "$_rs_expected" ]; } ||
 		die 'prepared review does not match the selected branch and range'
+	case "$1" in
+	refs/worktree/review-start/pending/*)
+		_rs_current_ancestry=$(review_ancestry_id) || die 'could not read current review ancestry'
+		[ "$_rs_ancestry" = "$_rs_current_ancestry" ] || die 'review ancestry has changed; prepare the review again' ;;
+	esac
 	case "$_rs_base_label" in local|remote) ;; *) die 'invalid prepared review base' ;; esac
 	if [ "$_rs_base" = '-' ]; then _rs_base=''; fi
 	if [ "$_rs_previous" = '-' ]; then _rs_previous=''; fi

@@ -131,7 +131,8 @@ adoptar sus archivos.
 
 Start, Compare y Forget comparten `review_remote_ref` para mapear un nombre de seguimiento
 a una ref del servidor, incluidas refs de PR. Start aplica el fetch configurado en una vista
-temporal de refs y reflogs. Git resuelve las expresiones completas en esa vista y la CLI fija
+temporal que conserva los gitdirs y las refs de todos los worktrees. Git resuelve las expresiones
+completas en esa vista y la CLI fija
 los OID que consumen las ofertas, el borrador y Start. Para Delta y
 `--from`, una base configurada que falta no impide revisar el rango. Si está disponible,
 permite excluir los cambios ya integrados.

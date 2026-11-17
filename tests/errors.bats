@@ -88,7 +88,7 @@ start_session_ref() {
 	original_index=$(git write-tree)
 	run --separate-stderr git review start --offline --base develop feature/x
 	[ "$status" -eq 1 ]
-	[[ "$stderr" == *"cannot lock ref '$pin'"*'error: could not create review/feature/x'* ]]
+	[[ "$stderr" == *"'$pin/occupied' exists; cannot create '$pin'"*'error: could not create review/feature/x'* ]]
 	[ "$(git branch --show-current)" = develop ]
 	[ "$(git rev-parse HEAD)" = "$original_head" ]
 	[ "$(git write-tree)" = "$original_index" ]

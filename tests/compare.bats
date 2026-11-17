@@ -194,7 +194,7 @@ prepare_comparison() {
 	original_index=$(git write-tree)
 	run --separate-stderr git review compare "--prepared=$token" -- v1.0 topic
 	[ "$status" -eq 1 ]
-	[[ "$stderr" == *"cannot lock ref '$pin'"*'error: could not create review/topic'* ]]
+	[[ "$stderr" == *"'$pin/occupied' exists; cannot create '$pin'"*'error: could not create review/topic'* ]]
 	[ "$(git branch --show-current)" = develop ]
 	[ "$(git rev-parse HEAD)" = "$original_head" ]
 	[ "$(git write-tree)" = "$original_index" ]

@@ -3652,10 +3652,15 @@ walk_draft_file() {
 		return
 	fi
 	[ ! -f "$_walk_draft_file" ] || return 0
-	case "$2" in
-	*.[Mm][Dd]/*) _walk_draft_file="$1/.names/$2/.draft.md" ;;
-	*) if [ -d "$_walk_draft_file" ]; then _walk_draft_file="$1/.names/$2/.draft.md"; fi ;;
-	esac
+	if [ -d "$_walk_draft_file" ]; then
+		# Only use the alternate path when a legacy descendant owns the
+		# directory. An unexpected directory still triggers the write guard.
+		if [ -n "$(_walk_draft_list_dir "$_walk_draft_file" '' "$_walk_draft_file" legacy)" ]; then
+			_walk_draft_file="$1/.names/$2/.draft.md"
+		fi
+	elif [ ! -e "$_walk_draft_file" ]; then
+		case "$2" in *.[Mm][Dd]/*) _walk_draft_file="$1/.names/$2/.draft.md" ;; esac
+	fi
 }
 
 # walk_draft_list

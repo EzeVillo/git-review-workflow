@@ -46,6 +46,10 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Start preserves conditional includes supplied at command scope through
+  `git -c` or `GIT_CONFIG_COUNT`. The temporary view keeps their effective
+  order and scope without duplicating cumulative values or applying the
+  superproject's options to recursive submodule fetches.
 - Start and remote Compare fetch submodule commits according to Git's
   configuration before opening a recursive checkout. Start preserves each
   submodule's conditional global configuration and can fetch repositories

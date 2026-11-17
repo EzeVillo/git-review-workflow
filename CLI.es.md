@@ -317,7 +317,10 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
 - Start ejecuta el fetch configurado del remoto en una vista temporal de
   Git. Git usa esa vista para resolver selectores como `origin/main~1`,
   `@{upstream}`, `origin/checkpoint@{0}` y `main-worktree/HEAD`, incluidas refs
-  fuera de `refs/remotes/` y refs privadas de worktrees vinculados. También
+  fuera de `refs/remotes/` y refs privadas de worktrees vinculados. La vista
+  conserva los valores efectivos, el orden y el ámbito de comando de los
+  includes condicionales y las opciones de `git -c` o `GIT_CONFIG_COUNT` para
+  cada repositorio, incluidos los fetches recursivos de submódulos. También
   puede traer la rama elegida y la base nombrada
   fuera del refspec de un clon de rama única. El repositorio real conserva
   sus ramas, tags, reflogs y `FETCH_HEAD`. Si el fetch cambiaría el límite

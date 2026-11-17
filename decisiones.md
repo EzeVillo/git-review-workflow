@@ -1849,6 +1849,22 @@ también el hook del submódulo que debía poder rechazar su fetch. La prueba
 contrasta ese rechazo con Git nativo y comprueba que los hooks del fetch
 temporal permanezcan aislados.
 
+Las opciones de comando del usuario se capturan después de que Git resuelve
+sus includes en el gitdir original. Heredar solamente `GIT_CONFIG_PARAMETERS`
+o `GIT_CONFIG_COUNT` no alcanza: un `includeIf.gitdir` que coincidía con el
+repositorio deja de hacerlo en la vista y puede perder refspecs o reglas de
+ascendencia, eligiendo un corte incorrecto con código 0. Tampoco se agregan
+los valores resueltos encima de los heredados: eso duplica opciones
+acumulativas y puede alterar su orden. Cada repositorio tiene una captura
+propia que se carga una sola vez en ámbito de comando, condicionada a su
+gitdir. Las opciones internas se aplican después y sólo al padre temporal.
+En Git 2.23, sin `--show-scope` ni `GIT_CONFIG_GLOBAL`, se extraen las opciones
+crudas por su origen y Git expande sus includes desde el repositorio original.
+Las pruebas comparan los OID y el índice con un fetch nativo, además de los
+valores y sus ámbitos; cubren includes anidados, entorno, valores vacíos y
+sin valor, bytes especiales y la configuración efectiva dentro de un hook
+del submódulo.
+
 Git evalúa los selectores completos después del fetch. Así un destino que acaba de aparecer puede tener precedencia sobre una rama homónima, @{upstream} puede resolver con la configuración del worktree y @{n} usa el historial de Git. La búsqueda de una base da prioridad a su nombre de rama. El mapeo de la rama remota de Start, el fetch explícito de Compare y la presencia remota de Forget comparten el mapeo de refspecs. Start puede incluir la rama elegida y una base nombrada fuera del refspec de un clon de rama única. Compare en caché conserva su revisión literal.
 
 Las ofertas, el borrador y la apertura usan los commits fijados por la preparación. Un cutoff explícito de Start se conserva al preparar un borrador, al retomarlo y al validar su contenido. Los tokens de Start validan el selector original y la ascendencia efectiva al consumirlos, porque Git puede dar otro contenido al mismo OID cuando cambian los reemplazos, los grafts o el límite shallow. El contexto del borrador valida la rama, la base y el modo y usa el cutoff guardado por OID. Las refs de sesión conservan el rango durante Save, Continue y Undo. Las refs del último punto revisado mantienen el commit alcanzable hasta reemplazarlo o ejecutar Forget. El resultado de Finish conserva los commits que necesitan los comentarios privados, aun después de Clean.

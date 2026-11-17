@@ -137,6 +137,12 @@ los OID que consumen las ofertas, el borrador y Start. Para Delta y
 `--from`, una base configurada que falta no impide revisar el rango. Si está disponible,
 permite excluir los cambios ya integrados.
 
+La vista conserva las opciones de comando efectivas de cada repositorio,
+incluidos los includes condicionales de `git -c` y `GIT_CONFIG_COUNT`. Se
+cargan una sola vez, en el mismo orden y ámbito, con condiciones por gitdir:
+duplicar los valores heredados altera las opciones acumulativas y reutilizar
+los del padre en un submódulo cambia su configuración.
+
 Start y Compare fijan los rangos de sesión en refs privadas del worktree con una
 clave plana por nombre. Cuando la sesión tiene rango fijado, la ref y la rama
 se crean en la misma transacción antes del checkout. Se siguen leyendo las

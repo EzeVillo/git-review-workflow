@@ -346,3 +346,45 @@ EOF
 	assert_parent_fetch_unchanged
 	[ -z "$(git for-each-ref --format='%(refname)' refs/worktree/review-start/pending/)" ]
 }
+
+@test "start preserves its own and its submodules command options during recursive fetch" {
+	advance_submodule
+	mirror="$TMP/child-mirror.git"
+	git clone -q --bare "$CHILD" "$mirror"
+	parent_fragment="$TMP/parent-command.config"
+	child_fragment="$TMP/child-command.config"
+	parent_gitdir=$(git rev-parse --absolute-git-dir)
+	child_gitdir=$(git -C "$MODULE" rev-parse --absolute-git-dir)
+	hooks="$TMP/command-hooks"
+	mkdir "$hooks"
+	git config --file "$parent_fragment" audit.order parent
+	git config --file "$child_fragment" audit.order child
+	git config --file "$child_fragment" core.hooksPath "$hooks"
+	git config --file "$child_fragment" "url.$mirror.insteadOf" "$TMP/unavailable"
+	git -C "$MODULE" config remote.origin.url "$TMP/unavailable"
+	config_git=(env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=audit.order GIT_CONFIG_VALUE_0=environment
+		git -c audit.order=before
+		-c "includeIf.gitdir:$parent_gitdir.path=$parent_fragment"
+		-c "includeIf.gitdir:$child_gitdir.path=$child_fragment"
+		-c audit.order=after)
+	export REVIEW_CONFIG_EXPECTED="$TMP/expected-command"
+	export REVIEW_CONFIG_ACTUAL="$TMP/actual-command"
+	"${config_git[@]}" -C "$MODULE" config --show-scope --null --get-all audit.order >"$REVIEW_CONFIG_EXPECTED"
+	cat >"$hooks/reference-transaction" <<'EOF'
+#!/bin/sh
+set -eu
+if [ "$1" = prepared ]; then
+	git config --show-scope --null --get-all audit.order >"$REVIEW_CONFIG_ACTUAL"
+	cmp "$REVIEW_CONFIG_EXPECTED" "$REVIEW_CONFIG_ACTUAL"
+fi
+EOF
+	chmod +x "$hooks/reference-transaction"
+	remember_parent_fetch
+	run "${config_git[@]}" review start --prepare -- topic
+	[ "$status" -eq 0 ]
+	[ -f "$REVIEW_CONFIG_ACTUAL" ]
+	cmp "$REVIEW_CONFIG_EXPECTED" "$REVIEW_CONFIG_ACTUAL"
+	git -C "$MODULE" cat-file -e "$CHILD_AFTER^{commit}"
+	assert_still_on_main
+	assert_parent_fetch_unchanged
+}

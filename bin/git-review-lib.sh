@@ -5148,7 +5148,9 @@ compare_resolve() {
 	if [ -n "${compare_prepared:-}" ]; then
 		compare_prepared_ref=$(compare_pending_ref "$compare_prepared")
 		compare_pack_oid=$(git show-ref --hash --verify "$compare_prepared_ref" 2>/dev/null) || die 'prepared comparison is unavailable'
-		_compare_range=$(git --no-replace-objects log -1 --format='%s %P' "$compare_pack_oid" -- 2>/dev/null) || die 'prepared comparison is unavailable'
+		_compare_manifest=$(git --no-replace-objects log -1 --format='%s %P%n%b' "$compare_pack_oid" -- 2>/dev/null) || die 'prepared comparison is unavailable'
+		_compare_range=$(printf '%s\n' "$_compare_manifest" | sed -n '1p')
+		_compare_ancestry=$(printf '%s\n' "$_compare_manifest" | sed -n 's/^review-ancestry //p')
 		_compare_parents=${_compare_range#* }
 		acommit=${_compare_parents%% *}
 		bcommit=${_compare_parents#* }
@@ -5158,6 +5160,10 @@ compare_resolve() {
 			die 'prepared comparison has an invalid revision pair'
 		fi
 		[ "$_compare_range" = "$compare_draft_id $acommit $bcommit" ] || die 'prepared comparison does not match the selected revisions'
+		if [ -n "$_compare_ancestry" ]; then
+			_compare_current_ancestry=$(review_ancestry_id) || die 'could not read current comparison ancestry'
+			[ "$_compare_ancestry" = "$_compare_current_ancestry" ] || die 'comparison ancestry has changed; prepare the comparison again'
+		fi
 	else
 		acommit=$(compare_literal_commit "$a") || exit 1
 		bcommit=$(compare_literal_commit "$b") || exit 1
@@ -5209,7 +5215,8 @@ compare_pending_ref() {
 }
 
 compare_pack_range() {
-	compare_lease_commit "$compare_draft_id" -p "$acommit" -p "$bcommit"
+	_compare_ancestry=$(review_ancestry_id) || return 1
+	compare_lease_commit "$(printf '%s\n\nreview-ancestry %s\n' "$compare_draft_id" "$_compare_ancestry")" -p "$acommit" -p "$bcommit"
 }
 
 compare_lease_commit() {
@@ -5225,7 +5232,7 @@ compare_lease_commit() {
 review_fetch_isolated() {
 	_rfi_head=''
 	if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then _rfi_head='--no-write-fetch-head'; fi
-	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags --no-recurse-submodules ${_rfi_head:+"$_rfi_head"} -- "$@"
+	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags ${_rfi_head:+"$_rfi_head"} -- "$@"
 }
 
 review_remote_ref() {
@@ -5384,24 +5391,27 @@ review_ancestry_id() (
 # gitdir, worktree configuration and command-line overrides. Git's null format
 # distinguishes a valueless key from an empty value and preserves multiline values.
 review_view_config() {
-	printf '[reviewview]\n\tprobe = temporary\n' >"$1/config.probe" || return 1
+	_rvc_directory=$1
+	shift
+	if [ "$#" -eq 0 ]; then set -- git; fi
+	printf '[reviewview]\n\tprobe = temporary\n' >"$_rvc_directory/config.probe" || return 1
 	_review_view_global=0
-	if [ "$(GIT_CONFIG_GLOBAL="$1/config.probe" git config --global --get reviewview.probe || true)" = temporary ]; then
+	if [ "$(GIT_CONFIG_GLOBAL="$_rvc_directory/config.probe" "$@" config --global --get reviewview.probe || true)" = temporary ]; then
 		_review_view_global=1
-		git config --includes --show-scope --null --list >"$1/config.records" || return 1
+		"$@" config --includes --show-scope --null --list >"$_rvc_directory/config.records" || return 1
 	else
 		# Older Git still reads the ordinary global and system files itself.
-		git config --local --includes --null --list >"$1/config.records" || return 1
-		if [ "$(git config --bool --get extensions.worktreeConfig || true)" = true ]; then
-			git config --worktree --includes --null --list >>"$1/config.records" || return 1
+		"$@" config --local --includes --null --list >"$_rvc_directory/config.records" || return 1
+		if [ "$("$@" config --bool --get extensions.worktreeConfig || true)" = true ]; then
+			"$@" config --worktree --includes --null --list >>"$_rvc_directory/config.records" || return 1
 		fi
 	fi
-	rm -f "$1/config.probe" || return 1
+	rm -f "$_rvc_directory/config.probe" || return 1
 	: >"$_review_view_common/config" || return 1
-	: >"$1/global-config" || return 1
+	: >"$_rvc_directory/global-config" || return 1
 	# POSIX awk is not required to handle NUL as a record separator.
-	LC_ALL=C od -An -v -tu1 "$1/config.records" |
-		REVIEW_VIEW_DIR="$1" REVIEW_VIEW_CONFIG="$_review_view_common/config" REVIEW_VIEW_SCOPED="$_review_view_global" LC_ALL=C awk '
+	LC_ALL=C od -An -v -tu1 "$_rvc_directory/config.records" |
+		REVIEW_VIEW_DIR="$_rvc_directory" REVIEW_VIEW_CONFIG="$_review_view_common/config" REVIEW_VIEW_SCOPED="$_review_view_global" LC_ALL=C awk '
 		BEGIN {
 			local_config = ENVIRON["REVIEW_VIEW_CONFIG"]
 			global_config = ENVIRON["REVIEW_VIEW_DIR"] "/global-config"
@@ -5452,8 +5462,46 @@ review_view_config() {
 			}
 		}
 	' || return 1
-	rm -f "$1/config.records"
+	rm -f "$_rvc_directory/config.records"
 }
+
+# Git treats includeIf gitdir conditions as globs, even for an exact path.
+review_view_config_include() {
+	_rvci_pattern=$(printf '%s' "$1" | sed 's/[][?*\\]/\\&/g') || return 1
+	git config --file "$_review_view/global-config" --add "includeIf.gitdir:$_rvci_pattern.path" "$2"
+}
+
+# Submodule fetches inherit GIT_CONFIG_GLOBAL. Select each repository's own
+# effective system/global configuration, including its conditional includes.
+review_view_submodule_config() (
+	[ "$_review_view_global" -eq 1 ] || return 0
+	_rvsc_gitdir=$(git --git-dir="$1" rev-parse --absolute-git-dir) || return 1
+	_rvsc_key=$(printf '%s' "$_rvsc_gitdir" | git hash-object --stdin) || return 1
+	_rvsc_directory="$_review_view/submodule-config/$_rvsc_key"
+	if [ -d "$_rvsc_directory" ]; then return 0; fi
+	mkdir -p "$_rvsc_directory" || return 1
+	for _rvsc_var in $(git rev-parse --local-env-vars); do
+		case "$_rvsc_var" in GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT) ;; *) unset "$_rvsc_var" ;; esac
+	done
+	_review_view_common=$_rvsc_directory
+	review_view_config "$_rvsc_directory" git --git-dir="$_rvsc_gitdir" || return 1
+	review_view_config_include "$_rvsc_gitdir" "$_rvsc_directory/global-config"
+)
+
+# Names may contain directory components. Stop at a repository and recurse
+# only into its modules directory, keeping object stores out of the traversal.
+review_view_module_configs() (
+	[ -d "$1" ] || return 0
+	for _rvmc_path in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+		[ -d "$_rvmc_path" ] || continue
+		if [ -f "$_rvmc_path/HEAD" ] && [ -f "$_rvmc_path/config" ]; then
+			review_view_submodule_config "$_rvmc_path" || return 1
+			review_view_module_configs "$_rvmc_path/modules" || return 1
+		else
+			review_view_module_configs "$_rvmc_path" || return 1
+		fi
+	done
+)
 
 # A revision can name an arbitrary ref at the root of a gitdir, in addition
 # to refs/, reflogs and backend tables. Copy the administrative state intact.
@@ -5489,6 +5537,23 @@ review_view_copy_gitdir() (
 			if [ -f "$original" ] || [ -d "$original" ]; then cp -RL "$original" "$link" || exit 1; fi
 		done
 	' sh "$_rvc_source" "$_rvc_dest" {} +
+)
+
+# Git falls back to modules/<name> when a submodule has no checkout. Point
+# those gitfiles at the existing repositories so Git can fetch there as usual.
+# Gitfiles work on Windows without native symbolic links.
+review_view_modules() (
+	mkdir -p "$2" || return 1
+	for _rvm_module in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+		[ -d "$_rvm_module" ] || continue
+		_rvm_target="$2/${_rvm_module##*/}"
+		if [ -f "$_rvm_module/HEAD" ] && [ -f "$_rvm_module/config" ]; then
+			_rvm_gitdir=$(git --git-dir="$_rvm_module" rev-parse --absolute-git-dir) || return 1
+			printf 'gitdir: %s\n' "$_rvm_gitdir" >"$_rvm_target" || return 1
+		else
+			review_view_modules "$_rvm_module" "$_rvm_target" || return 1
+		fi
+	done
 )
 
 review_view_open() {
@@ -5531,6 +5596,26 @@ review_view_open() {
 	esac
 	_rvo_index=$(git rev-parse --git-path index) || return 1
 	if [ -f "$_rvo_index" ]; then cp "$_rvo_index" "$_review_view_gitdir/index" || return 1; fi
+	_rvo_modules=$(git rev-parse --git-path modules) || return 1
+	if [ -d "$_rvo_modules" ]; then
+		_rvo_modules=$(cd "$_rvo_modules" && pwd -P) || return 1
+		_rvo_view_modules=$(review_view_git rev-parse --git-path modules) || return 1
+		review_view_modules "$_rvo_modules" "$_rvo_view_modules" || return 1
+	fi
+	if [ "$_review_view_global" -eq 1 ]; then
+		mv "$_review_view/global-config" "$_review_view/parent-global-config" || return 1
+		# Git's native absolute path also matches includeIf on Git for Windows.
+		_rvo_parent_gitdir=$(git --git-dir="$_review_view_gitdir" rev-parse --absolute-git-dir) || return 1
+		review_view_config_include "$_rvo_parent_gitdir" "$_review_view/parent-global-config" || return 1
+		review_view_module_configs "$_rvo_modules" || return 1
+		# Populated submodules may keep their gitdirs outside modules/.
+		if [ -n "$_review_view_top" ] && [ -f "$_review_view_top/.gitmodules" ]; then
+			git submodule foreach --quiet --recursive 'git rev-parse --absolute-git-dir' >"$_review_view/submodule-gitdirs" || return 1
+			while IFS= read -r _rvo_submodule; do
+				review_view_submodule_config "$_rvo_submodule" || return 1
+			done <"$_review_view/submodule-gitdirs"
+		fi
+	fi
 
 	_rvo_shallow=$(review_shallow_path) || return 1
 	if [ -f "$_rvo_shallow" ]; then cp "$_rvo_shallow" "$_review_view_common/shallow" || return 1; fi
@@ -5588,7 +5673,6 @@ review_view_fetch() {
 review_view_start() {
 	_rvs_remote=$1 _rvs_source=$2 _rvs_base=$3 _rvs_from=$4 _rvs_local=$5
 	_rvs_refs=$(review_remote_refs "$_rvs_remote") || die "could not update from $_rvs_remote"
-	set --
 	if [ "$_rvs_local" -eq 0 ]; then
 		_rvs_status=0
 		_rvs_ref=$(review_remote_ref "$_rvs_remote" "$_rvs_source" "$_rvs_refs") || _rvs_status=$?
@@ -5599,8 +5683,10 @@ review_view_start() {
 		esac
 		# Include the selected source in the same fetch. This also covers
 		# single-branch clones and refuses a source removed since ls-remote.
+		# Write into the temporary config: Git passes -c values to each
+		# submodule fetch, where the superproject's branches do not apply.
 		_rvs_tracking=refs/worktree/review-start/fetched-${_review_view##*/}
-		set -- -c "remote.$_rvs_remote.fetch=$_rvs_ref:$_rvs_tracking"
+		git config --file "$_review_view_common/config" --add "remote.$_rvs_remote.fetch" "$_rvs_ref:$_rvs_tracking" || return 1
 	fi
 
 	_rvs_base_tracking="refs/remotes/$_rvs_remote/$_rvs_base"
@@ -5609,10 +5695,10 @@ review_view_start() {
 		review_fetch_source "$_rvs_remote" "$_rvs_base_tracking" "$_rvs_refs" >/dev/null || _rvs_status=$?
 		if [ "$_rvs_status" -eq 5 ] &&
 			_rvs_base_source=$(review_remote_ref "$_rvs_remote" "$_rvs_base" "$_rvs_refs"); then
-			set -- "$@" -c "remote.$_rvs_remote.fetch=$_rvs_base_source:$_rvs_base_tracking"
+			git config --file "$_review_view_common/config" --add "remote.$_rvs_remote.fetch" "$_rvs_base_source:$_rvs_base_tracking" || return 1
 		fi
 	fi
-	review_view_fetch "$@" fetch --quiet --no-recurse-submodules -- "$_rvs_remote" ||
+	review_view_fetch fetch --quiet -- "$_rvs_remote" ||
 		die "could not update from $_rvs_remote"
 	if [ "$_rvs_local" -eq 0 ]; then
 		# Consumed by start after the temporary view has been removed.
@@ -5894,8 +5980,8 @@ compare_prepare() {
 		_compare_lease=$(compare_lease_commit 'Prepare comparison' </dev/null)
 		git update-ref "$_compare_pending-lease" "$_compare_lease"
 	fi
-	# A private refspec with an empty refmap leaves even the corresponding
-	# tracking branch alone. Ignore configured tag following and submodule fetches.
+	# A private refspec with an empty refmap leaves the parent tracking branch
+	# alone. Git still fetches the submodule commits needed by a recursive checkout.
 	if [ -n "$_compare_a_remote" ] && [ "$_compare_a_remote" = "$_compare_b_remote" ]; then
 		if [ "$_compare_a_branch" = "$_compare_b_branch" ]; then die "$a and $b select the same remote branch; nothing to compare"; fi
 		review_fetch_isolated "$_compare_a_remote" \

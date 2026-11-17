@@ -1814,9 +1814,27 @@ El selector agrupa por nombre las ramas conocidas y pide una versión por cada e
 
 La preparación fija ambos commits antes de calcular las ofertas. Su ref es privada del worktree y el token sólo se acepta para los dos selectores originales. Cancelar libera la preparación y Clean elimina las preparaciones abandonadas de más de un día. Cada rama de Compare conserva su propio par a través de Save y Continue. Abort y Clean liberan el par de la sesión retirada, incluidos los huérfanos cuando se borró la rama a mano. Los borradores conservan sus extremos hasta borrarlos y los resultados Local conservan los commits que necesitan sus rangos históricos. Los clientes conservan el flujo literal si la CLI instalada es anterior a esta opción.
 
+Los tokens nuevos de Compare conservan además la identidad de la ascendencia
+efectiva con el mismo cálculo de Start. Antes de abrirlos o crear su borrador se
+comprueban los reemplazos, los grafts y el límite shallow. Reemplazar el commit
+inferior después de preparar podía convertir el diff en vacío conservando los
+dos OID. Las preparaciones anteriores siguen siendo legibles.
+
 ### Start: preparación del rango y destino de Finish
 
 Start ejecuta el fetch configurado en una vista temporal. Conserva el gitdir principal y los identificadores y el estado Git de todos los worktrees registrados. Así Git puede resolver refs privadas, reflogs y referencias al índice desde el mismo lugar que en el repositorio original. La vista recibe la configuración efectiva y copia el límite shallow que Git lee, incluso si lo define `GIT_SHALLOW_FILE`. Comparte los objetos y deshabilita el mantenimiento automático. Las ramas, tags, reflogs y `FETCH_HEAD` que modifica Git pertenecen a la vista. Las versiones antiguas de Git que leen directamente la configuración global verifican que los includes condicionales produzcan los mismos valores en ambas vistas. Si la configuración difiere, Start pide actualizar Git. Si el fetch cambia el límite shallow, pide actualizar el clon antes de abrir una revisión sobre esos objetos. Offline sigue resolviendo en las refs del clon, sin contactar el remoto.
+
+Start y Compare respetan la recursión de fetch configurada en Git. Desactivarla
+siempre dejaba sin descargar el commit de un submódulo que después necesitaba
+el checkout recursivo. El fetch puede actualizar los datos Git del submódulo
+conservando su checkout. En Start los refspecs auxiliares se agregan al config
+de la vista, porque Git transmite las opciones `-c` a los submódulos y les
+pedía la rama del PR en su propio remoto. Cada submódulo conserva su
+configuración global efectiva mediante includes condicionados a su gitdir.
+Los gitfiles de la vista apuntan a los repositorios existentes en
+`modules/<nombre>` para que Git también pueda actualizar los desinicializados.
+Las pruebas incluyen anidados, worktrees vinculados, nombres y paths
+distintos, fallos del remoto y la prohibición de fetch de Offline.
 
 Git evalúa los selectores completos después del fetch. Así un destino que acaba de aparecer puede tener precedencia sobre una rama homónima, @{upstream} puede resolver con la configuración del worktree y @{n} usa el historial de Git. La búsqueda de una base da prioridad a su nombre de rama. El mapeo de la rama remota de Start, el fetch explícito de Compare y la presencia remota de Forget comparten el mapeo de refspecs. Start puede incluir la rama elegida y una base nombrada fuera del refspec de un clon de rama única. Compare en caché conserva su revisión literal.
 

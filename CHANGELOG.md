@@ -46,6 +46,12 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Start and remote Compare fetch submodule commits according to Git's
+  configuration before opening a recursive checkout. Start preserves each
+  submodule's conditional global configuration and can fetch repositories
+  retained after deinitialization.
+- Prepared comparisons reject changes to effective replacement refs, grafts or
+  shallow boundaries before opening a review or creating a reading draft.
 - Start and Compare can open `topic/next` while a review of `topic` is
   saved. Ref collisions fail before changing the checkout. Save and Continue
   check their destination branch before moving review state.

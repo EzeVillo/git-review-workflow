@@ -121,6 +121,37 @@
 	[ "$(git rev-parse refs/remotes/isolated/alias)" = "$cached" ]
 }
 
+@test "prepared compare rejects a changed replacement before opening or drafting" {
+	bats_require_minimum_version 1.5.0
+	run git review compare --prepare --porcelain -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk '$1 == "comparison-prepared" {print $2}')
+	[ -n "$token" ]
+
+	lower=$(git rev-parse v1.0)
+	replacement=$(git commit-tree "$(git rev-parse 'v2.0^{tree}')" -m replacement)
+	git replace "$lower" "$replacement"
+	original_head=$(git rev-parse HEAD)
+	original_index=$(git write-tree)
+	run --separate-stderr git review compare "--prepared=$token" --no-walk -- v1.0 v2.0
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: comparison ancestry has changed; prepare the comparison again' ]
+	run --separate-stderr git review walkthrough draft --compare "--prepared=$token" -- v1.0 v2.0
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: comparison ancestry has changed; prepare the comparison again' ]
+	[ "$(git symbolic-ref --short HEAD)" = develop ]
+	[ "$(git rev-parse HEAD)" = "$original_head" ]
+	[ "$(git write-tree)" = "$original_index" ]
+	[ -z "$(git for-each-ref --format='%(refname)' refs/heads/review/)" ]
+	[ ! -e "$(git rev-parse --git-path review-walkthrough)" ]
+	git show-ref --verify --quiet "refs/worktree/review-compare/pending/$token"
+
+	git replace -d "$lower"
+	run git review compare "--prepared=$token" --no-walk -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = "$(printf 'app.txt\nmore.txt')" ]
+}
+
 @test "compare clean only drops the refs owned by the removed session" {
 	for target in c1 v2.0; do
 		if [ "$target" = c1 ]; then git tag c1 v2.0^; fi

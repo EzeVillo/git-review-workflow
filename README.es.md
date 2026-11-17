@@ -134,7 +134,7 @@ Las comparaciones ofrecen sólo comentarios Local y los conservan automáticamen
 
 En **Compare revisions**, elegí cada rama por nombre y después elegí qué versión usar. Traer una versión para Compare conserva las ramas locales y las referencias de seguimiento remoto en sus commits actuales.
 
-**Start a review** también trae las revisiones que necesita sin mover las ramas locales ni las referencias de seguimiento remoto. Si tu rama local del PR está atrasada, Finish ofrece avanzarla explícitamente antes de aplicar los cambios de la revisión.
+**Start a review** usa el fetch configurado del remoto y conserva las ramas locales y las referencias de seguimiento remoto. Si tu rama local del PR está atrasada, Finish ofrece avanzarla explícitamente antes de aplicar los cambios de la revisión.
 
 Las notas Local son privadas; los comentarios Shared se preparan para el PR. Ambos
 documentos conviven y el destino sólo se aplica al comentario nuevo. Si se pregunta

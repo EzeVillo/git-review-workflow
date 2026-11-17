@@ -223,25 +223,20 @@ else
 	markerkey="reviewworkflow.$src.reviewed"
 fi
 
-# The prepared range and the draft both carry resolved object IDs. A fresh
-# range selects the refs to fetch first, then lets Git evaluate the revisions.
+# A prepared range already owns its resolved object IDs. Otherwise Git sees
+# the configured fetch in a private reference store before resolving selectors.
 baseref=''
 baselabel=$base
 _rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$delta$local_mode$offline_mode")
 _rs_pack=''
 _rs_prepared=0
 _rs_tmp=''
-_rs_remote_source=''
-_rs_remote_base=''
-_rs_remote_from=''
 _rs_base_label=local
-_rs_from_ref='' _rs_from_tracking='' _rs_from_suffix=''
+_rs_fresh_from=''
+_review_view=''
 _rs_cleanup() {
-	if [ -n "$_rs_remote_source" ]; then git update-ref -d "$_rs_tmp-tip" || true; fi
-	if [ -n "$_rs_remote_base" ]; then git update-ref -d "$_rs_tmp-base" || true; fi
-	if [ -n "$_rs_remote_from" ]; then git update-ref -d "$_rs_tmp-from" || true; fi
-	if [ "$_rs_prepared" -eq 0 ]; then git update-ref -d "$_rs_tmp" || true; fi
-	if [ "${_rs_lease_started:-0}" -eq 1 ]; then git update-ref -d "$_rs_tmp-lease" || true; fi
+	if [ -n "$_review_view" ]; then rm -rf "$_review_view"; fi
+	if [ -n "$_rs_tmp" ] && [ "$_rs_prepared" -eq 0 ]; then git update-ref -d "$_rs_tmp" || true; fi
 }
 
 if [ -n "$prepared" ] || [ "$use_draft" -eq 1 ]; then
@@ -252,72 +247,29 @@ if [ -n "$prepared" ] || [ "$use_draft" -eq 1 ]; then
 	else
 		_rs_saved_range=$(start_prepared_ref "$prepared")
 	fi
-	start_read_range "$_rs_saved_range" "$_rs_identity"
+	start_read_range "$_rs_saved_range" "$_rs_identity" "$use_draft"
 	srcref=$_rs_tip
 	baseref=$_rs_base
 else
-	if [ "$offline_mode" -eq 0 ] || [ "$prepare" -eq 1 ]; then
+	trap _rs_cleanup 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	if [ "$prepare" -eq 1 ]; then
 		walk_gitdir_init
 		_rs_nonce=$(mktemp "$_walk_gitdir/start.XXXXXX")
 		_rs_token=$(printf '%s\n%s\n' "$_rs_nonce" "$$" | git hash-object --stdin)
 		rm -f "$_rs_nonce"
 		_rs_tmp=$(start_prepared_ref "$_rs_token")
-		trap _rs_cleanup 0
-		trap 'exit 130' INT
-		trap 'exit 143' TERM
 	fi
-
 	if [ "$offline_mode" -eq 1 ]; then
 		baseref=$(review_cached_base "$base" refs/heads || true)
+		if [ -n "$from" ]; then _rs_fresh_from=$(review_commit_oid "$from") || die "unknown commit: $from"; fi
 	elif [ "$local_mode" -eq 0 ] || [ -n "$base$from" ]; then
-		_rs_advertised=$(review_remote_refs "$remote") || die "could not update from $remote"
-		set --
-		if [ "$local_mode" -eq 0 ]; then
-			_rs_status=0
-			_rs_remote_source=$(review_remote_ref "$remote" "$src" "$_rs_advertised") || _rs_status=$?
-			case "$_rs_status" in
-			0) ;;
-			2|3) die "$srclabel not found" ;;
-			*) exit 1 ;;
-			esac
-			srcref="$_rs_tmp-tip"
-			set -- "$_rs_remote_source:$srcref"
-		fi
-
-		_rs_base_ref='' _rs_base_tracking='' _rs_base_suffix=''
-		if [ -n "$base" ]; then
-			review_revision_fetch "$remote" "$base" base "$_rs_advertised" || exit 1
-			_rs_remote_base=$_rrv_ref
-			_rs_base_tracking=$_rrv_tracking_ref
-			_rs_base_suffix=$_rrv_suffix
-			if [ -n "$_rs_remote_base" ]; then
-				_rs_base_ref=$_rs_tmp-base
-				set -- "$@" "$_rs_remote_base:$_rs_base_ref"
-				case "$_rs_base_tracking" in
-				"refs/remotes/$remote/"*) _rs_base_label=remote ;;
-				esac
-			fi
-		fi
-		if [ -n "$from" ]; then
-			review_revision_fetch "$remote" "$from" from "$_rs_advertised" || exit 1
-			_rs_remote_from=$_rrv_ref
-			_rs_from_tracking=$_rrv_tracking_ref
-			_rs_from_suffix=$_rrv_suffix
-			if [ -n "$_rs_remote_from" ]; then
-				_rs_from_ref=$_rs_tmp-from
-				set -- "$@" "$_rs_remote_from:$_rs_from_ref"
-			fi
-		fi
-
-		if [ "$#" -gt 0 ]; then
-			_rs_lease=$(compare_lease_commit 'Prepare start review' </dev/null)
-			git update-ref "$_rs_tmp-lease" "$_rs_lease"
-			_rs_lease_started=1
-			review_fetch_isolated "$remote" "$@" || die "could not update from $remote"
-		fi
-
-		# A literal revision may only exist after the requested history arrives.
-		baseref=$(review_resolve_revision "$base" "$_rs_base_ref" "$_rs_base_tracking" "$_rs_base_suffix" || true)
+		_review_view=$(mktemp -d)
+		review_view_open "$_review_view" || die 'could not prepare the temporary fetch view'
+		review_view_start "$remote" "$src" "$base" "$from" "$local_mode" || exit 1
+		rm -rf "$_review_view"
+		_review_view=''
 	fi
 fi
 if [ "$_rs_base_label" = remote ]; then
@@ -362,12 +314,12 @@ if [ "$delta" -eq 1 ]; then
 		die "$src was force-pushed since your last review; run a full review instead"
 	start="$prev"
 	range="since last review ($(git rev-parse --short "$prev"))"
-elif [ -n "$from" ]; then
+elif [ -n "$from" ] || { [ "$use_draft" -eq 1 ] && [ -n "${_rs_from:-}" ]; }; then
 	if [ -n "${_rs_saved_range:-}" ]; then
 		[ -n "$_rs_from" ] || die 'prepared lower bound is unavailable; prepare the review again'
 		pinned_from=$_rs_from
 	else
-		pinned_from=$(review_resolve_revision "$from" "$_rs_from_ref" "$_rs_from_tracking" "$_rs_from_suffix") || die "unknown commit: $from"
+		pinned_from=$_rs_fresh_from
 	fi
 	start=$pinned_from
 	git merge-base --is-ancestor "$start" "$tip" ||
@@ -405,7 +357,8 @@ if [ "$prepare" -eq 1 ]; then
 	set -- -p "$tip"
 	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
 	if [ "$delta" -eq 1 ] && [ "$prev" != "$baseref" ] && [ "$prev" != "$tip" ]; then set -- "$@" -p "$prev"; fi
-	_rs_pack=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@" </dev/null)
+	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$delta$local_mode$offline_mode")
+	_rs_pack=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--} $_rs_draft_identity" "$@" </dev/null)
 	git update-ref "$_rs_tmp" "$_rs_pack"
 	_ero_branch=$src
 	_ero_tip=$tip
@@ -421,13 +374,16 @@ if [ "$prepare" -eq 1 ]; then
 fi
 
 start_keep_range() {
-	if [ "$offline_mode" -eq 1 ] && [ -z "${_rs_saved_range:-}" ]; then return 0; fi
+	if [ "$offline_mode" -eq 1 ] && [ -z "${_rs_saved_range:-}$pinned_from" ]; then return 0; fi
+	# A walkthrough inherits an explicit cutoff as an OID, rather than taking
+	# the selector again. The pending token above still validates that selector.
+	_rs_session_identity=$(start_range_identity "$remote" "$src" "$base" '' "$delta$local_mode$offline_mode")
 	set -- -p "$tip"
 	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && [ "$prev" != "$baseref" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
 		set -- "$@" -p "$prev"
 	fi
-	_rs_session=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@" </dev/null)
+	_rs_session=$(compare_lease_commit "$_rs_session_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@" </dev/null)
 	git update-ref "refs/worktree/review-start/session/$src" "$_rs_session"
 }
 
@@ -478,6 +434,7 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewsource" "$src"
 	git config "branch.$rb.reviewbase" "$base"
 	if [ -n "$baseref" ]; then git config "branch.$rb.reviewbasecommit" "$baseref"; fi
+	if [ -n "$pinned_from" ]; then git config "branch.$rb.reviewrangefrom" "$pinned_from"; fi
 	git config "branch.$rb.reviewtip" "$tip"
 	git config "branch.$rb.reviewstart" "$start"
 	git config "branch.$rb.reviewmode" "step"
@@ -569,6 +526,7 @@ git reset -q --soft "$lower"
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
 if [ -n "$baseref" ]; then git config "branch.$rb.reviewbasecommit" "$baseref"; fi
+if [ -n "$pinned_from" ]; then git config "branch.$rb.reviewrangefrom" "$pinned_from"; fi
 git config "branch.$rb.reviewtip" "$tip"
 # The name this review's walkthrough draft lives under, read back by
 # walk_review_draft_src. Recorded whether or not a draft exists yet, and in every

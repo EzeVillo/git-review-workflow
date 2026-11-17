@@ -240,6 +240,7 @@ fi
 copy_meta reviewsource
 copy_meta reviewbase
 copy_meta reviewbasecommit
+copy_meta reviewrangefrom
 copy_meta reviewtip
 copy_meta reviewprevreviewed
 copy_meta reviewlocal

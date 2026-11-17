@@ -4316,7 +4316,7 @@ emit_reading_offers() {
 	if [ "${from_draft:-0}" -eq 1 ]; then
 		_ero_anchor=$(start_draft_ref "$_ero_branch")
 		if git show-ref --verify --quiet "$_ero_anchor"; then
-			start_read_range "$_ero_anchor" "$(start_range_identity "$_ero_remote" "$_ero_branch" "$_ero_base" '' "$_ero_delta$_ero_local$_ero_offline")"
+			start_read_range "$_ero_anchor" "$(start_range_identity "$_ero_remote" "$_ero_branch" "$_ero_base" '' "$_ero_delta$_ero_local$_ero_offline")" 1
 			_ero_draft_range=1
 			_ero_srcref=$_rs_tip
 		fi
@@ -4358,6 +4358,8 @@ emit_reading_offers() {
 			return 1
 		}
 		_ero_start="$_ero_prev"
+	elif [ -n "$_ero_draft_range" ] && [ -n "$_rs_from" ]; then
+		_ero_start=$_rs_from
 	else
 		# Full range needs a base; without it, skip offers (delta rows may still
 		# have been emitted above by the caller). Not a hard error: config
@@ -5292,7 +5294,13 @@ review_remote_refs() {
 
 review_commit_oid() {
 	case "$1" in ''|-*) return 1 ;; esac
-	git rev-parse --verify --quiet "$1^{commit}"
+	_rco_revision=$1
+	shift
+	if [ "$#" -eq 0 ]; then set -- git; fi
+	# Peel after resolving the whole expression. Appending ^{commit} to a
+	# message selector such as :/subject would change the search pattern.
+	_rco_oid=$("$@" rev-parse --verify --quiet "$_rco_revision") || return 1
+	"$@" rev-parse --verify --quiet "$_rco_oid^{commit}"
 }
 
 # The cached base is also used by config and walkthrough outside a prepared
@@ -5302,215 +5310,219 @@ review_cached_base() {
 	review_commit_oid "$2/$1" || review_commit_oid "$1"
 }
 
-review_tracking_target() {
-	_rtt_ref="refs/remotes/$1/$2"
-	_rtt_target=$(git symbolic-ref --quiet "$_rtt_ref" || true)
-	case "${_rtt_target:-$_rtt_ref}" in
-	"refs/remotes/$1/"*) printf '%s\n' "${_rtt_target:-$_rtt_ref}" ;;
-	esac
+# Keep the effective configuration, including includes scoped to the original
+# gitdir, worktree configuration and command-line overrides. Git's null format
+# distinguishes a valueless key from an empty value and preserves multiline values.
+review_view_config() {
+	printf '[reviewview]\n\tprobe = temporary\n' >"$1/config.probe" || return 1
+	_review_view_global=0
+	if [ "$(GIT_CONFIG_GLOBAL="$1/config.probe" git config --global --get reviewview.probe || true)" = temporary ]; then
+		_review_view_global=1
+		git config --includes --show-scope --null --list >"$1/config.records" || return 1
+	else
+		# Older Git still reads the ordinary global and system files itself.
+		git config --local --includes --null --list >"$1/config.records" || return 1
+		if [ "$(git config --bool --get extensions.worktreeConfig || true)" = true ]; then
+			git config --worktree --includes --null --list >>"$1/config.records" || return 1
+		fi
+	fi
+	rm -f "$1/config.probe" || return 1
+	: >"$1/config" || return 1
+	: >"$1/global-config" || return 1
+	# POSIX awk is not required to handle NUL as a record separator.
+	LC_ALL=C od -An -v -tu1 "$1/config.records" |
+		REVIEW_VIEW_DIR="$1" REVIEW_VIEW_SCOPED="$_review_view_global" LC_ALL=C awk '
+		BEGIN {
+			local_config = ENVIRON["REVIEW_VIEW_DIR"] "/config"
+			global_config = ENVIRON["REVIEW_VIEW_DIR"] "/global-config"
+			scoped = ENVIRON["REVIEW_VIEW_SCOPED"] == "1"
+		}
+		function quote(value,   i, c, out) {
+			out = "\""
+			for (i = 1; i <= length(value); i++) {
+				c = substr(value, i, 1)
+				if (c == "\\" || c == "\"") out = out "\\" c
+				else if (c == "\n") out = out "\\n"
+				else if (c == "\t") out = out "\\t"
+				else if (c == "\b") out = out "\\b"
+				else out = out c
+			}
+			return out "\""
+		}
+		function entry(record, target,   separator, name, section_end, section, key, subsection, line) {
+			separator = index(record, "\n")
+			name = separator ? substr(record, 1, separator - 1) : record
+			section_end = index(name, ".")
+			section = substr(name, 1, section_end - 1)
+			if (section == "include" || section == "includeif") return
+			if (name == "core.worktree") return
+			key = name
+			sub(/^.*\./, "", key)
+			subsection = substr(name, section_end + 1, length(name) - section_end - length(key) - 1)
+			line = "[" section
+			if (subsection != "") line = line " " quote(subsection)
+			line = line "]\n\t" key
+			if (separator) line = line " = " quote(substr(record, separator + 1))
+			print line >> target
+		}
+		{
+			for (i = 1; i <= NF; i++) {
+				if ($i != 0) {
+					record = record sprintf("%c", $i)
+				} else if (scoped && scope == "") {
+					scope = record
+					record = ""
+				} else {
+					if (scope != "command") {
+						target = scope == "global" || scope == "system" ? global_config : local_config
+						entry(record, target)
+					}
+					scope = record = ""
+				}
+			}
+		}
+	' || return 1
+	rm -f "$1/config.records"
 }
 
-# The tracking ref provides the local history and the fetch refspec provides
-# the server name. Keep both even when they have different spellings.
-review_revision_tracking() {
-	_rrv_tracking_ref=''
-	git check-ref-format "refs/remotes/$1/$2" || return 2
-	_rrv_tracking_ref=$(review_tracking_target "$1" "$2")
-	[ -n "$_rrv_tracking_ref" ] || return 2
-	_rrv_ref=$(review_remote_ref "$1" "${_rrv_tracking_ref#"refs/remotes/$1/"}" "$3") || {
-		_rrv_status=$?
-		_rrv_ref=''
-		return "$_rrv_status"
-	}
+review_view_open() {
+	_review_view=$1
+	_rvo_common=$(git rev-parse --git-common-dir) || return 1
+	_rvo_common=$(cd "$_rvo_common" && pwd -P) || return 1
+	_rvo_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	_rvo_gitdir=$(cd "$_rvo_gitdir" && pwd -P) || return 1
+	_rvo_shallow=$(git rev-parse --git-path shallow) || return 1
+	_review_view_objects=$(git rev-parse --git-path objects) || return 1
+	_review_view_objects=$(cd "$_review_view_objects" && pwd -P) || return 1
+	_review_view_top=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+	_review_view_log=$(git config --get core.logAllRefUpdates || true)
+	if [ -z "$_review_view_log" ]; then
+		_review_view_log=true
+		if [ "$(git rev-parse --is-bare-repository)" = true ]; then _review_view_log=false; fi
+	fi
+
+	# Copy only the reference backend and revision inputs. Objects can be shared
+	# as with a normal fetch. The view owns its refs, reflogs, shallow file and
+	# FETCH_HEAD, including the current worktree's revision state.
+	mkdir -p "$_review_view/objects" "$_review_view/hooks" || return 1
+	review_view_config "$_review_view" || return 1
+	for _rvo_path in refs packed-refs logs reftable info/grafts; do
+		if [ -e "$_rvo_common/$_rvo_path" ]; then
+			mkdir -p "$_review_view/$(dirname "$_rvo_path")" || return 1
+			cp -RL "$_rvo_common/$_rvo_path" "$_review_view/$_rvo_path" || return 1
+		fi
+	done
+	mkdir -p "$_review_view/refs" || return 1
+	_review_view_gitdir=$_review_view
+	if [ "$_rvo_gitdir" != "$_rvo_common" ]; then
+		_review_view_gitdir="$_review_view/worktrees/revision"
+		mkdir -p "$_review_view_gitdir" || return 1
+		printf '../..\n' >"$_review_view_gitdir/commondir" || return 1
+		for _rvo_path in refs reftable; do
+			if [ -d "$_rvo_gitdir/$_rvo_path" ]; then
+				cp -RL "$_rvo_gitdir/$_rvo_path" "$_review_view_gitdir/$_rvo_path" || return 1
+			fi
+		done
+	fi
+	cp "$_rvo_gitdir/HEAD" "$_review_view_gitdir/HEAD" || return 1
+	for _rvo_path in FETCH_HEAD ORIG_HEAD MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD REBASE_HEAD BISECT_HEAD logs/HEAD; do
+		if [ -f "$_rvo_gitdir/$_rvo_path" ]; then
+			mkdir -p "$_review_view_gitdir/$(dirname "$_rvo_path")" || return 1
+			cp "$_rvo_gitdir/$_rvo_path" "$_review_view_gitdir/$_rvo_path" || return 1
+		fi
+	done
+	if [ -f "$_rvo_shallow" ]; then cp "$_rvo_shallow" "$_review_view/shallow" || return 1; fi
+	if [ "$_review_view_global" -eq 0 ]; then
+		# Older Git cannot redirect global config. Parts conditioned on the
+		# real gitdir could otherwise disappear and change the chosen commit.
+		for _rvo_scope in --system --global; do
+			git config "$_rvo_scope" --includes --null --list >"$_review_view/config.original" 2>/dev/null || true
+			review_view_git config "$_rvo_scope" --includes --null --list >"$_review_view/config.check" 2>/dev/null || true
+			cmp -s "$_review_view/config.original" "$_review_view/config.check" ||
+				die 'this Git cannot reproduce conditional configuration in a temporary view. Update Git and retry.'
+		done
+		rm -f "$_review_view/config.original" "$_review_view/config.check" || return 1
+	fi
 }
 
-review_revision_destination() {
-	git check-ref-format "$2" || return 5
-	_rrv_status=0
-	_rrv_ref=$(review_fetch_source "$1" "$2" "$3") || _rrv_status=$?
-	case "$_rrv_status" in
-	0) _rrv_tracking_ref=$2 ;;
-	2|3) _rrv_ref=''; _rrv_tracking_ref=$2 ;;
-	*) return "$_rrv_status" ;;
-	esac
+review_view_git() (
+	_rvg_alternates=${GIT_ALTERNATE_OBJECT_DIRECTORIES-}
+	_rvg_no_replace=${GIT_NO_REPLACE_OBJECTS-}
+	_rvg_replace_base=${GIT_REPLACE_REF_BASE-}
+	for _rvg_var in $(git rev-parse --local-env-vars); do
+		case "$_rvg_var" in GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT) ;; *) unset "$_rvg_var" ;; esac
+	done
+	if [ "$_review_view_global" -eq 1 ]; then
+		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$_review_view/global-config"
+		export GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL
+	fi
+	GIT_OBJECT_DIRECTORY="$_review_view_objects" \
+	GIT_ALTERNATE_OBJECT_DIRECTORIES="$_rvg_alternates" GIT_NO_REPLACE_OBJECTS="$_rvg_no_replace" \
+	GIT_REPLACE_REF_BASE="${_rvg_replace_base:-refs/replace/}" \
+	git -C "$_review_view_top" --git-dir="$_review_view_gitdir" \
+		-c core.bare=true -c extensions.worktreeConfig=false -c core.logAllRefUpdates="$_review_view_log" \
+		-c core.hooksPath="$_review_view/hooks" -c maintenance.auto=false -c gc.auto=0 -c fetch.writeCommitGraph=false \
+		"$@"
+)
+
+review_view_fetch() {
+	review_view_git "$@" || return 1
+	# The real repository must interpret object ancestry with the same boundary.
+	if [ -f "$_rvo_shallow" ] || [ -f "$_review_view/shallow" ]; then
+		cmp -s "$_rvo_shallow" "$_review_view/shallow" || {
+			printf '%s\n' 'error: fetch changed the shallow boundary. Fetch manually and prepare the review again.' >&2
+			return 1
+		}
+	fi
 }
 
-# Plan a fetch for a revision. Git will evaluate the expression after the
-# objects arrive. Here we only identify a named ref that has to be present
-# under a private name first, leaving the revision operators intact.
-review_revision_fetch() {
-	_rrv_root=${2%%[~^]*}
-	case "$_rrv_root" in
-	*'@{u}'|*'@{upstream}'|*'@{push}') ;; # These identify refs through Git config.
-	?*'@{'*'}') _rrv_root=${_rrv_root%'@{'*} ;;
-	esac
-	_rrv_suffix=${2#"$_rrv_root"}
-	_rrv_ref='' _rrv_tracking_ref=''
-	case "$_rrv_root" in ''|-*) return 0 ;; esac
-
-	# Same precedence as review_cached_base. A branch name can look like an
-	# abbreviated Git ref (tags/release), so try the prefixed namespace first.
-	if [ "$3" = base ]; then
-		_rrv_result=0
-		review_revision_tracking "$1" "$_rrv_root" "$4" || _rrv_result=$?
-		case "$_rrv_result" in
-		0) return 0 ;;
-		2|3) _rrv_tracking_ref='' ;;
+review_view_start() {
+	_rvs_remote=$1 _rvs_source=$2 _rvs_base=$3 _rvs_from=$4 _rvs_local=$5
+	_rvs_refs=$(review_remote_refs "$_rvs_remote") || die "could not update from $_rvs_remote"
+	set --
+	if [ "$_rvs_local" -eq 0 ]; then
+		_rvs_status=0
+		_rvs_ref=$(review_remote_ref "$_rvs_remote" "$_rvs_source" "$_rvs_refs") || _rvs_status=$?
+		case "$_rvs_status" in
+		0) ;;
+		2|3) die "$_rvs_remote/$_rvs_source not found" ;;
 		*) return 1 ;;
 		esac
+		# Include the selected source in the same fetch. This also covers
+		# single-branch clones and refuses a source removed since ls-remote.
+		_rvs_tracking=refs/worktree/review-start/source
+		set -- -c "remote.$_rvs_remote.fetch=$_rvs_ref:$_rvs_tracking"
 	fi
 
-	# A fully qualified ref can be a fetch destination even without a local
-	# copy. Honor that mapping before considering automatic tag following.
-	case "$_rrv_root" in
-	"refs/remotes/$1/"*) ;;
-	refs/*)
-		if review_revision_destination "$1" "$_rrv_root" "$4"; then return 0
-		else [ "$?" -eq 5 ] || return 1
-		fi ;;
-	esac
-
-	# A tag can arrive with this fetch and outrank a same-named local branch.
-	# Preserve an existing local tag, as normal automatic tag following does.
-	case "$_rrv_root" in
-	refs/tags/*) _rrv_tag=$_rrv_root ;;
-	tags/*) _rrv_tag="refs/$_rrv_root" ;;
-	refs/*|heads/*|remotes/*) _rrv_tag='' ;;
-	*) _rrv_tag="refs/tags/$_rrv_root" ;;
-	esac
-	if [ -n "$_rrv_tag" ] && git check-ref-format "$_rrv_tag" &&
-		! git show-ref --verify --quiet "$_rrv_tag" &&
-		! git show-ref --verify --quiet "refs/$_rrv_root" &&
-		printf '%s\n' "$4" | grep -Fxq -e "$_rrv_tag"; then
-		_rrv_ref=$_rrv_tag
-		return
-	fi
-
-	_rrv_symbolic=$(git rev-parse --symbolic-full-name --verify --quiet "$_rrv_root" 2>/dev/null || true)
-	case "${_rrv_symbolic:-$_rrv_root}" in
-	"refs/remotes/$1/"*) _rrv_name=${_rrv_symbolic:-$_rrv_root}; _rrv_name=${_rrv_name#"refs/remotes/$1/"} ;;
-	"remotes/$1/"*) _rrv_name=${_rrv_root#"remotes/$1/"} ;;
-	"$1"|"$1/"*)
-		for _rrv_namespace in refs refs/tags refs/heads; do
-			if git show-ref --verify --quiet "$_rrv_namespace/$_rrv_root"; then return 0; fi
-		done
-		if [ "$_rrv_root" = "$1" ]; then
-			# The symref still identifies the target when it is missing locally.
-			git symbolic-ref --quiet "refs/remotes/$1/HEAD" >/dev/null || return 0
-			_rrv_name=HEAD
-		else
-			_rrv_name=${_rrv_root#"$1/"}
-		fi ;;
-	refs/*)
-		# Git expanded a local name or upstream to a configured destination
-		# outside this remote's conventional tracking namespace.
-		if [ -n "$_rrv_symbolic" ] && [ "$_rrv_symbolic" != "$_rrv_root" ]; then
-			review_revision_destination "$1" "$_rrv_symbolic" "$4" || [ "$?" -eq 5 ]
+	_rvs_base_tracking="refs/remotes/$_rvs_remote/$_rvs_base"
+	if [ -n "$_rvs_base" ] && git check-ref-format "$_rvs_base_tracking"; then
+		_rvs_status=0
+		review_fetch_source "$_rvs_remote" "$_rvs_base_tracking" "$_rvs_refs" >/dev/null || _rvs_status=$?
+		if [ "$_rvs_status" -eq 5 ] &&
+			_rvs_base_source=$(review_remote_ref "$_rvs_remote" "$_rvs_base" "$_rvs_refs"); then
+			set -- "$@" -c "remote.$_rvs_remote.fetch=$_rvs_base_source:$_rvs_base_tracking"
 		fi
-		return ;;
-	*) return 0 ;;
-	esac
-	_rrv_result=0
-	review_revision_tracking "$1" "$_rrv_name" "$4" || _rrv_result=$?
-	case "$_rrv_result" in
-	0|2|3) return 0 ;;
-	*) return 1 ;;
-	esac
-}
-
-# Record just the prospective tracking update in a disposable ref and let
-# Git decide which side of it a date selects. The real history stays in Git's
-# own ref backend, including entries that git reflog show skips (e.g. tags).
-review_fetched_reflog_date() (
-	_rfr_cached=$1 _rfr_fresh=$2 _rfr_selector=$3
-	_rfr_zero=$(printf '%s' "$_rfr_fresh" | sed 's/./0/g')
-	_rfr_now=$(GIT_COMMITTER_DATE='' git -c user.name='Git Review' -c user.email='git-review@localhost' var GIT_COMMITTER_IDENT) || return 1
-	_rfr_dir=$(mktemp -d) || return 1
-	trap 'rm -rf "$_rfr_dir"' 0
-	# Do not let an enclosing worktree or reftable configuration select the store.
-	# shellcheck disable=SC2046
-	unset $(git rev-parse --local-env-vars)
-	_rfr_hash=sha1
-	if [ "${#_rfr_fresh}" -eq 64 ]; then _rfr_hash=sha256; fi
-	GIT_DEFAULT_HASH=$_rfr_hash GIT_DEFAULT_REF_FORMAT=files git init -q --bare --template= "$_rfr_dir" || return 1
-	_rfr_ref=refs/heads/selected
-	mkdir -p "$_rfr_dir/refs/heads" "$_rfr_dir/logs/refs/heads" || return 1
-	printf '%s\n' "$_rfr_fresh" >"$_rfr_dir/$_rfr_ref" || return 1
-	printf '%s %s %s\tfetch\n' "${_rfr_cached:-$_rfr_zero}" "$_rfr_fresh" "$_rfr_now" >"$_rfr_dir/logs/$_rfr_ref" || return 1
-	git --git-dir="$_rfr_dir" rev-parse --verify --quiet "$_rfr_ref$_rfr_selector" 2>/dev/null
-)
-
-# Resolve a selector in the history a normal tracking update would expose.
-review_fetched_reflog_oid() (
-	_rfr_tracking=$1 _rfr_fresh=$2 _rfr_selector=$3
-	_rfr_cached=$(git show-ref --hash --verify "$_rfr_tracking" 2>/dev/null || true)
-	if [ "$_rfr_fresh" = "$_rfr_cached" ]; then
-		git rev-parse --verify --quiet "$_rfr_tracking$_rfr_selector" 2>/dev/null
-		return
 	fi
-	_rfr_has_log=0
-	if git reflog exists "$_rfr_tracking"; then
-		_rfr_has_log=1
-	else
-		_rfr_log_mode=$(git config --get core.logAllRefUpdates || printf '%s' auto)
-		case "$_rfr_log_mode" in
-		[Aa][Ll][Ww][Aa][Yy][Ss]) ;;
-		*)
-			case "$_rfr_tracking" in
-			refs/heads/*|refs/remotes/*|refs/notes/*|HEAD) ;;
-			*) return 1 ;;
-			esac
-			if [ "$_rfr_log_mode" = auto ]; then
-				[ "$(git rev-parse --is-bare-repository)" = false ] || return 1
-			else
-				[ "$(git config --bool --get core.logAllRefUpdates)" = true ] || return 1
-			fi ;;
-		esac
+	review_view_fetch "$@" fetch --quiet --no-recurse-submodules -- "$_rvs_remote" ||
+		die "could not update from $_rvs_remote"
+	if [ "$_rvs_local" -eq 0 ]; then
+		# Consumed by start after the temporary view has been removed.
+		# shellcheck disable=SC2034
+		srcref=$(review_commit_oid "$_rvs_tracking" review_view_git) || die "$_rvs_remote/$_rvs_source not found"
 	fi
-	if [ "$_rfr_selector" = '@{0}' ]; then printf '%s\n' "$_rfr_fresh"; return; fi
 
-	# Git interprets decimal values >= 100000000 as timestamps. An index
-	# before the new entry is one lower in the original log.
-	_rfr_entry=${_rfr_selector#'@{'}
-	_rfr_entry=${_rfr_entry%'}'}
-	_rfr_index=$(printf '%s\n' "$_rfr_entry" | LC_ALL=C awk '/^[0-9]+$/ && $0 + 0 < 100000000 {printf "%.0f\n", $0 - 1}')
-	case "$_rfr_index" in
-	-1) printf '%s\n' "$_rfr_fresh" ;;
-	'')
-		_rfr_selected=$(review_fetched_reflog_date "$_rfr_cached" "$_rfr_fresh" "$_rfr_selector") || return 1
-		if [ "$_rfr_selected" = "$_rfr_fresh" ] || [ "$_rfr_has_log" -eq 0 ]; then
-			printf '%s\n' "$_rfr_selected"
+	if [ -n "$_rvs_base" ]; then
+		if baseref=$(review_commit_oid "$_rvs_base_tracking" review_view_git); then
+			_rs_base_label=remote
 		else
-			git rev-parse --verify --quiet "$_rfr_tracking$_rfr_selector" 2>/dev/null
-		fi ;;
-	*)
-		if [ "$_rfr_has_log" -eq 1 ]; then
-			git rev-parse --verify --quiet "$_rfr_tracking@{$_rfr_index}" 2>/dev/null
-		else
-			[ "$_rfr_index" = 0 ] && [ -n "$_rfr_cached" ] || return 1
-			printf '%s\n' "$_rfr_cached"
-		fi ;;
-	esac
-)
-
-# Only fetched roots are substituted. Git evaluates the remaining operators
-# in the caller's object store, and literal names use its normal precedence.
-review_resolve_revision() {
-	if [ -z "$2" ]; then
-		[ -z "$3" ] || return 1
-		review_commit_oid "$1"
-		return
+			# Consumed by start together with the base label.
+			# shellcheck disable=SC2034
+			baseref=$(review_commit_oid "$_rvs_base" review_view_git || true)
+		fi
 	fi
-	_rrs_revision=$2 _rrs_suffix=$4
-	case "$3:$_rrs_suffix" in
-	?*:'@{'*'}'*)
-		_rrs_reflog=${_rrs_suffix%%'}'*}'}'
-		_rrs_tip=$(git show-ref --hash --verify "$2") || return 1
-		_rrs_revision=$(review_fetched_reflog_oid "$3" "$_rrs_tip" "$_rrs_reflog") || return 1
-		_rrs_suffix=${_rrs_suffix#"$_rrs_reflog"}
-		;;
-	esac
-	review_commit_oid "$_rrs_revision$_rrs_suffix"
+	if [ -n "$_rvs_from" ]; then
+		_rs_fresh_from=$(review_commit_oid "$_rvs_from" review_view_git) || die "unknown commit: $_rvs_from"
+	fi
 }
 
 start_prepared_ref() {
@@ -5526,10 +5538,12 @@ start_range_identity() {
 start_read_range() {
 	_rs_pack=$(git show-ref --hash --verify "$1" 2>/dev/null) || die 'prepared review is unavailable'
 	_rs_range=$(git --no-replace-objects log -1 --format='%s' "$_rs_pack" --)
-	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous _rs_from <<EOF
+	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous _rs_from _rs_draft_identity <<EOF
 $_rs_range
 EOF
-	[ "$_rs_received" = "$2" ] || die 'prepared review does not match the selected branch and range'
+	[ "$_rs_received" = "$2" ] ||
+		{ [ "${3:-0}" -eq 1 ] && [ "$_rs_draft_identity" = "$2" ]; } ||
+		die 'prepared review does not match the selected branch and range'
 	case "$_rs_base_label" in local|remote) ;; *) die 'invalid prepared review base' ;; esac
 	if [ "$_rs_base" = '-' ]; then _rs_base=''; fi
 	if [ "$_rs_previous" = '-' ]; then _rs_previous=''; fi

@@ -314,17 +314,15 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   revisa `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
   revisando un snapshot distinto al que tenés. Con la rama omitida, falla con HEAD
   detached o estando sobre una rama `review/*`.
-- Start trae las revisiones remotas solicitadas a refs privadas y respeta los
-  refspecs de fetch configurados, incluidas las refs de PR mapeadas a ramas de
-  seguimiento. `--base` y `--from` también respetan un destino exacto de fetch
-  fuera de `refs/remotes/`, como `refs/integration/checkpoint`.
-  Las revisiones como `--base origin/main~1` o
-  `--from origin/checkpoint@{0}` se resuelven como si se hubiera hecho fetch de
-  la rama de seguimiento, sin actualizar su ref ni su reflog. Para la base,
-  el nombre de una rama tiene prioridad frente a la misma abreviatura Git,
-  como `tags/release`. Si `--base` o `--from` nombran un tag, Start puede traerlo
-  sin agregar un tag local. La revisión preparada fija el tip, la base y
-  cualquier commit de `--from` antes de ofrecer modos de lectura.
+- Start ejecuta el fetch configurado del remoto en una vista temporal de
+  Git. Git usa esa vista para resolver selectores como `origin/main~1`,
+  `@{upstream}` y `origin/checkpoint@{0}`, incluidos destinos fuera de
+  `refs/remotes/`. También puede traer la rama elegida y la base nombrada
+  fuera del refspec de un clon de rama única. El repositorio real conserva
+  sus ramas, tags, reflogs y `FETCH_HEAD`. El nombre de una rama base tiene
+  prioridad frente a la misma abreviatura de Git, como `tags/release`. La
+  preparación fija el tip, la base y cualquier commit de `--from` antes de
+  ofrecer modos de lectura.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que
@@ -585,8 +583,9 @@ git review start feature/checkout                      # entra en walk con tu or
 - Toma la rama como argumento, igual que `git review start` — estás parado en la
   base, no en el PR — y por defecto usa la rama en la que estás o, si lo corrés
   desde adentro de una review, la rama que esa review está leyendo. Si escribís
-  un borrador para esa rama y ese origen, se usan el tip y la base fijados por
-  la review, aunque indiques la rama explícitamente. `--local`, `--offline` y
+  un borrador para esa rama y ese origen, se usan el tip, la base y el corte de
+  `--from` fijados por la review, aunque indiques la rama explícitamente.
+  `--local`, `--offline` y
   `--delta` seleccionan el origen o rango como en `start`. Nunca hace fetch.
 - `--build` aplica la misma validación que `build` sobre el sidecar del autor:
   placeholders, drift, paths duplicados, `> key` con valor. Es un control de

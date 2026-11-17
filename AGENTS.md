@@ -101,6 +101,7 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 | Clave | Modo | Qué lleva |
 |---|---|---|
 | `reviewmode`, `reviewsource`, `reviewtip` | todos | Modo y origen de la review |
+| `reviewrangefrom` | `--from` | Corte de la review que hereda el borrador |
 | `reviewstart`, `reviewcount`, `reviewstep` | `step` | Posición del cursor de commits |
 | `reviewwalkstep`, `reviewwalkcount`, `reviewwalkbase` | `walk` | Cursor de lectura (1-based), guard y lower bound |
 | `reviewwalkfromdraft` | `walk` | El orden caminado salió del borrador del revisor |
@@ -129,9 +130,9 @@ adoptar sus archivos.
   `git config` por repo, por diseño.
 
 Start, Compare y Forget comparten `review_remote_ref` para mapear un nombre de seguimiento
-a una ref del servidor, incluidas refs de PR. Start selecciona las refs, trae solo esas refs a
-destinos privados y resuelve las expresiones con Git sobre los objetos ya disponibles.
-El rango preparado fija los OID que consumen las ofertas, el borrador y Start. Para Delta y
+a una ref del servidor, incluidas refs de PR. Start aplica el fetch configurado en una vista
+temporal de refs y reflogs. Git resuelve las expresiones completas en esa vista y la CLI fija
+los OID que consumen las ofertas, el borrador y Start. Para Delta y
 `--from`, una base configurada que falta no impide revisar el rango. Si está disponible,
 permite excluir los cambios ya integrados.
 

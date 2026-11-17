@@ -307,16 +307,14 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `origin/<branch>` — if that differs from your checked-out branch you get a note,
   since you would be reviewing a different snapshot than you have. With no branch,
   fails on a detached HEAD or while on a `review/*` branch.
-- Start fetches the requested remote revisions to private refs and honors
-  configured fetch refspecs, including PR refs mapped to tracking branches.
-  `--base` and `--from` also honor an exact fetch destination outside
-  `refs/remotes/`, such as `refs/integration/checkpoint`.
-  Revisions such as `--base origin/main~1` or `--from origin/checkpoint@{0}`
-  resolve as if the tracking branch had been fetched, without updating its
-  ref or reflog. A base branch name takes precedence over the same text used
-  as a Git abbreviation, such as `tags/release`. A tag named by `--base` or
-  `--from` can be fetched without adding a local tag. Prepared reviews pin
-  the tip, base and any `--from` commit before offering reading layouts.
+- Start runs the remote's configured fetch in a temporary Git view. Git uses
+  that view to resolve selectors such as `origin/main~1`, `@{upstream}`, and
+  `origin/checkpoint@{0}`, including destinations outside `refs/remotes/`.
+  The selected branch and named base can also be fetched outside a
+  single-branch refspec. The real repository keeps its branches, tags,
+  reflogs, and `FETCH_HEAD`. A base branch name has priority over an
+  identical Git abbreviation such as `tags/release`. Preparation pins the
+  tip, base and any `--from` commit before offering reading layouts.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review
@@ -569,7 +567,8 @@ git review start feature/checkout                      # enters walk mode on you
 - Takes the branch as an argument, like `git review start` — you're standing on
   the base, not on the PR — and defaults to the branch you are on, or, run from
   inside a review, to the branch that review is reading. Drafting for that
-  branch and source uses the review's pinned tip and base, even when you pass
+  branch and source uses the review's pinned tip, base and any `--from`
+  cutoff, even when you pass
   the branch explicitly. `--local`, `--offline` and `--delta` select the
   source or range as they do in `start`. Never fetches.
 - `--build` applies the same validation `build` does for the author's sidecar:

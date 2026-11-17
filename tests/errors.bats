@@ -924,6 +924,144 @@ step_review_two_with_edits() {
 	[ -z "$(git for-each-ref refs/review-delta/)" ]
 }
 
+@test "start resolves new destinations with the same precedence as Git fetch" {
+	make_two_commit_feature
+	git fetch -q origin develop
+	cutoff=$(git rev-parse develop)
+	homonym=$(git rev-parse feature/two^)
+	git clone -q --branch develop "$ORIGIN" "$TMP/oracle"
+	destination=refs/integration/checkpoint
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$cutoff"
+	for reader in "$TMP/oracle" "$PWD"; do
+		git -C "$reader" config --add remote.origin.fetch "+refs/heads/checkpoint:$destination"
+		git -C "$reader" branch integration/checkpoint "$homonym"
+	done
+	! git show-ref --verify --quiet "$destination"
+	git -C "$TMP/oracle" fetch -q origin
+	expected=$(git -C "$TMP/oracle" rev-parse --verify integration/checkpoint 2>/dev/null)
+	[ "$expected" = "$cutoff" ]
+	refs_before=$(git for-each-ref --format='%(refname) %(objectname)' refs/heads refs/remotes refs/integration)
+	fetch_before=$(cat .git/FETCH_HEAD)
+
+	for option in --base --from; do
+		run git review start "$option" integration/checkpoint --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$expected" ]
+		[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+		git review abort
+	done
+
+	run git review start --prepare --from integration/checkpoint -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review start "--prepared=$token" --from integration/checkpoint --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$expected" ]
+	[ "$(git diff --cached --name-only)" = $'a.txt\nb.txt' ]
+	git review abort
+	git review start --release -- "$token"
+	[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/heads refs/remotes refs/integration)" = "$refs_before" ]
+	[ "$(cat .git/FETCH_HEAD)" = "$fetch_before" ]
+}
+
+@test "start supports previously unfetched upstream push and message selectors" {
+	make_two_commit_feature
+	cutoff=$(git rev-parse feature/two^)
+	git config branch.develop.merge refs/heads/checkpoint
+	git config push.default upstream
+	git --git-dir="$ORIGIN" update-ref refs/heads/checkpoint "$cutoff"
+	message=$(git log -1 --format=%s "$cutoff")
+	! git show-ref --verify --quiet refs/remotes/origin/checkpoint
+
+	for selector in 'develop@{upstream}' 'develop@{push}' ":/$message"; do
+		run git review start --from "$selector" --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git rev-parse HEAD)" = "$cutoff" ]
+		[ "$(git diff --cached --name-only)" = b.txt ]
+		git review abort
+		! git show-ref --verify --quiet refs/remotes/origin/checkpoint
+	done
+
+	message='cutoff visible through another remote branch'
+	other=$(git commit-tree "$cutoff^{tree}" -p "$cutoff" -m "$message")
+	git push -q origin "$other:refs/heads/search-target"
+	git update-ref -d refs/remotes/origin/search-target
+	! git rev-parse --verify --quiet ":/$message"
+	run git review start --base ":/$message" --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$other" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	git review abort
+	! git show-ref --verify --quiet refs/remotes/origin/search-target
+
+	git update-ref refs/remotes/origin/checkpoint "$cutoff"
+	git --git-dir="$ORIGIN" update-ref -d refs/heads/checkpoint
+	run git -c fetch.prune=false review start --from origin/checkpoint --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	[ "$(git rev-parse refs/remotes/origin/checkpoint)" = "$cutoff" ]
+}
+
+@test "temporary fetch honors worktree config and preserves linked ref stores" {
+	make_two_commit_feature
+	cutoff=$(git rev-parse feature/two^)
+	for format in files reftable; do
+		if [ "$format" = reftable ] && ! git init -h 2>&1 | grep -q -- --ref-format; then
+			continue
+		fi
+		reader="$TMP/reader-$format"
+		linked="$TMP/linked-$format"
+		GIT_DEFAULT_REF_FORMAT="$format" git clone -q --branch develop "$ORIGIN" "$reader"
+		git -C "$reader" worktree add -q -b reading "$linked" develop
+		git -C "$reader" config extensions.worktreeConfig true
+		git -C "$linked" config --worktree branch.reading.remote origin
+		linked_dir=$(git -C "$linked" rev-parse --absolute-git-dir)
+		include_file="$TMP/linked-$format.config"
+		git config --file "$include_file" branch.reading.merge "refs/heads/cutoff-$format"
+		git config --global "includeIf.gitdir:$linked_dir.path" "$include_file"
+		[ "$(git -C "$linked" config branch.reading.merge)" = "refs/heads/cutoff-$format" ]
+		git --git-dir="$ORIGIN" update-ref "refs/heads/cutoff-$format" "$cutoff"
+		! git -C "$linked" show-ref --verify --quiet "refs/remotes/origin/cutoff-$format"
+
+		run git -C "$linked" review start --from '@{upstream}' --no-walk -- feature/two
+		[ "$status" -eq 0 ]
+		[ "$(git -C "$linked" rev-parse HEAD)" = "$cutoff" ]
+		[ "$(git -C "$linked" diff --cached --name-only)" = b.txt ]
+		! git -C "$linked" show-ref --verify --quiet "refs/remotes/origin/cutoff-$format"
+		[ "$(git -C "$reader" branch --show-current)" = develop ]
+	done
+}
+
+@test "an explicit cutoff survives draft preparation save and reopen" {
+	make_two_commit_feature
+	cutoff=$(git rev-parse feature/two^)
+	git config --unset reviewworkflow.base
+
+	run git review start --prepare --from "$cutoff" -- feature/two
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review walkthrough draft "--start-prepared=$token" -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(sed -n '/^## ?\. /p' .git/review-walkthrough/feature/two.md)" = '## ?. b.txt' ]
+	git review start --release -- "$token"
+
+	run git review config --porcelain --from-draft -- feature/two
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'start-draft-range\t1'* ]]
+	[[ "$output" == *$'offer\twhole\tavailable'* ]]
+	run git review start --from-draft --no-walk -- feature/two
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$cutoff" ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+	git review save
+	git review continue feature/two
+	run git review walkthrough draft --stdout
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '/^## ?\. /p')" = '## ?. b.txt' ]
+}
+
 @test "review draft created from a prepared start retains its selected range" {
 	cached=$(git rev-parse refs/remotes/origin/feature/x)
 	push_pr2

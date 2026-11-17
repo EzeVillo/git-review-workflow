@@ -2,6 +2,8 @@
 
 setup() {
 	TMP=$(mktemp -d)
+	# MSYS skips argv path conversion when a path contains literal shell syntax.
+	if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -am "$TMP"); fi
 	export HOME="$TMP/home"
 	mkdir -p "$HOME"
 	export PATH="$BATS_TEST_DIRNAME/../bin:$PATH"
@@ -14,7 +16,7 @@ setup() {
 	CHILD="$TMP/child"
 	SERVER="$TMP/server"
 	CLIENT="$TMP/client"
-	MODULE='deps/shared library'
+	MODULE="deps/shared library's \$(touch grv-unquoted)"
 	git init -q "$CHILD"
 	printf 'old\n' >"$CHILD/version"
 	git -C "$CHILD" add version
@@ -58,6 +60,7 @@ assert_still_on_main() {
 }
 
 assert_parent_fetch_unchanged() {
+	[ ! -e grv-unquoted ]
 	[ "$(cat "$FETCH_HEAD")" = 'keep this FETCH_HEAD' ]
 	[ "$(git for-each-ref --format='%(refname) %(objectname)' refs/remotes/origin/)" = "$TRACKING" ]
 	[ "$(git reflog show --format='%H %gs' refs/remotes/origin/main)" = "$TRACKING_LOG" ]
@@ -280,4 +283,66 @@ assert_reviewed_gitlink() {
 		[ -z "$(git for-each-ref --format='%(refname)' "refs/worktree/review-$verb/pending/")" ]
 		[ -z "$(git for-each-ref --format='%(refname)' refs/heads/review/)" ]
 	done
+}
+
+@test "start prepares submodules alongside an index revision gitlink" {
+	advance_submodule
+	alternate="$TMP/alternate-index"
+	cp "$(git rev-parse --git-path index)" "$alternate"
+	GIT_INDEX_FILE="$alternate" git update-index --add --cacheinfo 160000,"$BASE",cutoff
+	remember_parent_fetch
+	mkdir nested
+	cd nested
+	run env GIT_INDEX_FILE=../../alternate-index git review start --prepare -- topic
+	[ "$status" -eq 0 ]
+	cd ..
+	git -C "$MODULE" cat-file -e "$CHILD_AFTER^{commit}"
+	assert_still_on_main
+	assert_parent_fetch_unchanged
+}
+
+@test "start isolates its own hooks while honoring a submodule fetch guard" {
+	bats_require_minimum_version 1.5.0
+	hooks="$TMP/submodule-hooks"
+	parent_hooks="$TMP/parent-hooks"
+	mkdir "$hooks" "$parent_hooks"
+	cat >"$hooks/reference-transaction" <<'EOF'
+#!/bin/sh
+if [ "$1" = prepared ]; then
+	printf 'submodule fetch rejected\n' >&2
+	exit 1
+fi
+EOF
+	cat >"$parent_hooks/reference-transaction" <<'EOF'
+#!/bin/sh
+while read -r before after ref; do
+	case "$ref" in
+	refs/remotes/*|refs/worktree/review-start/fetched-*)
+		printf 'parent hook must stay isolated\n' >&2
+		exit 1
+		;;
+	esac
+done
+exit 0
+EOF
+	chmod +x "$hooks/reference-transaction" "$parent_hooks/reference-transaction"
+	oracle="$TMP/oracle"
+	git clone -q "$CHILD" "$oracle"
+	git -C "$oracle" config core.hooksPath "$hooks"
+	git -C "$MODULE" config core.hooksPath "$hooks"
+	git config core.hooksPath "$parent_hooks"
+	advance_submodule
+	remember_parent_fetch
+	run --separate-stderr git -C "$oracle" fetch -q origin
+	[ "$status" -eq 128 ]
+	[[ "$stderr" == *'submodule fetch rejected'* ]]
+
+	run --separate-stderr git review start --prepare -- topic
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'submodule fetch rejected'* ]]
+	[[ "$stderr" != *'parent hook must stay isolated'* ]]
+	[[ "$output" != *'start-prepared'* ]]
+	assert_still_on_main
+	assert_parent_fetch_unchanged
+	[ -z "$(git for-each-ref --format='%(refname)' refs/worktree/review-start/pending/)" ]
 }

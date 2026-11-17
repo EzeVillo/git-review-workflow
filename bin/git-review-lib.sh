@@ -5468,8 +5468,47 @@ review_view_config() {
 # Git treats includeIf gitdir conditions as globs, even for an exact path.
 review_view_config_include() {
 	_rvci_pattern=$(printf '%s' "$1" | sed 's/[][?*\\]/\\&/g') || return 1
-	git config --file "$_review_view/global-config" --add "includeIf.gitdir:$_rvci_pattern.path" "$2"
+	git config --file "$3" --add "includeIf.gitdir:$_rvci_pattern.path" "$2"
 }
+
+# An index revision can be a gitlink without a .gitmodules entry. Enumerate
+# populated gitlinks directly. Octal-encoded paths survive a POSIX read loop,
+# including quotes and newlines, without interpreting any path as shell code.
+review_view_populated_configs() (
+	_rvpc_top=$(git rev-parse --show-toplevel) || return 1
+	_rvpc_key=$(printf '%s' "$_rvpc_top" | git hash-object --stdin) || return 1
+	_rvpc_paths="$_review_view/populated-$_rvpc_key"
+	[ ! -f "$_rvpc_paths" ] || return 0
+	git ls-files --stage --full-name -z -- ':/' >"$_rvpc_paths.index" || return 1
+	LC_ALL=C od -An -v -tu1 "$_rvpc_paths.index" | LC_ALL=C awk '
+		{
+			for (i = 1; i <= NF; i++) {
+				if ($i == 0) {
+					if (header ~ /^160000 / && !seen[path]++) print path
+					header = path = ""
+					in_path = 0
+				} else if (in_path) path = path sprintf("\\0%03o", $i)
+				else if ($i == 9) in_path = 1
+				else header = header sprintf("%c", $i)
+			}
+		}
+	' >"$_rvpc_paths" || return 1
+	while IFS= read -r _rvpc_encoded; do
+		_rvpc_path=$(printf '%b.' "$_rvpc_encoded") || return 1
+		review_view_populated_path "$_rvpc_top/${_rvpc_path%.}" || return 1
+	done <"$_rvpc_paths"
+)
+
+review_view_populated_path() (
+	[ -e "$1/.git" ] || return 0
+	for _rvpp_var in $(git rev-parse --local-env-vars); do
+		case "$_rvpp_var" in GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT) ;; *) unset "$_rvpp_var" ;; esac
+	done
+	cd "$1" || return 1
+	_rvpp_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	review_view_submodule_config "$_rvpp_gitdir" || return 1
+	review_view_populated_configs
+)
 
 # Submodule fetches inherit GIT_CONFIG_GLOBAL. Select each repository's own
 # effective system/global configuration, including its conditional includes.
@@ -5485,7 +5524,7 @@ review_view_submodule_config() (
 	done
 	_review_view_common=$_rvsc_directory
 	review_view_config "$_rvsc_directory" git --git-dir="$_rvsc_gitdir" || return 1
-	review_view_config_include "$_rvsc_gitdir" "$_rvsc_directory/global-config"
+	review_view_config_include "$_rvsc_gitdir" "$_rvsc_directory/global-config" "$_review_view/global-config"
 )
 
 # Names may contain directory components. Stop at a repository and recurse
@@ -5594,6 +5633,13 @@ review_view_open() {
 		review_view_copy_gitdir "$_rvo_gitdir" "$_review_view_gitdir" || return 1
 		printf '../.git\n' >"$_review_view_gitdir/commondir" || return 1 ;;
 	esac
+	# Command configuration is inherited by recursive Git processes. Apply the
+	# view's overrides at command scope only when the gitdir is this snapshot.
+	_rvo_parent_gitdir=$(git --git-dir="$_review_view_gitdir" rev-parse --absolute-git-dir) || return 1
+	printf '[extensions]\nworktreeConfig = false\n[maintenance]\nauto = false\n[gc]\nauto = 0\n[fetch]\nwriteCommitGraph = false\n' >"$_review_view/config-overrides" || return 1
+	git config --file "$_review_view/config-overrides" core.logAllRefUpdates "$_review_view_log" || return 1
+	git config --file "$_review_view/config-overrides" core.hooksPath "$_review_view/hooks" || return 1
+	review_view_config_include "$_rvo_parent_gitdir" "$_review_view/config-overrides" "$_review_view/command-config" || return 1
 	_rvo_index=$(git rev-parse --git-path index) || return 1
 	if [ -f "$_rvo_index" ]; then cp "$_rvo_index" "$_review_view_gitdir/index" || return 1; fi
 	_rvo_modules=$(git rev-parse --git-path modules) || return 1
@@ -5605,16 +5651,10 @@ review_view_open() {
 	if [ "$_review_view_global" -eq 1 ]; then
 		mv "$_review_view/global-config" "$_review_view/parent-global-config" || return 1
 		# Git's native absolute path also matches includeIf on Git for Windows.
-		_rvo_parent_gitdir=$(git --git-dir="$_review_view_gitdir" rev-parse --absolute-git-dir) || return 1
-		review_view_config_include "$_rvo_parent_gitdir" "$_review_view/parent-global-config" || return 1
+		review_view_config_include "$_rvo_parent_gitdir" "$_review_view/parent-global-config" "$_review_view/global-config" || return 1
 		review_view_module_configs "$_rvo_modules" || return 1
 		# Populated submodules may keep their gitdirs outside modules/.
-		if [ -n "$_review_view_top" ] && [ -f "$_review_view_top/.gitmodules" ]; then
-			git submodule foreach --quiet --recursive 'git rev-parse --absolute-git-dir' >"$_review_view/submodule-gitdirs" || return 1
-			while IFS= read -r _rvo_submodule; do
-				review_view_submodule_config "$_rvo_submodule" || return 1
-			done <"$_review_view/submodule-gitdirs"
-		fi
+		if [ -n "$_review_view_top" ]; then review_view_populated_configs || return 1; fi
 	fi
 
 	_rvo_shallow=$(review_shallow_path) || return 1
@@ -5649,8 +5689,7 @@ review_view_git() (
 	if [ -n "$_review_view_top" ]; then set -- --work-tree="$_review_view_top" "$@"; fi
 	GIT_OBJECT_DIRECTORY="$_review_view_objects" \
 	git --git-dir="$_review_view_gitdir" \
-		-c extensions.worktreeConfig=false -c core.logAllRefUpdates="$_review_view_log" \
-		-c core.hooksPath="$_review_view/hooks" -c maintenance.auto=false -c gc.auto=0 -c fetch.writeCommitGraph=false \
+		-c "include.path=$_review_view/command-config" \
 		"$@"
 )
 

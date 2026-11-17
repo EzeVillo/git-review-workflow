@@ -1836,6 +1836,19 @@ Los gitfiles de la vista apuntan a los repositorios existentes en
 Las pruebas incluyen anidados, worktrees vinculados, nombres y paths
 distintos, fallos del remoto y la prohibición de fetch de Offline.
 
+El inventario de submódulos inicializados lee los gitlinks del índice efectivo
+desde el directorio del invocador. Un gitlink también puede ser un selector de
+revisión y carecer de entrada en `.gitmodules`. Los paths se transportan
+codificados en octal para conservar comillas, espacios y saltos de línea en
+shell POSIX. Sólo se consultan los que tienen un gitdir propio.
+
+Las opciones internas de aislamiento se cargan en el ámbito de comando con
+un include condicionado al gitdir temporal. Git propaga las opciones de
+comando a los procesos recursivos. Aplicarlas sin esa condición desactivaba
+también el hook del submódulo que debía poder rechazar su fetch. La prueba
+contrasta ese rechazo con Git nativo y comprueba que los hooks del fetch
+temporal permanezcan aislados.
+
 Git evalúa los selectores completos después del fetch. Así un destino que acaba de aparecer puede tener precedencia sobre una rama homónima, @{upstream} puede resolver con la configuración del worktree y @{n} usa el historial de Git. La búsqueda de una base da prioridad a su nombre de rama. El mapeo de la rama remota de Start, el fetch explícito de Compare y la presencia remota de Forget comparten el mapeo de refspecs. Start puede incluir la rama elegida y una base nombrada fuera del refspec de un clon de rama única. Compare en caché conserva su revisión literal.
 
 Las ofertas, el borrador y la apertura usan los commits fijados por la preparación. Un cutoff explícito de Start se conserva al preparar un borrador, al retomarlo y al validar su contenido. Los tokens de Start validan el selector original y la ascendencia efectiva al consumirlos, porque Git puede dar otro contenido al mismo OID cuando cambian los reemplazos, los grafts o el límite shallow. El contexto del borrador valida la rama, la base y el modo y usa el cutoff guardado por OID. Las refs de sesión conservan el rango durante Save, Continue y Undo. Las refs del último punto revisado mantienen el commit alcanzable hasta reemplazarlo o ejecutar Forget. El resultado de Finish conserva los commits que necesitan los comentarios privados, aun después de Clean.

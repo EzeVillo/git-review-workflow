@@ -4314,11 +4314,11 @@ emit_reading_offers() {
 	fi
 	_ero_draft_range=''
 	if [ "${from_draft:-0}" -eq 1 ]; then
-		_ero_anchor=$(start_draft_ref "$_ero_branch")
-		if git show-ref --verify --quiet "$_ero_anchor"; then
-			start_read_range "$_ero_anchor" "$(start_range_identity "$_ero_remote" "$_ero_branch" "$_ero_base" '' "$_ero_delta$_ero_local$_ero_offline")" 1
+		if _ero_anchor=$(start_find_draft_ref "$_ero_branch"); then
+			start_read_range "$_ero_anchor" "$_ero_remote" "$_ero_branch" "$_ero_base" '' "$_ero_delta$_ero_local$_ero_offline" draft
 			_ero_draft_range=1
 			_ero_srcref=$_rs_tip
+			_ero_base=$_rs_base_selector
 		fi
 		porcelain_row start-draft-range "${_ero_draft_range:-0}"
 	fi
@@ -5535,14 +5535,32 @@ start_range_identity() {
 	printf '%s\n' "$@" | git hash-object --stdin
 }
 
+# Arguments after the ref are the remote, branch, base, cutoff and mode flags.
+# A draft can supply its saved base selector and inherit an explicit cutoff.
+# A pending Start must still match the selectors that produced its token.
 start_read_range() {
 	_rs_pack=$(git show-ref --hash --verify "$1" 2>/dev/null) || die 'prepared review is unavailable'
-	_rs_range=$(git --no-replace-objects log -1 --format='%s' "$_rs_pack" --)
+	_rs_range=$(git --no-replace-objects log -1 --encoding=none --format='%B' "$_rs_pack" --)
+	_rs_nl='
+'
 	read -r _rs_received _rs_base_label _rs_tip _rs_base _rs_previous _rs_from _rs_draft_identity <<EOF
-$_rs_range
+${_rs_range%%"$_rs_nl"*}
 EOF
-	[ "$_rs_received" = "$2" ] ||
-		{ [ "${3:-0}" -eq 1 ] && [ "$_rs_draft_identity" = "$2" ]; } ||
+	_rs_base_selector=$4
+	_rs_read_mode=${7:-exact}
+	if [ "$_rs_read_mode" = draft ]; then
+		# Older manifests have only the first line. New ones keep the full
+		# selector in the body. The final dot preserves trailing newlines.
+		case "$_rs_range" in
+		*"$_rs_nl$_rs_nl"base=*.)
+			_rs_base_selector=${_rs_range#*"$_rs_nl$_rs_nl"base=}
+			_rs_base_selector=${_rs_base_selector%.}
+			;;
+		esac
+	fi
+	_rs_expected=$(start_range_identity "$2" "$3" "$_rs_base_selector" "$5" "$6")
+	[ "$_rs_received" = "$_rs_expected" ] ||
+		{ [ "$_rs_read_mode" != exact ] && [ "$_rs_draft_identity" = "$_rs_expected" ]; } ||
 		die 'prepared review does not match the selected branch and range'
 	case "$_rs_base_label" in local|remote) ;; *) die 'invalid prepared review base' ;; esac
 	if [ "$_rs_base" = '-' ]; then _rs_base=''; fi
@@ -5737,11 +5755,31 @@ compare_keep_draft() {
 	git update-ref "refs/worktree/review-compare/draft/${compare_draft_id#compare/}" "$compare_pack_oid"
 }
 
-start_draft_ref() { printf 'refs/worktree/review-start/draft/%s\n' "$1"; }
+start_draft_ref() {
+	# Drafts for 'topic' and 'topic/next' can coexist on disk. A flat key lets
+	# their range refs coexist even after the original branch was deleted.
+	_sdr_key=$(printf '%s' "$1" | git hash-object --stdin) || return 1
+	printf 'refs/worktree/review-start/draft-key/%s\n' "$_sdr_key"
+}
+
+start_find_draft_ref() {
+	_sfdr_ref=$(start_draft_ref "$1") || return 1
+	if ! git show-ref --verify --quiet "$_sfdr_ref"; then
+		_sfdr_ref="refs/worktree/review-start/draft/$1"
+		git show-ref --verify --quiet "$_sfdr_ref" || return 1
+	fi
+	printf '%s\n' "$_sfdr_ref"
+}
+
+start_drop_legacy_draft() {
+	_sdld_ref="refs/worktree/review-start/draft/$1"
+	if git show-ref --verify --quiet "$_sdld_ref"; then git update-ref -d "$_sdld_ref"; fi
+}
 
 start_drop_draft() {
-	_sdd_ref=$(start_draft_ref "$1")
-	if git show-ref --verify --quiet "$_sdd_ref"; then git update-ref -d "$_sdd_ref"; fi
+	_sdd_ref=$(start_draft_ref "$1") || return 1
+	if git show-ref --verify --quiet "$_sdd_ref"; then git update-ref -d "$_sdd_ref" || return 1; fi
+	start_drop_legacy_draft "$1"
 }
 
 compare_drop_draft() {

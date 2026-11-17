@@ -1083,6 +1083,111 @@ step_review_two_with_edits() {
 	[ "$(git rev-parse refs/remotes/origin/feature/x)" = "$cached" ]
 }
 
+@test "prepared drafts coexist when a branch becomes a prefix of another" {
+	run git review start --prepare -- feature/x
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review walkthrough draft "--start-prepared=$token" -- feature/x
+	[ "$status" -eq 0 ]
+	git review start --release -- "$token"
+	first=.git/review-walkthrough/feature/x.md
+	first_oid=$(git hash-object "$first")
+
+	git push -q origin :feature/x
+	git branch -D feature/x
+	git switch -qc feature/x/next develop
+	printf 'next\n' >next.txt
+	git add next.txt
+	git commit -qm next
+	git push -q origin feature/x/next
+	git switch -q develop
+
+	run git review start --prepare -- feature/x/next
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review walkthrough draft "--start-prepared=$token" -- feature/x/next
+	[ "$status" -eq 0 ]
+	git review start --release -- "$token"
+	[ "$(git hash-object "$first")" = "$first_oid" ]
+	[ "$(sed -n '/^## ?\. /p' .git/review-walkthrough/feature/x/next.md)" = '## ?. next.txt' ]
+
+	run git review forget --draft feature/x
+	[ "$status" -eq 0 ]
+	[ ! -e "$first" ]
+	run git review config --porcelain --from-draft -- feature/x/next
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '/^start-draft-range/p')" = $'start-draft-range\t1' ]
+}
+
+@test "a draft keeps its explicit base when validated and reopened from another branch" {
+	bats_require_minimum_version 1.5.0
+	make_two_commit_feature
+	alternate=$(git rev-parse feature/two^)
+	git branch alternate "$alternate"
+	git push -q origin alternate
+	git review start --base alternate --no-walk -- feature/two
+	git review walkthrough draft
+	draft=.git/review-walkthrough/feature/two.md
+	[ "$(sed -n '/^## ?\. /p' "$draft")" = '## ?. b.txt' ]
+	printf '# Walkthrough\n\n## 1. b.txt\nRead the second change.\n' >"$draft"
+	git review abort
+	[ "$(git branch --show-current)" = develop ]
+	git push -q origin :alternate
+	git branch -D alternate
+	git config --unset reviewworkflow.base
+
+	run git review walkthrough draft --build -- feature/two
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'git review start --from-draft -- feature/two now reads it'* ]]
+	run git review config --porcelain --from-draft -- feature/two
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'start-draft-range\t1'* ]]
+	[[ "$output" == *$'offer\twalk\trecommended'* ]]
+
+	run --separate-stderr git review start --from-draft --base develop -- feature/two
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: prepared review does not match the selected branch and range' ]
+	[ "$(git branch --show-current)" = develop ]
+	run git review start --from-draft -- feature/two
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'vs origin/alternate'* ]]
+	[ "$(git config branch.review/feature/two.reviewbase)" = alternate ]
+	[ "$(git config branch.review/feature/two.reviewbasecommit)" = "$alternate" ]
+	[ "$(git config branch.review/feature/two.reviewmode)" = walk ]
+	[ "$(git diff --cached --name-only)" = b.txt ]
+}
+
+@test "a legacy draft range remains usable and is replaced on the next draft update" {
+	run git review start --prepare -- feature/x
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="start-prepared" {print $2}')
+	[ -n "$token" ]
+	prepared="refs/worktree/review-start/pending/$token"
+	legacy="refs/worktree/review-start/draft/feature/x"
+	subject=$(git log -1 --format='%s' "$prepared" --)
+	range=$(git commit-tree "$prepared^{tree}" -p "$prepared^1" -p "$prepared^2" -m "$subject")
+	git update-ref "$legacy" "$range"
+	draft=.git/review-walkthrough/feature/x.md
+	mkdir -p "$(dirname "$draft")"
+	printf '# Walkthrough\n\n## 1. app.txt\nRead the first change.\n' >"$draft"
+
+	run git review config --porcelain --from-draft -- feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'start-draft-range\t1'* ]]
+	run git review walkthrough draft "--start-prepared=$token" -- feature/x
+	[ "$status" -eq 0 ]
+	git review start --release -- "$token"
+	! git show-ref --verify --quiet "$legacy"
+	[ "$(sed -n '/^Read the first change\.$/p' "$draft")" = 'Read the first change.' ]
+
+	run git review start --from-draft -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = walk ]
+	[ "$(git diff --cached --name-only)" = app.txt ]
+}
+
 @test "prepared offline draft preserves its local range through build and start" {
 	bats_require_minimum_version 1.5.0
 	make_two_commit_feature

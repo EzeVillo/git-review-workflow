@@ -16,6 +16,7 @@ prog="git review start"
 usage() {
 	cat <<EOF
 usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk | --keys] [--local | --offline]
+       $prog --from-draft [--step | --no-walk | --keys] [--local | --offline] [--delta] -- <branch>
        $prog --prepare [--local | --offline] [--base <base> | --delta | --from <commit>] -- <branch>
        $prog --release -- <token>
 
@@ -30,6 +31,7 @@ With no <branch>, review the branch you currently have checked out.
                     letting <branch> default to the current branch
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
+  --from-draft      use the saved range of the walkthrough draft for <branch>
   --step            review one commit at a time; advance with git review next
   --no-walk         ignore any walkthrough on the PR; review the whole diff
   --keys            walk mode restricted to entries marked > key (requires a
@@ -227,7 +229,7 @@ fi
 # the configured fetch in a private reference store before resolving selectors.
 baseref=''
 baselabel=$base
-_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$delta$local_mode$offline_mode")
+_rs_mode_flags=$delta$local_mode$offline_mode
 _rs_pack=''
 _rs_prepared=0
 _rs_tmp=''
@@ -242,14 +244,18 @@ _rs_cleanup() {
 if [ -n "$prepared" ] || [ "$use_draft" -eq 1 ]; then
 	[ "$prepare" -eq 0 ] || die 'choose --prepare or --prepared'
 	if [ "$use_draft" -eq 1 ]; then
-		_rs_saved_range=$(start_draft_ref "$src")
-		git show-ref --verify --quiet "$_rs_saved_range" || die 'prepared draft range is unavailable'
+		_rs_saved_range=$(start_find_draft_ref "$src") || die 'prepared draft range is unavailable'
+		_rs_read_mode=draft
+		if [ "$base_explicit" -eq 1 ]; then _rs_read_mode=draft-explicit; fi
 	else
 		_rs_saved_range=$(start_prepared_ref "$prepared")
+		_rs_read_mode=exact
 	fi
-	start_read_range "$_rs_saved_range" "$_rs_identity" "$use_draft"
+	start_read_range "$_rs_saved_range" "$remote" "$src" "$base" "$from" "$_rs_mode_flags" "$_rs_read_mode"
 	srcref=$_rs_tip
 	baseref=$_rs_base
+	base=$_rs_base_selector
+	baselabel=$base
 else
 	trap _rs_cleanup 0
 	trap 'exit 130' INT
@@ -352,13 +358,22 @@ fi
 # every decision from here on describes the same walkthrough.
 walk_use_draft "$src"
 
+start_range_commit() {
+	_src_subject=$1
+	shift
+	compare_lease_commit "$_src_subject
+
+base=$base." "$@" </dev/null
+}
+
 if [ "$prepare" -eq 1 ]; then
 	# The manifest pins both endpoints, even when a selector is a movable ref.
 	set -- -p "$tip"
 	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
 	if [ "$delta" -eq 1 ] && [ "$prev" != "$baseref" ] && [ "$prev" != "$tip" ]; then set -- "$@" -p "$prev"; fi
-	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$delta$local_mode$offline_mode")
-	_rs_pack=$(compare_lease_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--} $_rs_draft_identity" "$@" </dev/null)
+	_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$_rs_mode_flags")
+	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
+	_rs_pack=$(start_range_commit "$_rs_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--} $_rs_draft_identity" "$@")
 	git update-ref "$_rs_tmp" "$_rs_pack"
 	_ero_branch=$src
 	_ero_tip=$tip
@@ -374,16 +389,16 @@ if [ "$prepare" -eq 1 ]; then
 fi
 
 start_keep_range() {
-	if [ "$offline_mode" -eq 1 ] && [ -z "${_rs_saved_range:-}$pinned_from" ]; then return 0; fi
+	if [ "$offline_mode" -eq 1 ] && [ "$base_explicit" -eq 0 ] && [ -z "${_rs_saved_range:-}$pinned_from" ]; then return 0; fi
 	# A walkthrough inherits an explicit cutoff as an OID, rather than taking
 	# the selector again. The pending token above still validates that selector.
-	_rs_session_identity=$(start_range_identity "$remote" "$src" "$base" '' "$delta$local_mode$offline_mode")
+	_rs_session_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
 	set -- -p "$tip"
 	if [ -n "$baseref" ] && [ "$baseref" != "$tip" ]; then set -- "$@" -p "$baseref"; fi
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && [ "$prev" != "$baseref" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
 		set -- "$@" -p "$prev"
 	fi
-	_rs_session=$(compare_lease_commit "$_rs_session_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@" </dev/null)
+	_rs_session=$(start_range_commit "$_rs_session_identity $_rs_base_label $tip ${baseref:--} ${prev:--} ${pinned_from:--}" "$@")
 	git update-ref "refs/worktree/review-start/session/$src" "$_rs_session"
 }
 

@@ -34,6 +34,8 @@ This file starts at 0.2.1. Earlier versions are only in the
   tracking branches using the same fetch refspec mapping, including PR refs.
 - Drafting for an active review uses its pinned revisions. Delta drafts use
   the last review point from before that session.
+- Drafts keep their explicit base when validated and reopened from another
+  branch. Drafts for names like `topic` and `topic/next` can coexist.
 - `git review forget --delta --stale` checks the remote's refs, including
   branches outside a single-branch clone's fetch refspec.
 

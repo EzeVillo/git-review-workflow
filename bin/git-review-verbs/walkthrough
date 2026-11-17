@@ -531,13 +531,14 @@ if [ "$sub" = draft ]; then
 	_start_draft_from=''
 	if [ -n "$start_prepared" ]; then
 		_start_draft_anchor=$(start_prepared_ref "$start_prepared")
-	elif [ "$build_draft" -eq 1 ] && git show-ref --verify --quiet "$(start_draft_ref "$branch")"; then
-		_start_draft_anchor=$(start_draft_ref "$branch")
+	elif [ "$build_draft" -eq 1 ]; then
+		_start_draft_anchor=$(start_find_draft_ref "$branch" || true)
 	fi
 	_start_draft_pack=''
 	if [ -n "$_start_draft_anchor" ]; then
-		start_read_range "$_start_draft_anchor" "$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline")" 1
+		start_read_range "$_start_draft_anchor" "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline" draft
 		srcref=$_rs_tip
+		base=$_rs_base_selector
 		_start_draft_from=$_rs_from
 		_start_draft_pack=$_rs_pack
 	elif [ "$from_review" -eq 1 ]; then
@@ -549,7 +550,7 @@ if [ "$sub" = draft ]; then
 			_start_draft_identity=$(start_range_identity "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline")
 			_start_session_identity=$(git log -1 --format='%s' "$_start_session_pack" --)
 			if [ "${_start_session_identity%% *}" = "$_start_draft_identity" ]; then
-				start_read_range "$_start_session_anchor" "$_start_draft_identity"
+				start_read_range "$_start_session_anchor" "$remote" "$branch" "$base" '' "$delta_mode$draft_local$offline"
 				_start_draft_pack=$_rs_pack
 				srcref=$_rs_tip
 				_start_draft_from=$_rs_from
@@ -1224,12 +1225,14 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		fi
 		emit_skeleton >"$tmp"
 		if [ -n "${_start_draft_pack:-}" ]; then
-			git update-ref "$(start_draft_ref "$branch")" "$_start_draft_pack"
+		_start_draft_ref=$(start_draft_ref "$branch")
+		git update-ref "$_start_draft_ref" "$_start_draft_pack"
 		elif [ "$compare_mode" -eq 0 ]; then
 			start_drop_draft "$branch"
 		fi
 		if [ "$compare_mode" -eq 1 ]; then compare_keep_draft; fi
 		mv "$tmp" "$targetpath"
+	if [ -n "${_start_draft_pack:-}" ]; then start_drop_legacy_draft "$branch"; fi
 		trap - EXIT INT TERM
 	fi
 
@@ -1809,7 +1812,11 @@ mv "$tmp" "$targetpath"
 if [ "$sub" = draft ] && [ "$compare_mode" -eq 1 ]; then
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review compare --draft $branch now reads it"
 elif [ "$sub" = draft ]; then
-	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start$draftflags $branch now reads it"
+	_start_reopen_flags=$draftflags
+	if [ -n "$_start_draft_anchor" ] && [ -z "$start_prepared" ]; then
+		_start_reopen_flags=" --from-draft$draftflags --"
+	fi
+	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start$_start_reopen_flags $branch now reads it"
 else
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"
 fi

@@ -1264,6 +1264,25 @@ assert_start_matches_git() {
 	[ "$(git symbolic-ref refs/heads/symlink-cutoff)" = refs/remotes/origin/cutoff ]
 }
 
+@test "start reads a graft file linked to a relative path starting with refs" {
+	make_two_commit_feature
+	tip=$(git rev-parse feature/two)
+	base=$(git rev-parse develop)
+	git clone -q --branch develop "$ORIGIN" "$TMP/oracle"
+	for repo in "$WORK" "$TMP/oracle"; do
+		git -C "$repo" config advice.graftFileDeprecated false
+		mkdir -p "$repo/.git/info/refs"
+		printf '%s %s\n' "$tip" "$base" >"$repo/.git/info/refs/cutoff"
+		ln -s refs/cutoff "$repo/.git/info/grafts" 2>/dev/null || skip 'symlinks unavailable'
+		[ -L "$repo/.git/info/grafts" ] || skip 'symlinks unavailable'
+	done
+	git -C "$TMP/oracle" fetch -q origin
+	[ "$(git -C "$TMP/oracle" rev-parse --verify origin/feature/two^)" = "$base" ]
+	assert_start_matches_git "$WORK" "$TMP/oracle" --from origin/feature/two^
+	[ -L .git/info/grafts ]
+	[ "$(cat .git/info/grafts)" = "$tip $base" ]
+}
+
 @test "start refuses configured fetch into a branch checked out in another worktree" {
 	bats_require_minimum_version 1.5.0
 	make_two_commit_feature

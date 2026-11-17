@@ -5438,20 +5438,21 @@ review_view_copy_gitdir() (
 		fi
 	done
 	[ "$#" -eq 0 ] || cp -RP "$@" "$_rvc_dest/" || return 1
-	# Never leave a symlink that Git could write through to the source. Git
-	# also accepts old-style symlink symrefs, even if the link is dangling
-	# as a filesystem path. Preserve those in Git's textual form.
+	# Keep Git's old-style symrefs as links. A relative target below refs/
+	# stays inside the snapshot, and Git may also read the same path as
+	# a regular file (for example, a graft file under info/). Materialize
+	# other links so neither fetch nor ref updates can write through them.
 	find "$_rvc_dest" -type l -exec sh -c '
 		from=$1 to=$2
 		shift 2
 		for link do
 			original=$from/${link#"$to/"}
 			target=$(readlink "$original") || exit 1
-			rm -f "$link" || exit 1
 			case "$target" in
-			refs/*) printf "ref: %s\n" "$target" >"$link" || exit 1 ;;
-			*) if [ -f "$original" ] || [ -d "$original" ]; then cp -RL "$original" "$link" || exit 1; fi ;;
+			refs/*) case "/$target/" in *\\*|*/../*) ;; *) continue ;; esac ;;
 			esac
+			rm -f "$link" || exit 1
+			if [ -f "$original" ] || [ -d "$original" ]; then cp -RL "$original" "$link" || exit 1; fi
 		done
 	' sh "$_rvc_source" "$_rvc_dest" {} +
 )

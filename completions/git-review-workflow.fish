@@ -89,6 +89,7 @@ complete -c git -n '__grw_review_bare' -f -l h -d 'list all available commands'
 complete -c git -n '__grw_review_bare' -f -s V -l version -d 'print the installed version'
 complete -c git -n '__grw_review_bare' -f -a start -d 'stage a PR diff on a new review/<branch> branch'
 complete -c git -n '__grw_review_bare' -f -a compare -d 'stage the diff between two commit-ish, read-only'
+complete -c git -n '__grw_review_bare' -f -a workspace -d 'review pinned revisions in separate directories'
 complete -c git -n '__grw_review_bare' -f -a walkthrough -d 'author a reading walkthrough for the current PR'
 complete -c git -n '__grw_review_bare' -f -a comments -d 'write and revisit Local or Shared review comments'
 complete -c git -n '__grw_review_bare' -f -a config -d 'read or write the base branch and remote'
@@ -147,12 +148,14 @@ complete -c git -n '__grw_review_using start' -f -l from -d 'review only commits
 complete -c git -n '__grw_review_using start' -f -l step -d 'review one commit at a time'
 complete -c git -n '__grw_review_using start' -f -l no-walk -d 'ignore any walkthrough on the PR'
 complete -c git -n '__grw_review_using start' -f -l local -d 'review your local branches directly, without fetching'
+complete -c git -n '__grw_review_using start' -r -l workspace -d 'open in a new directory'
 complete -c git -n '__grw_review_using start' -f -l h -d 'show help'
 complete -c git -n '__grw_review_using start' -f -a '(__grw_branches)'
 
 # ── git review compare ────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using compare' -f -l step -d 'review one commit at a time'
 complete -c git -n '__grw_review_using compare' -f -l no-walk -d 'ignore any walkthrough on <b>'
+complete -c git -n '__grw_review_using compare' -r -l workspace -d 'open in a new directory'
 complete -c git -n '__grw_review_using compare' -f -l h -d 'show help'
 complete -c git -n '__grw_review_using compare' -f -a '(__grw_branches)'
 

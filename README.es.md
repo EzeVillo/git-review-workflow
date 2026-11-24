@@ -297,6 +297,13 @@ git config --global http.sslBackend openssl
 
 </details>
 
+## Reviews aisladas en la CLI
+
+Agregá `--workspace ../carpeta-de-review` a `git review start` o `git review compare`
+para abrir un diff staged en su propio repositorio. En modo commit por commit,
+mover el cursor conserva la carpeta abierta. Creá un checkout separado para
+editar o probar otro commit. [Ver los comandos](CLI.es.md#carpetas-aisladas-de-revisión).
+
 ## Referencia de la CLI
 
 Los paneles y la interfaz de terminal cubren el flujo normal. Para consultar

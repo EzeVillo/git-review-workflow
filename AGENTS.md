@@ -23,6 +23,14 @@ Revisás en tu working tree y `git review finish` extrae las ediciones que hayas
 `review-fixes/<branch>`. No hace falta editar código para aprovechar el recorrido. Ver `CLI.md`
 para la superficie completa de comandos.
 
+En la CLI, `start --workspace <dir>` y `compare --workspace <dir>` también abren
+una sesión aislada para revisar el diff completo o navegar commits. Cada
+materialización usa un repositorio independiente en un directorio nuevo. El
+cursor vive en `refs/review-workspace/` y navega por OID. Finish captura las
+ediciones con un índice temporal y las stagea sobre el tip fijado en otro
+directorio, que se conserva incluso si hay un conflicto. Las carpetas abiertas
+no se reciclan ni se borran como parte de una operación de review.
+
 ## Dónde está cada cosa
 
 | Documento | Qué contesta |

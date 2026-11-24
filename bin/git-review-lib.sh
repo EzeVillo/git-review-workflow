@@ -2873,7 +2873,7 @@ porcelain_row() {
 	printf '\n'
 }
 
-# show_commit <commit> <n> <total>
+# show_commit <commit> <n> <total> [<next-step-message>]
 # Print a commit's diffstat first and its identifying header last, so the header
 # stays next to the prompt instead of scrolling off the top when the diffstat is
 # long. core.quotePath=false for the same reason as changed_paths: git's default
@@ -2882,10 +2882,11 @@ porcelain_row() {
 # project prints in one shape.
 show_commit() {
 	git --no-pager -c core.quotePath=false show --stat --format='' "$1"
-	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review next\n' \
+	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\n%s\n' \
 		"$2" "$3" "$(git rev-parse --short "$1")" \
 		"$(git show -s --format='%an <%ae>' "$1")" \
-		"$(git show -s --format='%s%n%n%b' "$1")"
+		"$(git show -s --format='%s%n%n%b' "$1")" \
+		"${4-review this commit, edit files, then run git review next}"
 }
 
 # require_not_finish_conflict

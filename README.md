@@ -295,6 +295,13 @@ git config --global http.sslBackend openssl
 
 </details>
 
+## Isolated reviews in the CLI
+
+Add `--workspace ../review-folder` to `git review start` or `git review compare`
+to open a staged diff in its own repository. In commit-by-commit mode, moving
+the reading cursor preserves the open folder. Create a separate checkout to
+edit or test another commit. [See the workspace commands](CLI.md#isolated-review-workspaces).
+
 ## CLI reference
 
 The panels and terminal UI cover the normal workflow. For every command, flag,

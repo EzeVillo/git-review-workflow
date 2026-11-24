@@ -29,6 +29,7 @@ _git_review_start() {
 		'(--no-walk)--step[review one commit at a time]' \
 		'(--step)--no-walk[ignore any walkthrough on the PR]' \
 		'--local[review your local branches directly, without fetching]' \
+		'--workspace[open in a new directory]:directory:_directories' \
 		'*: :__git_revisions'
 }
 
@@ -37,6 +38,7 @@ _git_review_compare() {
 		'(-h --h)'{-h,--h}'[show help]' \
 		'(--no-walk)--step[review one commit at a time]' \
 		'(--step)--no-walk[ignore any walkthrough on <b>]' \
+		'--workspace[open in a new directory]:directory:_directories' \
 		'*:commit-ish:__git_revisions'
 }
 
@@ -240,6 +242,7 @@ _git-review() {
 		verbs=(
 			'start:stage a PR diff on a new review/<branch> branch'
 			'compare:stage the diff between two commit-ish, read-only'
+			'workspace:review pinned revisions in separate directories'
 			'walkthrough:author a reading walkthrough for the current PR'
 			'comments:write and revisit Local or Shared review comments'
 			'config:read or write the base branch and remote'
@@ -263,6 +266,7 @@ _git-review() {
 		case "$line[1]" in
 		start) _git_review_start ;;
 		compare) _git_review_compare ;;
+		workspace) _arguments '1:workspace command:(open status next prev diff checkout finish)' ;;
 		walkthrough) _git_review_walkthrough ;;
 		comments) _git_review_comments ;;
 		config) _git_review_config ;;

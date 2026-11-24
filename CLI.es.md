@@ -71,6 +71,43 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review forget --draft ([--] <rama> \| --all \| --reviewed) [--dry-run]`                                                                             | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
 | `git review config [<clave> [<valor>]] [--unset <clave>] [--porcelain [<rama>]]`                                                           | Lee o escribe la config del producto (`base`, `remote`); `--porcelain` también lista las ramas candidatas a revisar.                                                                                                                                                                                                                                                                   |
 
+## Carpetas aisladas de revisión
+
+Usá `--workspace <directorio-nuevo>` con `start` o `compare` desde cualquier
+checkout, incluso si tiene cambios locales. El directorio nuevo tiene que
+quedar fuera de los repositorios existentes. Contiene un repositorio
+independiente con el diff seleccionado staged. Con `--step`, se abre en el
+primer commit. Sin ese flag, queda staged el rango completo. Son sesiones
+de CLI para diffs completos o para revisar commit por commit. El walkthrough,
+los comentarios y los paneles de los IDEs usan el flujo habitual.
+
+```sh
+git review start feature/login --step --workspace ../login-first
+cd ../login-first
+git review workspace next
+git review workspace diff
+git review workspace checkout ../login-second
+# Después de editar en cualquiera de las dos carpetas:
+git review workspace finish ../login-fixes ../login-second
+```
+
+`workspace status`, `next`, `prev` y `diff` leen los commits fijados. Mover el
+cursor deja intactos los archivos y el índice. `workspace checkout` deja staged
+el diff seleccionado en otro directorio nuevo para editar o probar. Para un
+rango local exacto, usá `git review workspace open [--step] <directorio-nuevo> -- <base> <destino>`.
+
+`workspace finish` abre la salida en el destino fijado y stagea tus ediciones
+respecto del commit que se materializó en cada carpeta. Lee primero la carpeta
+actual y después las adicionales en el orden de los argumentos. Si hay un
+conflicto, queda en el directorio nuevo para que puedas resolverlo. Las carpetas
+abiertas desde `compare` son de solo lectura. Cada directorio creado queda en
+disco hasta que lo borres.
+
+La URL del remoto de origen, si está configurada, queda como `origin` en los
+repositorios aislados para que puedas inicializar los submódulos con Git cuando
+haga falta. Los objetos del rango se copian localmente. Estas sesiones no
+marcan la rama original como revisada para un `--delta` posterior.
+
 ## Comentarios de revisión
 
 Las comparaciones admiten sólo comentarios **Local**. Su Markdown guardado se conserva automáticamente al cerrar con `abort` o eliminar con `clean`; las ediciones de código se descartan. No hace falta una acción Save comments. En reviews se elige Local o Shared en cada captura. Los clientes obtienen los destinos permitidos de `comments status --porcelain`; si hay uno solo, lo envían automáticamente sin selector.

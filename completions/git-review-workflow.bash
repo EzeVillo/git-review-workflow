@@ -54,7 +54,7 @@ __grw_marked_branches() {
 _git_review_start() {
 	case "$cur" in
 	--*)
-		__gitcomp "--base --delta --from --step --no-walk --local --h"
+		__gitcomp "--base --delta --from --step --no-walk --local --workspace --h"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
@@ -65,7 +65,7 @@ _git_review_start() {
 _git_review_compare() {
 	case "$cur" in
 	--*)
-		__gitcomp "--step --no-walk --h"
+		__gitcomp "--step --no-walk --workspace --h"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
@@ -206,7 +206,7 @@ _git_review_forget() {
 # dispatcher's own -h/--version). Otherwise dispatch to the verb's helper —
 # verbs with no options beyond --h fall through to the default.
 _git_review() {
-	local subcommands="start compare walkthrough comments config next prev status list preview finish save continue abort clean forget ui"
+	local subcommands="start compare workspace walkthrough comments config next prev status list preview finish save continue abort clean forget ui"
 	local subcommand
 	subcommand="$(__git_find_on_cmdline "$subcommands")"
 
@@ -221,6 +221,11 @@ _git_review() {
 	case "$subcommand" in
 	start) _git_review_start ;;
 	compare) _git_review_compare ;;
+	workspace)
+		if [ -z "$(__git_find_on_cmdline 'open status next prev diff checkout finish')" ]; then
+			__gitcomp "open status next prev diff checkout finish"
+		fi
+		;;
 	walkthrough) _git_review_walkthrough ;;
 	comments) _git_review_comments ;;
 	config) _git_review_config ;;

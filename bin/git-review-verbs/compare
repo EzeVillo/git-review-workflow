@@ -32,6 +32,7 @@ finish refuses on it.
              brings the current remote branch without moving tracking branches
   --step     read one commit at a time; advance with git review next
   --no-walk  ignore any walkthrough on <b>; read the whole diff
+  --workspace <dir> open the comparison in a new, isolated directory
   --keys     walk mode restricted to entries marked > key (requires a
              walkthrough with at least one key in range; not with --step
              or --no-walk)
@@ -55,6 +56,7 @@ comparison_query=''
 compare_prepared=''
 porcelain=0
 compare_mode=1
+workspace=''
 # Collect the two positional commit-ish; mirror start's parser, including -- as the
 # end-of-options separator so a commit-ish that starts with "-" stays positional.
 add_positional() {
@@ -75,6 +77,12 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--draft) from_draft=1 ;;
+	--workspace)
+		shift
+		[ -n "${1:-}" ] || die '--workspace requires a new directory'
+		[ -z "$workspace" ] || die '--workspace given more than once'
+		workspace=$1
+		;;
 	--sources|--prepare|--release)
 		[ -z "$comparison_query" ] || die 'choose one comparison operation'
 		comparison_query=${1#--} ;;
@@ -122,6 +130,9 @@ if [ "$keys_only" -eq 1 ]; then
 		die "--keys cannot be combined with --no-walk"
 	fi
 fi
+if [ -n "$workspace" ] && { [ -n "$comparison_query" ] || [ "$keys_only" -eq 1 ]; }; then
+	die '--workspace opens a whole or step comparison and cannot be combined with queries or --keys'
+fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
@@ -141,6 +152,12 @@ release)
 esac
 
 if [ "$from_draft" -eq 1 ]; then compare_load_draft "$a"; else compare_resolve "$a" "$b"; fi
+
+if [ -n "$workspace" ]; then
+	set -- open --read-only
+	if [ "$step" -eq 1 ]; then set -- "$@" --step; fi
+	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" "$@" "$workspace" -- "$acommit" "$bcommit"
+fi
 
 require_clean_work_tree
 

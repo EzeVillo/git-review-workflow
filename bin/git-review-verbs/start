@@ -41,6 +41,8 @@ With no <branch>, review the branch you currently have checked out.
                     is still fetched and resolved against origin
   --offline         like --local, but also skip fetching and resolve the base
                     from your local branches too
+  --workspace <dir> open an isolated review in a new directory; supports whole
+                    diff and --step
 EOF
 }
 
@@ -63,6 +65,7 @@ prepare=0
 prepared=''
 release=0
 use_draft=0
+workspace=''
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -78,6 +81,12 @@ while [ $# -gt 0 ]; do
 	--prepared=*) prepared=${1#--prepared=} ;;
 	--release) release=1 ;;
 	--from-draft) use_draft=1 ;;
+	--workspace)
+		shift
+		[ -n "${1:-}" ] || die '--workspace requires a new directory'
+		[ -z "$workspace" ] || die '--workspace given more than once'
+		workspace=$1
+		;;
 	--offline)
 		local_mode=1
 		offline_mode=1
@@ -158,6 +167,9 @@ if [ "$keys_only" -eq 1 ]; then
 		die "--keys cannot be combined with --no-walk"
 	fi
 fi
+if [ -n "$workspace" ] && [ "$prepare$release$keys_only" != 000 ]; then
+	die '--workspace opens a whole or step review and cannot be combined with --prepare, --release or --keys'
+fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
@@ -201,7 +213,7 @@ if [ -z "$base" ]; then
 	base="$(git config reviewworkflow.base || true)"
 fi
 
-if [ "$prepare" -eq 0 ]; then require_clean_work_tree; fi
+if [ "$prepare" -eq 0 ] && [ -z "$workspace" ]; then require_clean_work_tree; fi
 case "$src" in
 	review/*|review-saved/*|review-fixes/*) die "refusing to review a review branch ($src)" ;;
 esac
@@ -289,10 +301,12 @@ fi
 tip=$(review_commit_oid "$srcref") || die "$srclabel not found"
 
 rb="review/$src"
-git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
-	die "$rb already exists; run git review clean $src first"
-git rev-parse --verify --quiet "refs/heads/review-saved/$src" >/dev/null &&
-	die "you have a saved review of $src; resume it with git review continue $src or discard it with git review forget --saved $src"
+if [ -z "$workspace" ]; then
+	git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
+		die "$rb already exists; run git review clean $src first"
+	git rev-parse --verify --quiet "refs/heads/review-saved/$src" >/dev/null &&
+		die "you have a saved review of $src; resume it with git review continue $src or discard it with git review forget --saved $src"
+fi
 
 prev="$(git config "$markerkey" || true)"
 if [ -n "${_rs_saved_range:-}" ] && [ "$delta" -eq 1 ] && [ "$prev" != "$_rs_previous" ]; then
@@ -349,6 +363,16 @@ else
 		n="$(git rev-list --count "$prev..$tip")"
 		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since$(advice_suffix ' (use --delta to review only those)')" >&2
 	fi
+fi
+
+if [ -n "$workspace" ]; then
+	if [ "$step" -eq 1 ]; then
+		"$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" open --step "$workspace" -- "$start" "$tip"
+	else
+		lower=$(fold_lower "$start" "$baseref" "$tip")
+		"$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" open "$workspace" -- "$lower" "$tip"
+	fi
+	exit
 fi
 
 # Read this source's own draft in preference to the PR's walkthrough, if the

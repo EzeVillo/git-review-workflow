@@ -71,6 +71,43 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review forget --draft ([--] <branch> \| --all \| --reviewed) [--dry-run]`                                                                             | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
 | `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                               | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                                                                      |
 
+## Isolated review workspaces
+
+Use `--workspace <new-directory>` with `start` or `compare` from any checkout,
+including one with local changes. The new directory must be outside existing
+Git repositories. It contains an independent repository with the selected
+diff staged. `--step` starts on the first commit. Without `--step`, the full
+range is staged. These are CLI sessions for whole diffs or commit-by-commit
+review. The walkthrough, review comments and IDE review panels use the regular
+review flow.
+
+```sh
+git review start feature/login --step --workspace ../login-first
+cd ../login-first
+git review workspace next
+git review workspace diff
+git review workspace checkout ../login-second
+# After editing in either workspace:
+git review workspace finish ../login-fixes ../login-second
+```
+
+`workspace status`, `next`, `prev` and `diff` read the pinned commits. Moving
+the cursor leaves the files and index alone. `workspace checkout` stages the
+selected diff in another new directory for editing or testing. For an exact
+local range, use `git review workspace open [--step] <new-directory> -- <base> <target>`.
+
+`workspace finish` starts the output at the pinned target and stages your edits
+relative to the commit originally materialized in each supplied workspace.
+It reads the current workspace first, followed by any additional workspace
+directories in argument order. A conflict stays in the new output directory
+for resolution. Comparison workspaces opened by `compare` are read-only.
+Every created directory remains on disk until you remove it.
+
+The source remote URL, if configured, is stored as `origin` in the isolated
+repositories so you can initialize submodules with Git when needed. All
+repository objects needed for the pinned range are copied locally. Workspaces
+do not mark the source branch as reviewed for a subsequent `--delta`.
+
 ## Review comments
 
 Comparisons accept **Local** comments only. Their saved Markdown is retained automatically when the comparison is closed with `abort` or removed with `clean`; code edits are discarded. No Save comments action is needed. In reviews, choose Local or Shared on each capture. Clients obtain the permitted destinations from `comments status --porcelain`; a sole destination is sent automatically without a selector.

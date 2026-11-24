@@ -26,6 +26,8 @@ Commands:
                      --keys restricts walk to entries marked > key)
   git review compare <a> <b> [--step | --no-walk | --keys]
                      stage the diff between two commit-ish, read-only (finish refuses)
+  git review workspace <command>
+                     read pinned revisions and stage changes in separate directories
   git review walkthrough (init [--base <base>] [--force] | build [--check])
                      author a reading walkthrough for the current branch's PR
   git review comments <command>

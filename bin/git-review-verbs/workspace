@@ -1,0 +1,258 @@
+#!/usr/bin/env sh
+#
+# Review pinned revisions without rewriting a directory already in use.
+
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: git review workspace open [--step] [--read-only] <new-directory> -- <base> <target>
+       git review workspace (status | next | prev | diff)
+       git review workspace checkout <new-directory>
+       git review workspace finish <new-directory> [<other-workspace>...]
+
+Open an independent review workspace. Use --step to read a commit at a time.
+Next and Previous move the reading cursor. Checkout opens the selected commit
+in a new directory. Finish stages edits from these workspaces on the reviewed
+tip in a new directory. Previous directories remain available.
+EOF
+}
+
+die() {
+	printf 'error: %s\n' "$1" >&2
+	exit 1
+}
+
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+workspace_failed() {
+	if [ "$1" -ne 0 ]; then
+		printf 'note: workspace files retained at %s\n' "$destination" >&2
+	fi
+}
+
+# Populate only a directory reserved by this invocation. A local fetch copies
+# the pinned objects to an independent repository, including shallow history.
+# In particular no alternate object store or source worktree is needed later.
+create_workspace() (
+	requested=$1
+	checkout_base=$2
+	checkout_tip=$3
+	kind=$4
+	parent=$(dirname -- "$requested")
+	leaf=$(basename -- "$requested")
+	case "$leaf" in ''|.|..|/) die 'choose a new workspace directory' ;; esac
+	parent=$(CDPATH='' cd -P -- "$parent" && pwd -P) || die 'workspace parent directory does not exist'
+	destination=${parent%/}/$leaf
+	source_gitdir=$(git rev-parse --absolute-git-dir) || exit 1
+	remote=$(git config --get reviewworkflow.remote || printf origin)
+	remote_url=$(git remote get-url "$remote" 2>/dev/null || git remote get-url origin 2>/dev/null || true)
+	case "$remote_url" in
+	''|/*|*:*|\\*) ;;
+	*) remote_url="$(git rev-parse --show-toplevel)/$remote_url" ;;
+	esac
+	local_vars=$(git rev-parse --local-env-vars) || exit 1
+	for var in $local_vars; do unset "$var"; done
+	if git -C "$parent" rev-parse --git-dir >/dev/null 2>&1; then
+		die 'choose a directory outside existing Git repositories'
+	fi
+	if ! mkdir -- "$destination"; then
+		die 'workspace destination must be a new directory'
+	fi
+	# Keep partial output on failure. Even a directory that was empty at
+	# reservation can receive user files while Git is running.
+	trap 'workspace_failed "$?"' 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	cd -- "$destination"
+	export GIT_DIR="$destination/.git" GIT_WORK_TREE="$destination"
+	if [ "${#checkout_tip}" -eq 64 ]; then
+		GIT_DEFAULT_HASH=sha256 git init -q --template=
+	else
+		GIT_DEFAULT_HASH=sha1 git init -q --template=
+	fi
+	# Older upload-pack versions accept only advertised tips by default. This
+	# subprocess serves the local repository's exact pinned objects.
+	git -c core.hooksPath=/dev/null fetch -q --no-tags --update-shallow \
+		--upload-pack='git -c uploadpack.allowAnySHA1InWant=true upload-pack' -- \
+		"$source_gitdir" "$range_base" "$range_tip" "$checkout_base" "$checkout_tip"
+	if [ -n "$remote_url" ]; then git config --local remote.origin.url "$remote_url"; fi
+	git symbolic-ref HEAD "refs/heads/$kind"
+	git -c core.hooksPath=/dev/null update-ref HEAD "$checkout_base"
+	# The index starts empty. Unpack the target, leaving HEAD at the lower
+	# endpoint so the diff is staged.
+	git -c core.hooksPath=/dev/null -c submodule.recurse=false read-tree -m -u "$checkout_tip"
+	if [ "$kind" = review-fixes ]; then
+		i=1
+		while [ "$i" -le "$patch_count" ]; do
+			if [ -s "$patch_dir/$i" ]; then
+				git -c core.hooksPath=/dev/null apply --binary --3way --index "$patch_dir/$i"
+			fi
+			i=$((i + 1))
+		done
+	else
+		{
+			printf 'create refs/review-workspace/base %s\n' "$range_base"
+			printf 'create refs/review-workspace/tip %s\n' "$range_tip"
+			printf 'create refs/review-workspace/materialized %s\n' "$checkout_tip"
+			if [ -n "$cursor" ]; then printf 'create refs/review-workspace/cursor %s\n' "$cursor"; fi
+			if [ "$read_only" -eq 1 ]; then printf 'create refs/review-workspace/readonly %s\n' "$range_tip"; fi
+		} | git -c core.hooksPath=/dev/null update-ref --stdin
+	fi
+	printf '%s\n' "$destination"
+)
+
+read_range() {
+	range_base=$(git rev-parse --verify --quiet refs/review-workspace/base) || die 'run this command inside a review workspace'
+	range_tip=$(git rev-parse --verify refs/review-workspace/tip)
+	materialized=$(git rev-parse --verify refs/review-workspace/materialized)
+	cursor=$(git rev-parse --verify --quiet refs/review-workspace/cursor || true)
+	read_only=0
+	if git show-ref --verify --quiet refs/review-workspace/readonly; then read_only=1; fi
+}
+
+write_workspace_patch() {
+	tree=$(review_snapshot_worktree)
+	git -c diff.relative=false diff --binary --full-index --no-ext-diff --no-textconv \
+		--src-prefix=a/ --dst-prefix=b/ --ignore-submodules=dirty "$materialized" "$tree" --
+}
+
+write_workspace_patch_from() (
+	selected_path=$1
+	expected_base=$range_base
+	expected_tip=$range_tip
+	local_vars=$(git rev-parse --local-env-vars) || exit 1
+	for var in $local_vars; do unset "$var"; done
+	cd -- "$selected_path" || exit 1
+	[ -z "$(git rev-parse --show-prefix)" ] || die 'specify the root of the workspace'
+	read_range
+	if [ "$range_base" != "$expected_base" ] || [ "$range_tip" != "$expected_tip" ]; then
+		die "workspace reviews a different range: $selected_path"
+	fi
+	[ "$read_only" -eq 0 ] || die "this workspace is a read-only comparison: $selected_path"
+	write_workspace_patch
+)
+
+read_steps() {
+	commits=$(git rev-list --reverse --first-parent --no-merges "$range_base..$range_tip")
+	[ -n "$commits" ] || die 'there are no commits to read in the selected range'
+}
+
+show_position() {
+	if [ -z "$cursor" ]; then
+		git --no-pager diff --stat --no-ext-diff "$range_base" "$range_tip" --
+		return
+	fi
+	set_position
+	show_workspace_commit "$cursor" "$position" "$total"
+}
+
+show_workspace_commit() {
+	show_commit "$1" "$2" "$3" 'Use git review workspace checkout to edit or test this commit in a new directory.'
+}
+
+set_position() {
+	read_steps
+	total=$(printf '%s\n' "$commits" | wc -l | tr -d ' ')
+	position=$(printf '%s\n' "$commits" | awk -v commit="$cursor" '$0 == commit { print NR }')
+	[ -n "$position" ] || die 'workspace cursor is outside the pinned range'
+}
+
+command=${1:--h}
+case "$command" in
+-h|--h) usage; exit 0 ;;
+esac
+shift
+case "$command" in
+open)
+	step_mode=0
+	read_only=0
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+		--step) step_mode=1 ;;
+		--read-only) read_only=1 ;;
+		*) break ;;
+		esac
+		shift
+	done
+	if [ "$#" -ne 4 ] || [ "$2" != -- ]; then
+		die 'open expects a new directory, --, and two revisions'
+	fi
+	range_base=$(review_commit_oid "$3") || die "unknown base revision: $3"
+	range_tip=$(review_commit_oid "$4") || die "unknown target revision: $4"
+	if review_uses_replacements && [ -n "$(git replace --list)" ]; then
+		die 'workspaces require the original commit objects; disable replacement refs for this invocation'
+	fi
+	grafts=${GIT_GRAFT_FILE-$(git rev-parse --git-path info/grafts)}
+	[ ! -s "$grafts" ] || die 'workspaces do not support grafted history'
+	if [ "${GIT_SHALLOW_FILE+x}" = x ]; then
+		die 'workspaces require the repository shallow boundary; unset GIT_SHALLOW_FILE'
+	fi
+	cursor=''
+	checkout_base=$range_base
+	checkout_tip=$range_tip
+	if [ "$step_mode" -eq 1 ]; then
+		read_steps
+		cursor=$(printf '%s\n' "$commits" | sed -n '1p')
+		checkout_tip=$cursor
+		checkout_base=$(git rev-parse --verify "$cursor^")
+	fi
+	create_workspace "$1" "$checkout_base" "$checkout_tip" review-workspace
+	;;
+status|next|prev|diff)
+	[ "$#" -eq 0 ] || die "$command takes no arguments"
+	read_range
+	case "$command" in
+	status) show_position ;;
+	diff)
+		if [ -n "$cursor" ]; then set -- "$cursor^" "$cursor"; else set -- "$range_base" "$range_tip"; fi
+		git --no-pager diff --no-ext-diff --no-textconv "$@" --
+		;;
+	next|prev)
+		[ -n "$cursor" ] || die 'commit navigation requires a workspace opened with --step'
+		set_position
+		if [ "$command" = next ]; then destination=$((position + 1)); else destination=$((position - 1)); fi
+		if [ "$destination" -lt 1 ] || [ "$destination" -gt "$total" ]; then
+			show_workspace_commit "$cursor" "$position" "$total"
+			exit 0
+		fi
+		selected=$(printf '%s\n' "$commits" | sed -n "${destination}p")
+		git update-ref refs/review-workspace/cursor "$selected" "$cursor"
+		show_workspace_commit "$selected" "$destination" "$total"
+		;;
+	esac
+	;;
+checkout)
+	[ "$#" -eq 1 ] || die "$command expects a new directory"
+	read_range
+	if [ -n "$cursor" ]; then
+		checkout_base=$(git rev-parse --verify "$cursor^")
+		checkout_tip=$cursor
+	else
+		checkout_base=$range_base
+		checkout_tip=$range_tip
+	fi
+	create_workspace "$1" "$checkout_base" "$checkout_tip" review-workspace
+	;;
+finish)
+	[ "$#" -ge 1 ] || die 'finish expects a new directory'
+	output=$1
+	shift
+	read_range
+	[ "$read_only" -eq 0 ] || die 'this workspace is a read-only comparison'
+	source_gitdir=$(git rev-parse --absolute-git-dir)
+	patch_dir=$(mktemp -d "$source_gitdir/workspace-patch.XXXXXX")
+	trap 'rm -f "$patch_dir"/*; rmdir "$patch_dir"' 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	patch_count=1
+	write_workspace_patch >"$patch_dir/$patch_count"
+	for input do
+		patch_count=$((patch_count + 1))
+		write_workspace_patch_from "$input" >"$patch_dir/$patch_count"
+	done
+	create_workspace "$output" "$range_tip" "$range_tip" review-fixes
+	;;
+*) die "unknown workspace command: $command" ;;
+esac

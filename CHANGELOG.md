@@ -16,6 +16,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Added
 
+- Open an isolated terminal review with `--workspace`. Browse pinned commits
+  without changing the files in use and stage code in a new directory when
+  editing a commit or delivering corrections.
 - Advance a behind local PR branch to the reviewed tip with
   `git review finish --update-source`, then stage your corrections on it.
   Undo restores the previous local tip along with the review.

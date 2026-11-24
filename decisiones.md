@@ -1941,11 +1941,33 @@ el padre para conservar los archivos que quedan al lado. En un working tree
 con `core.ignoreCase`, la búsqueda también contempla destinos que escriben
 la misma ruta con otra capitalización.
 
+Si el gitlink ya salió del índice, los archivos que rastrea el padre como
+entradas ordinarias le pertenecen en el working tree. Esas rutas se excluyen
+de las modificaciones unstaged y de los archivos ignorados o sin rastrear
+del hijo, incluso al cruzar varios checkouts retenidos. Cada checkout conserva
+su propio índice. Una edición staged en el hijo sigue protegida aunque el
+padre también rastree esa ruta. Las entradas de directorio que Git devuelve
+para un checkout embebido se comprueban con su propio inventario de archivos.
+
+Al pasar del gitlink a archivos ordinarios, Git puede ver los archivos del
+hijo como ajenos al padre y rechazar el switch. El cambio de árbol aparta
+sólo los archivos que coinciden byte por byte con el contenido que Git puede
+reproducir desde el índice del hijo. Si el checkout no ocupa esa ruta, se
+devuelve la copia sin pisar una escritura concurrente. En la transición
+inversa sin recursión, Git puede quitar los archivos del padre y dejar al
+hijo con borrados locales. Se restauran desde el índice del hijo únicamente
+las rutas transferidas que siguen ausentes. Así, Save puede volver a la rama
+con el gitlink y Continue puede retomar la review con las ediciones que
+quedaron en el banco.
+
 La captura de correcciones usa el mismo límite de propiedad en Preview,
 Save, navegación, Finish y Undo. Captura los archivos que ya rastrea el
 padre y excluye los nuevos de checkouts anidados, incluidos los checkouts
 que `git add -A` convertiría implícitamente en gitlinks. Un gitlink que se
 stagea explícitamente sigue siendo parte de la review.
+Las copias de índices conservan su marca de tiempo. Git puede omitir una
+edición del mismo tamaño si la copia vuelve aparentemente más viejo el
+registro de stat de un archivo modificado en el mismo tick.
 
 El mantenimiento de ediciones y Undo identifica al dueño exacto de cada ref,
 incluso si los nombres de dos ramas comparten prefijo.

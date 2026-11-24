@@ -261,7 +261,7 @@ git config "branch.$saved.reviewreturn" "$target"
 # Give the checkout the captured index so it also removes newly added files
 # that were untracked in the live index.
 git read-tree "$tree"
-if ! git switch -q --discard-changes --no-overwrite-ignore "$target"; then
+if ! review_checkout_tree "refs/heads/$target" switch -q --discard-changes --no-overwrite-ignore "$target"; then
 	die "could not return to $target; the review and its saved code snapshot were kept"
 fi
 

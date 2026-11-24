@@ -1095,6 +1095,12 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   aside, or preserve your changes in the nested repository, and retry. During
   an update of the PR branch, a checkout hook can create a collision after Finish
   has started. In that case, Undo remains available.
+- When an earlier submodule becomes an ordinary directory, paths already
+  tracked as files by the parent can be reviewed and edited like any other
+  parent file. The retained checkouts still keep their staged changes and
+  protect local files outside those paths. When a non-recursive checkout
+  restores the gitlink, the child recovers its missing files at those paths
+  from its own index.
 - Review snapshots capture changes to paths the parent already tracks and new
   files owned by the parent. To include a new submodule, stage its gitlink
   explicitly with Git.

@@ -329,6 +329,269 @@ start_without_gitlink() {
 	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
 }
 
+start_vendored_module() {
+	git config submodule.recurse false
+	git -C "$SERVER" switch -qc topic
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	git -C "$SERVER" commit -qm 'remove gitlink'
+	mkdir -p "$SERVER/$MODULE"
+	printf 'vendored version\n' >"$SERVER/$MODULE/version"
+	printf 'vendored settings\n' >"$SERVER/$MODULE/settings"
+	git -C "$SERVER" add -- "$MODULE"
+	git -C "$SERVER" commit -qm 'vendor ordinary files'
+	if [ "${1:-}" = replace ]; then
+		git -C "$SERVER" rm -qr -- "$MODULE"
+		mkdir -p "$SERVER/${MODULE%/*}"
+		printf 'ordinary replacement\n' >"$SERVER/$MODULE"
+	else
+		printf 'updated version\n' >"$SERVER/$MODULE/version"
+		printf 'new settings\n' >"$SERVER/$MODULE/settings"
+		printf 'new parent file\n' >"$SERVER/$MODULE/private"
+	fi
+	git -C "$SERVER" add -- "$MODULE"
+	git -C "$SERVER" commit -qm 'update vendored files'
+	git review start --step topic
+	git review next
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ -f "$MODULE/.git" ]
+	[ "$(git show ":$MODULE/version")" = 'vendored version' ]
+	[ "$(git -C "$MODULE" show :version)" = old ]
+}
+
+# bats test_tags=legacy-git
+@test "navigation keeps parent edits to files also tracked by a retained checkout" {
+	start_vendored_module
+	printf 'reviewer version\n' >"$MODULE/version"
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
+	[ "$(cat "$MODULE/version")" = 'updated version' ]
+	[ "$(git show "refs/review-edits/topic/2:$MODULE/version")" = 'reviewer version' ]
+	run git review prev
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ "$(cat "$MODULE/version")" = 'reviewer version' ]
+	[ "$(git show ":$MODULE/version")" = 'vendored version' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$(git -C "$MODULE" rev-parse 'HEAD^{tree}')" ]
+}
+
+# bats test_tags=legacy-git
+@test "finish and undo recognize parent files also ignored or tracked by a retained checkout" {
+	start_vendored_module
+	exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$exclude")"
+	printf '/settings\n/cache\n' >>"$exclude"
+	printf 'keep child cache\n' >"$MODULE/cache"
+	git -C "$MODULE" check-ignore -q settings
+	git -C "$MODULE" check-ignore -q cache
+	parent_index=$(git write-tree)
+	parent_head=$(git rev-parse HEAD)
+
+	run git review finish
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review-fixes/topic ]
+	[ "$(cat "$MODULE/version")" = 'updated version' ]
+	[ "$(cat "$MODULE/settings")" = 'new settings' ]
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git rev-parse HEAD)" = "$parent_head" ]
+	[ "$(git write-tree)" = "$parent_index" ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ "$(cat "$MODULE/version")" = 'vendored version' ]
+	[ "$(cat "$MODULE/settings")" = 'vendored settings' ]
+	[ "$(cat "$MODULE/cache")" = 'keep child cache' ]
+	[ -z "$(git for-each-ref refs/review-undo/topic/)" ]
+}
+
+# bats test_tags=legacy-git
+@test "parent ownership still protects the child index and child only paths" {
+	bats_require_minimum_version 1.5.0
+	start_vendored_module
+	parent_index=$(git write-tree)
+	parent_head=$(git rev-parse HEAD)
+	printf 'child staged version\n' >"$MODULE/version"
+	git -C "$MODULE" add version
+	printf 'vendored version\n' >"$MODULE/version"
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would overwrite a local path in a nested Git working tree: $MODULE/version"* ]]
+	[ "$(git -C "$MODULE" show :version)" = 'child staged version' ]
+	[ "$(cat "$MODULE/version")" = 'vendored version' ]
+	git -C "$MODULE" reset -q HEAD -- version
+
+	printf 'child private file\n' >"$MODULE/private"
+	run --separate-stderr git review finish
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would overwrite a local path in a nested Git working tree: $MODULE/private"* ]]
+	[ "$(cat "$MODULE/private")" = 'child private file' ]
+	[ "$(git rev-parse HEAD)" = "$parent_head" ]
+	[ "$(git write-tree)" = "$parent_index" ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ -z "$(git for-each-ref refs/review-edits/topic/ refs/review-undo/topic/)" ]
+}
+
+# bats test_tags=legacy-git
+@test "replacing a retained directory still protects files owned only by the child" {
+	bats_require_minimum_version 1.5.0
+	start_vendored_module replace
+	child_gitdir=$(git -C "$MODULE" rev-parse --absolute-git-dir)
+	mkdir -p "$child_gitdir/info"
+	printf '/cache\n' >>"$child_gitdir/info/exclude"
+	printf 'keep child cache\n' >"$MODULE/cache"
+	index=$(git write-tree)
+
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ "$(cat "$MODULE/cache")" = 'keep child cache' ]
+
+	mv "$MODULE/cache" "$TMP/saved-cache"
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
+	[ "$(cat "$MODULE")" = 'ordinary replacement' ]
+	[ "$(git --git-dir="$child_gitdir" --work-tree="$TMP" show :version)" = old ]
+}
+
+# bats test_tags=legacy-git
+@test "save and continue hand ordinary paths back to a retained submodule" {
+	start_vendored_module
+	printf 'child cache\n' >"$MODULE/cache"
+	child_exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$child_exclude")"
+	printf '/cache\n' >>"$child_exclude"
+	# Model an edit with the same size and timestamp as the cached stat entry.
+	git config core.trustctime false
+	git update-index --refresh
+	touch -r "$MODULE/version" "$TMP/file-time"
+	printf 'reviewer version\n' >"$MODULE/version"
+	touch -r "$TMP/file-time" "$MODULE/version" "$(git rev-parse --git-path index)"
+	[ "$(git diff --name-only)" = "$MODULE/version" ]
+
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/version")" = old ]
+	[ "$(git -C "$MODULE" show :version)" = old ]
+	[ ! -e "$MODULE/settings" ]
+	[ "$(cat "$MODULE/cache")" = 'child cache' ]
+	[ -z "$(git status --porcelain)" ]
+
+	run git review continue topic
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ "$(cat "$MODULE/version")" = 'reviewer version' ]
+	[ "$(git show ":$MODULE/version")" = 'vendored version' ]
+	[ "$(cat "$MODULE/cache")" = 'child cache' ]
+}
+
+# bats test_tags=legacy-git
+@test "a failed checkout keeps the submodule files and the saved correction" {
+	start_vendored_module
+	printf 'saved reviewer version\n' >"$MODULE/version"
+	run git review save
+	[ "$status" -eq 0 ]
+	saved=$(git rev-parse refs/review-saved-edits/topic/2)
+	hook=$(git rev-parse --git-path hooks/post-checkout)
+	mkdir -p "$(dirname "$hook")"
+	cat >"$hook" <<'EOF'
+#!/bin/sh
+[ "$(git symbolic-ref --quiet --short HEAD)" != review/topic ]
+EOF
+	chmod +x "$hook"
+
+	run git review continue topic
+	[ "$status" -eq 1 ]
+	[[ "$output" == *'could not switch to review/topic'* ]]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/version")" = old ]
+	[ -z "$(git status --porcelain)" ]
+	[ "$(git rev-parse refs/review-saved-edits/topic/2)" = "$saved" ]
+	[ "$(git show "$saved:$MODULE/version")" = 'saved reviewer version' ]
+	[ -z "$(git for-each-ref refs/heads/review/)" ]
+}
+
+# bats test_tags=legacy-git
+@test "checkout retains writes made through an already open submodule file" {
+	if command -v cygpath >/dev/null 2>&1; then skip 'open-file rename needs Unix semantics'; fi
+	start_vendored_module
+	run git review save
+	[ "$status" -eq 0 ]
+	hook=$(git rev-parse --git-path hooks/post-checkout)
+	mkdir -p "$(dirname "$hook")" "$TMP/hold-temp"
+	cat >"$hook" <<'EOF'
+#!/bin/sh
+printf 'late child write\n' >&9
+EOF
+	chmod +x "$hook"
+
+	run env TMPDIR="$TMP/hold-temp" sh -c 'exec 9>>"$1"; git review continue topic' sh "$MODULE/version"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"kept a recoverable copy of "*"/$MODULE/version at "* ]]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(cat "$MODULE/version")" = 'vendored version' ]
+	[ "$(git -C "$MODULE" show :version)" = old ]
+	held=$(find "$TMP/hold-temp" -name 'held.1.1' -type f)
+	[ "$(cat "$held")" = "$(printf 'old\nlate child write')" ]
+}
+
+# bats test_tags=legacy-git
+@test "ordinary parent files can cross multiple retained checkout boundaries" {
+	git config submodule.recurse false
+	git -C "$SERVER" switch -qc topic
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	git -C "$SERVER" commit -qm 'remove outer gitlink'
+	mkdir -p "$SERVER/$MODULE/inner"
+	printf 'vendored inner version\n' >"$SERVER/$MODULE/inner/version"
+	git -C "$SERVER" add -- "$MODULE/inner/version"
+	git -C "$SERVER" commit -qm 'vendor inner file'
+	printf 'updated inner version\n' >"$SERVER/$MODULE/inner/version"
+	git -C "$SERVER" commit -qam 'update inner file'
+	git review start --step topic
+	git clone -q --separate-git-dir "$TMP/inner-git" "$CHILD" "$MODULE/inner"
+	printf 'inner cache\n' >"$MODULE/inner/cache"
+	parent_exclude=$(git rev-parse --git-path info/exclude)
+	child_exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$parent_exclude")" "$(dirname "$child_exclude")"
+	printf '/%s/\n' "$MODULE" >>"$parent_exclude"
+	printf '/inner/\n' >>"$child_exclude"
+	git check-ignore -q "$MODULE/inner/cache"
+	git -C "$MODULE" check-ignore -q inner/cache
+
+	printf 'inner private version\n' >"$MODULE/inner/version"
+	run git review next
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"would overwrite a local path in a nested Git working tree: $MODULE/inner/version"* ]]
+	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+	[ "$(cat "$MODULE/inner/version")" = 'inner private version' ]
+	git -C "$MODULE/inner" checkout -- version
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ "$(cat "$MODULE/inner/version")" = 'vendored inner version' ]
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
+	[ "$(cat "$MODULE/inner/version")" = 'updated inner version' ]
+	[ "$(cat "$MODULE/inner/cache")" = 'inner cache' ]
+	[ "$(git -C "$MODULE/inner" show :version)" = old ]
+	[ "$(git ls-files -- "$MODULE")" = "$MODULE/inner/version" ]
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/inner/version")" = old ]
+	run git review continue topic
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
+	[ "$(cat "$MODULE/inner/version")" = 'updated inner version' ]
+	[ "$(cat "$MODULE/inner/cache")" = 'inner cache' ]
+}
+
 @test "start preparation fetches submodule commits without checking them out" {
 	git config fetch.recurseSubmodules on-demand
 	advance_submodule

@@ -1114,6 +1114,12 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
   el repositorio anidado, y volvé a intentar. Al actualizar la rama del PR, un
   hook de checkout puede crear una colisión durante Finish y Undo sigue
   disponible.
+- Cuando un submódulo pasa a ser un directorio común, podés revisar y editar
+  los archivos que el padre ya rastrea como cualquier otro archivo del padre.
+  Los checkouts que queden en disco conservan sus cambios staged y protegen
+  sus archivos locales fuera de esas rutas. Cuando un checkout sin recursión
+  restaura el gitlink, el hijo recupera de su propio índice los archivos que
+  le falten en esas rutas.
 - Los snapshots de la review capturan los cambios en rutas que el padre ya
   rastrea y los archivos nuevos del padre. Para incluir un submódulo nuevo,
   agregá su gitlink al índice explícitamente con Git.

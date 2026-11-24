@@ -93,7 +93,7 @@ stage_finish_resolution() (
 	candidate=
 	trap 'rm -f "$lock" "$lock.lock" ${candidate:+"$candidate"}' 0
 	trap 'exit 1' 1 2 15
-	cp "$index" "$lock" || exit 1
+	cp -p "$index" "$lock" || exit 1
 	export GIT_INDEX_FILE="$lock"
 	unmerged=$(git -c core.quotePath=true ls-files --unmerged --full-name) || exit 1
 	review_worktree_files stage || exit 1
@@ -372,7 +372,7 @@ do_abort() {
 		# Hold the PR checkout until the guarded ref update is done. Releasing
 		# it first would let another worktree check out the tip we are rewinding.
 		if [ "$cur" != "$asrc" ]; then
-			git switch -q --no-overwrite-ignore "$asrc"
+			review_checkout_tree "$source_now" switch -q --no-overwrite-ignore "$asrc"
 			# The intermediate checkout may have created another obstruction.
 			review_guard_checkout_paths "refs/heads/$rb" "$head" "$wttree" || exit 1
 		fi
@@ -383,7 +383,7 @@ do_abort() {
 		source_rewound=1
 	fi
 	if [ "$cur" != "$rb" ]; then
-		if ! git switch -q --discard-changes --no-overwrite-ignore "$rb"; then
+		if ! review_checkout_tree "refs/heads/$rb" switch -q --discard-changes --no-overwrite-ignore "$rb"; then
 			if [ "$source_rewound" -eq 1 ] &&
 				[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ]; then
 				git update-ref "refs/heads/$asrc" "$source_now" "$source_before"
@@ -393,8 +393,8 @@ do_abort() {
 		# The checkout hook can write files before the undo trees are restored.
 		review_guard_checkout_paths "$head" "$wttree" || exit 1
 	fi
-	git reset -q --hard "$head"
-	git read-tree -m -u "$wttree"
+	review_checkout_tree "$head" reset -q --hard "$head"
+	review_checkout_tree "$wttree" read-tree -m -u "$wttree"
 	git read-tree "$idxtree"
 
 	# Restore the current step's banked edit ref to what it was before finish
@@ -654,7 +654,7 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 		# earlier, or they resurrect in the replay below.
 		git update-ref -d "refs/review-edits/$src/$step" 2>/dev/null || true
 	fi
-	git reset -q --hard "$tip"
+	review_checkout_tree "$tip" reset -q --hard "$tip"
 	conflict=0
 	i=1
 	while [ "$i" -le "$count" ]; do
@@ -742,7 +742,7 @@ if [ "$onto" -eq 1 ]; then
 		fi
 		# Claim the branch through Git before moving it. Its checkout protects
 		# the other worktrees while Git fast-forwards the ref, index and files.
-		if ! git switch -q --no-overwrite-ignore "$src"; then
+		if ! review_checkout_tree "$finish_source_head" switch -q --no-overwrite-ignore "$src"; then
 			die "could not switch to $src; recover with git review finish --abort"
 		fi
 		if [ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||
@@ -752,7 +752,7 @@ if [ "$onto" -eq 1 ]; then
 		git config "branch.$cur.reviewundosourcemove" 1
 		review_guard_nested_worktrees "$tip" || exit 1
 		# Branch merge options can request a squash, which succeeds without moving HEAD.
-		if ! git -c merge.autostash=false merge --ff-only --no-squash --no-overwrite-ignore --quiet "$tip" ||
+		if ! review_checkout_tree "$tip" -c merge.autostash=false merge --ff-only --no-squash --no-overwrite-ignore --quiet "$tip" ||
 			[ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||
 			[ "$(git rev-parse --verify HEAD)" != "$tip" ]; then
 			die "could not fast-forward $src; recover with git review finish --abort"
@@ -763,9 +763,9 @@ if [ "$onto" -eq 1 ]; then
 			echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 			exit 1
 		fi
-		git switch -q --no-overwrite-ignore "$src"
+		review_checkout_tree "$tip" switch -q --no-overwrite-ignore "$src"
 	else
-		git switch -q --no-overwrite-ignore -c "$src" "$tip"
+		review_checkout_tree "$tip" switch -q --no-overwrite-ignore -c "$src" "$tip"
 	fi
 	if [ "$has_edits" -eq 1 ]; then
 		apply_review_patch "$tip" "$cur" --index --3way || {
@@ -789,7 +789,7 @@ else
 		echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 		exit 1
 	}
-	git switch -q --no-overwrite-ignore -c "$fb" "$tip"
+	review_checkout_tree "$tip" switch -q --no-overwrite-ignore -c "$fb" "$tip"
 	if [ "$has_edits" -eq 1 ]; then
 		apply_review_patch "$tip" "$cur" --index --3way || {
 			echo "error: could not apply review changes onto $fb" >&2

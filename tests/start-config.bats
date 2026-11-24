@@ -95,6 +95,22 @@ assert_configured_start_matches_git() {
 	assert_configured_start_matches_git
 }
 
+@test "start accepts an interleaved global conditional identity" {
+	identity="$TMP/identity.config"
+	git config --file "$identity" user.email work@example.com
+	git config --global "$CONDITION" "$identity"
+	git config --global fetch.prune false
+	[ "$(git config user.email)" = work@example.com ]
+	CONFIG_GIT=(git -c "include.path=$FRAGMENT")
+	assert_configured_start_matches_git
+}
+
+@test "start replays trailing global conditional fetch options" {
+	git config --global "$CONDITION" "$FRAGMENT"
+	CONFIG_GIT=(git)
+	assert_configured_start_matches_git
+}
+
 @test "start keeps nested conditional includes supplied at command scope" {
 	outer="$TMP/outer.config"
 	git config --file "$outer" "$CONDITION" fetch.config

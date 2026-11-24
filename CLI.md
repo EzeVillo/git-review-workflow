@@ -442,8 +442,9 @@ Compare keeps both original revision names and their resolved commit IDs in `sta
 
 In the interactive flow, **What do you want to review?** asks for `<b>` first. **Compare against what?** asks for `<a>`. Each branch name appears once. For each branch, you can choose the local version, a remote-tracking copy from the last fetch, or fetch the current version from that remote. The refresh uses the fetch refspec to find the branch behind a renamed tracking ref. You can also enter a tag, a commit, or an exact ref. Compare fetches only the branches selected for refresh and uses the same two pinned commits to offer reading layouts and open the diff. Compare's fetch leaves local branches and refs like `origin/feature` in place.
 
-Remote preparation honors Git's submodule fetch configuration too. If the
-shallow boundary, grafts or effective replacement refs change after preparation,
+Remote preparation preserves the parent repository's `FETCH_HEAD` and honors
+Git's submodule fetch configuration. If the shallow boundary, grafts or
+effective replacement refs change after preparation,
 prepare the comparison again before opening it or creating its reading draft.
 
 Only usable walkthroughs and keys appear, alongside creating, resuming or updating your own reading order when needed. These drafts are independent of Start drafts and work with branches, tags and commits, without a configured base.

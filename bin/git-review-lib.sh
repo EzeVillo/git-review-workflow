@@ -5227,13 +5227,34 @@ compare_lease_commit() {
 		commit-tree "$_compare_lease_tree" "$@" -m "$_compare_lease_message"
 }
 
-# Shared by the two reading flows. Restrict the mapping to the private
-# destinations supplied by the caller and leave all tracking refs alone.
+# Restrict the mapping to the private destinations supplied by Compare.
 review_fetch_isolated() {
-	_rfi_head=''
-	if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then _rfi_head='--no-write-fetch-head'; fi
-	git fetch -q --no-prune --no-prune-tags --refmap= --no-tags ${_rfi_head:+"$_rfi_head"} -- "$@"
+	if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then
+		git fetch -q --no-prune --no-prune-tags --refmap= --no-tags --no-write-fetch-head -- "$@"
+	else
+		review_fetch_legacy "$@"
+	fi
 }
+
+# Older Git always opens FETCH_HEAD. Run the fetch in the private ref store and
+# publish only the requested refs, whose objects already live in the real repo.
+review_fetch_legacy() (
+	_rfl_view=$(mktemp -d) || exit 1
+	trap 'rm -rf "$_rfl_view"' 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	review_view_open "$_rfl_view" || die 'could not prepare the temporary fetch view'
+	review_view_fetch fetch -q --no-prune --no-prune-tags --refmap= --no-tags -- "$@" || exit 1
+	shift
+	{
+		for _rfl_spec do
+			_rfl_ref=${_rfl_spec#*:}
+			_rfl_oid=$(review_commit_oid "$_rfl_ref" review_view_git) || exit 1
+			printf 'create %s %s\n' "$_rfl_ref" "$_rfl_oid"
+		done
+	} >"$_rfl_view/fetched" || exit 1
+	git update-ref --stdin <"$_rfl_view/fetched"
+)
 
 review_remote_ref() {
 	review_fetch_source "$1" "refs/remotes/$1/$2" "$3" "refs/heads/$2" "$1/$2"
@@ -5459,7 +5480,10 @@ review_view_config_write() {
 			section_end = index(name, ".")
 			section = substr(name, 1, section_end - 1)
 			if (format != "raw-command" && (section == "include" || section == "includeif")) return
-			if (name == "core.worktree" && target != command_config && format != "raw-command") return
+			if (format == "ambient" && (name == "user.name" || name == "user.email")) {
+				target = ENVIRON["REVIEW_VIEW_DIR"] "/" name
+			}
+			if (name == "core.worktree" && target != command_config && format != "raw-command" && format != "ambient") return
 			key = name
 			sub(/^.*\./, "", key)
 			subsection = substr(name, section_end + 1, length(name) - section_end - length(key) - 1)
@@ -5492,6 +5516,47 @@ review_view_config_write() {
 		}
 	'
 }
+
+# Keep the gitdir for includeIf and HEAD, but hide repository config from this
+# read. The ordinary config reader sees both global files, plus system config.
+review_view_ambient_config() (
+	unset GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+	GIT_COMMON_DIR="$_review_view/empty-common" git --git-dir="$1" config --includes --null --list
+)
+
+# Old Git cannot redirect its global config. Leave HOME and the native config
+# in place, and add only the values that would otherwise disappear. A tail
+# preserves the order and multiplicity of the settings used by fetch. Name and
+# email are independent of other keys and can each be checked in their own order.
+review_view_legacy_config() (
+	_rvl_original="$_review_view/original-config"
+	_rvl_snapshot="$_review_view/snapshot-config"
+	mkdir -p "$_rvl_original" "$_rvl_snapshot" \
+		"$_review_view/empty-common/refs" "$_review_view/empty-common/objects" || exit 1
+	review_view_ambient_config "$1" >"$_rvl_original/records" || exit 1
+	review_view_ambient_config "$2" >"$_rvl_snapshot/records" || exit 1
+	if cmp -s "$_rvl_original/records" "$_rvl_snapshot/records"; then exit 0; fi
+	for _rvl_key in config user.name user.email; do
+		: >"$_rvl_original/$_rvl_key" || exit 1
+		: >"$_rvl_snapshot/$_rvl_key" || exit 1
+	done
+	(_review_view_common=$_rvl_original; review_view_config_write "$_rvl_original/records" ambient "$_rvl_original") || exit 1
+	(_review_view_common=$_rvl_snapshot; review_view_config_write "$_rvl_snapshot/records" ambient "$_rvl_snapshot") || exit 1
+	{
+		for _rvl_key in config user.name user.email; do
+			_rvl_size=$(wc -c <"$_rvl_snapshot/$_rvl_key" | tr -d '[:space:]') || exit 1
+			dd if="$_rvl_original/$_rvl_key" bs=1 count="$_rvl_size" >"$_review_view/config.prefix" 2>/dev/null || exit 1
+			cmp -s "$_review_view/config.prefix" "$_rvl_snapshot/$_rvl_key" ||
+				die 'this Git cannot reproduce conditional configuration in a temporary view. Update Git and retry.'
+			dd if="$_rvl_original/$_rvl_key" bs=1 skip="$_rvl_size" 2>/dev/null || exit 1
+		done
+	} >"$_review_view/ambient-values" || exit 1
+	# Only the ordinary config reader expands the include. Repository format
+	# detection still reads the original repository settings in this file.
+	git config --file "$_review_view/config.replayed" include.path "$_review_view/ambient-values" || exit 1
+	cat "$_review_view_common/config" >>"$_review_view/config.replayed" || exit 1
+	mv "$_review_view/config.replayed" "$_review_view_common/config"
+)
 
 # Git treats includeIf gitdir conditions as globs, even for an exact path.
 review_view_config_include() {
@@ -5629,8 +5694,8 @@ review_view_open() {
 	_review_view=$1
 	_rvo_common=$(git rev-parse --git-common-dir) || return 1
 	_rvo_common=$(cd "$_rvo_common" && pwd -P) || return 1
-	_rvo_gitdir=$(git rev-parse --absolute-git-dir) || return 1
-	_rvo_gitdir=$(cd "$_rvo_gitdir" && pwd -P) || return 1
+	_rvo_native_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	_rvo_gitdir=$(cd "$_rvo_native_gitdir" && pwd -P) || return 1
 	_review_view_objects=$(git rev-parse --git-path objects) || return 1
 	_review_view_objects=$(cd "$_review_view_objects" && pwd -P) || return 1
 	_review_view_top=$(git rev-parse --show-toplevel 2>/dev/null || true)
@@ -5691,15 +5756,7 @@ review_view_open() {
 	_rvo_shallow=$(review_shallow_path) || return 1
 	if [ -f "$_rvo_shallow" ]; then cp "$_rvo_shallow" "$_review_view_common/shallow" || return 1; fi
 	if [ "$_review_view_global" -eq 0 ]; then
-		# Older Git cannot redirect global config. Parts conditioned on the
-		# real gitdir could otherwise disappear and change the chosen commit.
-		for _rvo_scope in --system --global; do
-			git config "$_rvo_scope" --includes --null --list >"$_review_view/config.original" 2>/dev/null || true
-			review_view_git config "$_rvo_scope" --includes --null --list >"$_review_view/config.check" 2>/dev/null || true
-			cmp -s "$_review_view/config.original" "$_review_view/config.check" ||
-				die 'this Git cannot reproduce conditional configuration in a temporary view. Update Git and retry.'
-		done
-		rm -f "$_review_view/config.original" "$_review_view/config.check" || return 1
+		review_view_legacy_config "$_rvo_native_gitdir" "$_rvo_parent_gitdir" || return 1
 	fi
 }
 

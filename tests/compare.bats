@@ -25,6 +25,8 @@
 	! git cat-file -e "$new_tip^{commit}" 2>/dev/null
 	before=$(git rev-parse refs/remotes/isolated/topic)
 	local_tip=$(git rev-parse develop)
+	fetch_head=$(git rev-parse --git-path FETCH_HEAD)
+	cp "$fetch_head" "$BATS_TEST_TMPDIR/before-fetch"
 	run git review compare --sources --porcelain
 	[ "$status" -eq 0 ]
 	[[ "$output" == *$'compare-source\ttopic\tremote\tisolated\tfetch:isolated:topic'* ]]
@@ -36,6 +38,7 @@
 	[ "$(git rev-parse refs/remotes/isolated/topic)" = "$before" ]
 	[ "$(git rev-parse refs/remotes/isolated/other)" = "$before" ]
 	[ "$(git rev-parse develop)" = "$local_tip" ]
+	cmp -s "$fetch_head" "$BATS_TEST_TMPDIR/before-fetch"
 	[ "$(git for-each-ref --format='%(refname)' refs/worktree/review-compare/pending/)" = "refs/worktree/review-compare/pending/$token" ]
 	run git review compare "--prepared=$token" --no-walk -- refs/remotes/isolated/topic fetch:isolated:other
 	[ "$status" -eq 1 ]
@@ -76,6 +79,25 @@
 	! git show-ref --verify --quiet "$retained"
 	git gc --prune=now
 	! git cat-file -e "$new_tip^{commit}" 2>/dev/null
+}
+
+@test "prepared remote compare leaves a missing FETCH_HEAD absent" {
+	remote="$TMP/remote.git"
+	git clone -q --bare . "$remote"
+	git --git-dir="$remote" branch topic v2.0
+	git remote add isolated "$remote"
+	fetch_head=$(git rev-parse --git-path FETCH_HEAD)
+	[ ! -e "$fetch_head" ]
+
+	run git review compare --prepare --porcelain -- v1.0 fetch:isolated:topic
+	[ "$status" -eq 0 ]
+	token=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comparison-prepared" {print $2}')
+	[ -n "$token" ]
+	[ "$(git rev-parse "refs/worktree/review-compare/pending/$token^2")" = "$(git rev-parse v2.0)" ]
+	[ "$(git symbolic-ref --short HEAD)" = develop ]
+	[ -z "$(git status --porcelain)" ]
+	[ ! -e "$fetch_head" ]
+	! git show-ref --verify --quiet refs/remotes/isolated/topic
 }
 
 @test "compare refreshes the upstream of a renamed tracking branch" {
@@ -248,11 +270,10 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global core.autocrlf false
-	git config --global init.defaultBranch develop
-
 	WORK="$TMP/work"
 	git init --quiet "$WORK"
 	cd "$WORK"
+	git symbolic-ref HEAD refs/heads/develop
 
 	printf 'a\nb\nc\n' >app.txt
 	git add app.txt
@@ -267,9 +288,6 @@ setup() {
 	git add more.txt
 	git commit --quiet -m c2-add-more
 	git tag v2.0
-
-	# Land back on a normal branch so compare records a return point.
-	git switch --quiet develop
 }
 
 teardown() {

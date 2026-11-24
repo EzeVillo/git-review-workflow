@@ -10,7 +10,6 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global core.autocrlf false
-	git config --global init.defaultBranch main
 	git config --global protocol.file.allow always
 
 	CHILD="$TMP/child"
@@ -18,12 +17,14 @@ setup() {
 	CLIENT="$TMP/client"
 	MODULE="deps/shared library's \$(touch grv-unquoted)"
 	git init -q "$CHILD"
+	git -C "$CHILD" symbolic-ref HEAD refs/heads/main
 	printf 'old\n' >"$CHILD/version"
 	git -C "$CHILD" add version
 	git -C "$CHILD" commit -qm initial
 	CHILD_BEFORE=$(git -C "$CHILD" rev-parse HEAD)
 
 	git init -q "$SERVER"
+	git -C "$SERVER" symbolic-ref HEAD refs/heads/main
 	git -C "$SERVER" submodule add -q --name library "$CHILD" "$MODULE"
 	git -C "$SERVER" commit -qm base
 	git clone -q --recurse-submodules "$SERVER" "$CLIENT"
@@ -154,6 +155,7 @@ assert_reviewed_gitlink() {
 @test "start fetches descendants of a nested initialized submodule" {
 	grandchild="$TMP/grandchild"
 	git init -q "$grandchild"
+	git -C "$grandchild" symbolic-ref HEAD refs/heads/main
 	printf 'old\n' >"$grandchild/version"
 	git -C "$grandchild" add version
 	git -C "$grandchild" commit -qm initial

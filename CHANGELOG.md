@@ -46,6 +46,10 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Start preserves conditional global identity on older Git and replays
+  missing configuration when it can keep the order of fetch options.
+- Preparing a remote comparison preserves the parent repository's
+  `FETCH_HEAD` on Git versions without `--no-write-fetch-head`.
 - Start preserves conditional includes supplied at command scope through
   `git -c` or `GIT_CONFIG_COUNT`. The temporary view keeps their effective
   order and scope without duplicating cumulative values or applying the

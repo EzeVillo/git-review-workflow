@@ -1810,7 +1810,7 @@ Los borradores propios de Compare llevan `source=compare`, una identidad estable
 
 ### Compare: versión por rama y fetch aislado
 
-El selector agrupa por nombre las ramas conocidas y pide una versión por cada extremo. La CLI enumera las opciones y conserva la entrada literal para tags, commits y referencias exactas. La copia de seguimiento se resuelve antes de hacer fetch. Las ramas pedidas al mismo remoto viajan en una invocación con refspecs privados y un refmap vacío. Así tampoco se mueve la copia de seguimiento de la propia rama descargada. Si Git admite omitir `FETCH_HEAD`, se omite.
+El selector agrupa por nombre las ramas conocidas y pide una versión por cada extremo. La CLI enumera las opciones y conserva la entrada literal para tags, commits y referencias exactas. La copia de seguimiento se resuelve antes de hacer fetch. Las ramas pedidas al mismo remoto viajan en una invocación con refspecs privados y un refmap vacío. Así se conserva la copia de seguimiento de la propia rama descargada. Si Git admite omitir `FETCH_HEAD`, se omite. En Git anterior, el fetch usa la vista temporal de Start y publica sólo los OID solicitados en las refs privadas de la preparación. El `FETCH_HEAD` del padre conserva su contenido o su ausencia.
 
 La preparación fija ambos commits antes de calcular las ofertas. Su ref es privada del worktree y el token sólo se acepta para los dos selectores originales. Cancelar libera la preparación y Clean elimina las preparaciones abandonadas de más de un día. Cada rama de Compare conserva su propio par a través de Save y Continue. Abort y Clean liberan el par de la sesión retirada, incluidos los huérfanos cuando se borró la rama a mano. Los borradores conservan sus extremos hasta borrarlos y los resultados Local conservan los commits que necesitan sus rangos históricos. Los clientes conservan el flujo literal si la CLI instalada es anterior a esta opción.
 
@@ -1822,7 +1822,17 @@ dos OID. Las preparaciones anteriores siguen siendo legibles.
 
 ### Start: preparación del rango y destino de Finish
 
-Start ejecuta el fetch configurado en una vista temporal. Conserva el gitdir principal y los identificadores y el estado Git de todos los worktrees registrados. Así Git puede resolver refs privadas, reflogs y referencias al índice desde el mismo lugar que en el repositorio original. La vista recibe la configuración efectiva y copia el límite shallow que Git lee, incluso si lo define `GIT_SHALLOW_FILE`. Comparte los objetos y deshabilita el mantenimiento automático. Las ramas, tags, reflogs y `FETCH_HEAD` que modifica Git pertenecen a la vista. Las versiones antiguas de Git que leen directamente la configuración global verifican que los includes condicionales produzcan los mismos valores en ambas vistas. Si la configuración difiere, Start pide actualizar Git. Si el fetch cambia el límite shallow, pide actualizar el clon antes de abrir una revisión sobre esos objetos. Offline sigue resolviendo en las refs del clon, sin contactar el remoto.
+Start ejecuta el fetch configurado en una vista temporal. Conserva el gitdir principal y los identificadores y el estado Git de todos los worktrees registrados. Así Git puede resolver refs privadas, reflogs y referencias al índice desde el mismo lugar que en el repositorio original. La vista recibe la configuración efectiva y copia el límite shallow que Git lee, incluso si lo define `GIT_SHALLOW_FILE`. Comparte los objetos y deshabilita el mantenimiento automático. Las ramas, tags, reflogs y `FETCH_HEAD` que modifica Git pertenecen a la vista. Si el fetch cambia el límite shallow, pide actualizar el clon antes de abrir una revisión sobre esos objetos. Offline sigue resolviendo en las refs del clon, sin contactar el remoto.
+
+Git anterior a `GIT_CONFIG_GLOBAL` lee directamente la configuración de sistema
+y los dos archivos globales. La vista conserva `HOME` y pide a Git los valores
+de esos archivos en cada gitdir. Si los valores que siguen activos son un
+prefijo de los originales, carga el resto mediante un include antes de la
+configuración del repositorio. Así conserva el orden y la cantidad de opciones
+acumulativas. `user.name` y `user.email` se comprueban cada uno por separado,
+por lo que un include de identidad puede aparecer entre otras opciones.
+Cuando reproducir la configuración requeriría descartar o reordenar valores
+ya leídos por Git, la CLI pide actualizar Git antes de hacer el fetch.
 
 Start y Compare respetan la recursión de fetch configurada en Git. Desactivarla
 siempre dejaba sin descargar el commit de un submódulo que después necesitaba

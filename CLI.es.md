@@ -454,9 +454,10 @@ Compare conserva los nombres de ambas revisiones y sus commits resueltos en `sta
 
 En el flujo interactivo, **What do you want to review?** pide primero `<b>`. **Compare against what?** pide `<a>`. Cada nombre de rama aparece una vez. Para cada rama podés elegir la versión local, la copia de un remoto del último fetch o traer la versión actual de ese remoto. Para actualizar una ref de seguimiento con otro nombre, el fetch usa el refspec para identificar su rama en el remoto. También podés escribir un tag, un commit o una referencia exacta. Compare descarga sólo las ramas elegidas para actualizar y usa los dos commits fijados para mostrar las opciones de lectura y abrir el diff. El fetch de Compare conserva las ramas locales y las referencias como `origin/feature` en sus commits actuales.
 
-La preparación remota también respeta la configuración de fetch de submódulos
-de Git. Si después de preparar cambian el límite shallow, los grafts o las refs
-de reemplazo efectivas, volvé a preparar la comparación antes de abrirla o
+La preparación remota conserva el `FETCH_HEAD` del repositorio principal y
+respeta la configuración de fetch de submódulos de Git. Si después de preparar
+cambian el límite shallow, los grafts o las refs de reemplazo efectivas,
+volvé a preparar la comparación antes de abrirla o
 crear su borrador de lectura.
 
 Sólo aparecen walkthroughs y esenciales utilizables, junto con crear, retomar o actualizar tu propio orden de lectura cuando corresponde. Estos borradores son independientes de los de Start y funcionan con ramas, tags y commits, sin base configurada.

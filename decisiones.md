@@ -1920,6 +1920,24 @@ incompleta. Continue aplica las correcciones desde el banco guardado antes de
 publicar las refs activas, por lo que `Clean` conserva el original de una
 reanudación abortada por un fallo de checkout.
 
+Los snapshots de correcciones omiten archivos ignorados sin rastrear. Finish
+al actualizar la rama del PR, Undo, Save, Cancel y la navegación por commits
+verifican los árboles que van a materializar antes de modificar la sesión.
+La comprobación incluye los choques entre archivos y directorios. Los switches
+y el fast-forward piden a Git preservar los archivos ignorados también al
+ejecutar el cambio. Git 2.23 puede pisarlos en un switch forzado incluso con
+`--no-overwrite-ignore`, por lo que ese flag complementa el guard. El
+fast-forward protege además los archivos que escribe un hook al tomar la rama
+local atrasada.
+
+Git delega el checkout recursivo a `read-tree` dentro de cada submódulo;
+el flag del padre no protege los archivos ignorados de los hijos. La misma
+comprobación recorre los submódulos presentes en el índice y compara sus
+archivos con el commit hijo que va a materializar Git. También contempla
+reemplazar un gitlink por un archivo o directorio del repositorio padre.
+Al reemplazarlo por un directorio, se verifica el árbol entrante para que
+los archivos ignorados que queden al lado de los nuevos puedan conservarse.
+
 El mantenimiento de ediciones y Undo identifica al dueño exacto de cada ref,
 incluso si los nombres de dos ramas comparten prefijo.
 

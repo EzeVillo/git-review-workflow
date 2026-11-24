@@ -113,6 +113,7 @@ _save_worktrees="$(git worktree list --porcelain)" || die "could not check workt
 if printf '%s\n' "$_save_worktrees" | grep -Fqx "branch refs/heads/$target"; then
 	die "cannot save: return branch '$target' is checked out in another worktree; switch that worktree to a different branch and retry"
 fi
+review_guard_ignored_paths "refs/heads/$target" || exit 1
 
 # Does the archive already hold a draft under the name this review would file its
 # own under? The move at the end of this script is an mv: without this guard it
@@ -260,7 +261,7 @@ git config "branch.$saved.reviewreturn" "$target"
 # Give the checkout the captured index so it also removes newly added files
 # that were untracked in the live index.
 git read-tree "$tree"
-if ! git switch -q --discard-changes "$target"; then
+if ! git switch -q --discard-changes --no-overwrite-ignore "$target"; then
 	die "could not return to $target; the review and its saved code snapshot were kept"
 fi
 

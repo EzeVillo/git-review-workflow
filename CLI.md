@@ -1087,6 +1087,11 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   where you were editing, the same way `git merge --abort` backs out a merge. It
   refuses if you have changed the finish branch since, so you do not lose work;
   add `--force` to discard those changes and abort anyway.
+- Opening a review, Finish, Undo (including `--force`), Save, Cancel, and step
+  navigation stop if the destination would overwrite an ignored working tree
+  file, including files in submodules. Move the file aside and retry. During
+  an update of the PR branch, a checkout hook can create a collision after
+  Finish has started. In that case, Undo remains available.
 - Refuses on a read-only `git review compare` — there is no writable branch to
   write your edits back to.
 

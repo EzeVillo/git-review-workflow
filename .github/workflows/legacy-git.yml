@@ -12,8 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build the minimum supported Git
         run: docker build --target legacy-git -t git-review-legacy tests
-      - name: Check isolated fetch configuration and state against Git 2.23
+      - name: Check isolated fetch and checkout safety against Git 2.23
         run: >-
           docker run --rm -v "$PWD:/repo:ro" -w /repo git-review-legacy
           --print-output-on-failure --filter-tags legacy-git
-          tests/start-config.bats tests/compare.bats tests/submodules.bats
+          tests/start-config.bats tests/compare.bats tests/submodules.bats tests/errors.bats

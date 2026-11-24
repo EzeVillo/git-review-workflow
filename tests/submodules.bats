@@ -90,6 +90,93 @@ assert_reviewed_gitlink() {
 	assert_reviewed_gitlink review/topic
 }
 
+# bats test_tags=legacy-git
+@test "start and compare protect ignored files in recursive submodule checkouts" {
+	bats_require_minimum_version 1.5.0
+	git -C "$SERVER" switch -qc topic
+	printf 'tracked by the PR\n' >"$CHILD/build-output"
+	git -C "$CHILD" add build-output
+	git -C "$CHILD" commit -qm 'track build output'
+	git -C "$SERVER/$MODULE" pull -q --ff-only origin main
+	git -C "$SERVER" commit -qam 'update submodule'
+	exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$exclude")"
+	printf 'build-output\n' >>"$exclude"
+	printf 'private child data\n' >"$MODULE/build-output"
+
+	run --separate-stderr git review start topic --no-walk
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would overwrite an ignored working tree path: $MODULE/build-output"* ]]
+	assert_still_on_main
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	[ -z "$(git for-each-ref refs/heads/review/)" ]
+
+	git fetch -q --no-recurse-submodules origin
+	run --separate-stderr git review compare --no-walk main origin/topic
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would overwrite an ignored working tree path: $MODULE/build-output"* ]]
+	assert_still_on_main
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	[ -z "$(git for-each-ref refs/heads/review/)" ]
+	[ ! -e grv-unquoted ]
+
+	mv "$MODULE/build-output" "$TMP/build-output"
+	run git review start topic --no-walk
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/build-output")" = 'tracked by the PR' ]
+}
+
+# bats test_tags=legacy-git
+@test "start protects ignored contents when a file replaces a populated submodule" {
+	bats_require_minimum_version 1.5.0
+	git config submodule.recurse false
+	git -C "$SERVER" switch -qc topic
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	printf 'ordinary file\n' >"$SERVER/$MODULE"
+	git -C "$SERVER" add -- "$MODULE"
+	git -C "$SERVER" commit -qm 'replace submodule'
+	exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$exclude")"
+	printf 'build-output\n' >>"$exclude"
+	printf 'private child data\n' >"$MODULE/build-output"
+
+	run --separate-stderr git review start topic --no-walk
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
+	assert_still_on_main
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	[ -z "$(git for-each-ref refs/heads/review/)" ]
+	[ ! -e grv-unquoted ]
+}
+
+# bats test_tags=legacy-git
+@test "start protects only overlapping paths when a submodule becomes a directory" {
+	bats_require_minimum_version 1.5.0
+	git -C "$SERVER" switch -qc topic
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	mkdir -p "$SERVER/$MODULE"
+	printf 'tracked by the PR\n' >"$SERVER/$MODULE/build-output"
+	git -C "$SERVER" add -- "$MODULE"
+	git -C "$SERVER" commit -qm 'replace gitlink with an ordinary tree'
+	exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$exclude")"
+	printf 'build-output\nlocal-cache\n' >>"$exclude"
+	printf 'private child data\n' >"$MODULE/build-output"
+
+	run --separate-stderr git review start topic --no-walk
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would overwrite an ignored working tree path: $MODULE/build-output"* ]]
+	assert_still_on_main
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	[ -z "$(git for-each-ref refs/heads/review/)" ]
+
+	mv "$MODULE/build-output" "$MODULE/local-cache"
+	run git review start topic --no-walk
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/local-cache")" = 'private child data' ]
+	[ "$(cat "$MODULE/build-output")" = 'tracked by the PR' ]
+}
+
 @test "start preparation fetches submodule commits without checking them out" {
 	git config fetch.recurseSubmodules on-demand
 	advance_submodule

@@ -70,12 +70,13 @@ fi
 	echo "error: could not determine a branch to return to; switch away manually, then run git review clean $src" >&2
 	exit 1
 }
+review_guard_ignored_paths "refs/heads/$target" || exit 1
 
 comments_lock_branch "$cur" || exit 1
 trap 'comments_unlock' 0
 trap 'exit 1' 1 2 15
 comments_retain_compare || exit 1
-git switch -q --discard-changes "$target"
+git switch -q --discard-changes --no-overwrite-ignore "$target"
 comments_discard_branch "$cur" || exit 1
 _abort_compare=$(review_config_get "branch.$cur.reviewreadonly" || true)
 git branch -D "$cur" >/dev/null

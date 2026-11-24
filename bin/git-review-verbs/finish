@@ -356,6 +356,20 @@ do_abort() {
 		fi
 	fi
 
+	rewind_source=0
+	if [ -n "$source_before" ] && [ "$source_move" = 1 ] &&
+		{ [ "$source_now" = "$source_target" ] || { [ "$force" -eq 1 ] && [ -n "$outhead" ]; }; }; then
+		rewind_source=1
+	fi
+	set -- "$head" "$wttree"
+	if [ "$cur" != "$rb" ] || [ "$rewind_source" -eq 1 ]; then
+		set -- "$@" "refs/heads/$rb"
+	fi
+	if [ "$rewind_source" -eq 1 ] && [ "$cur" != "$asrc" ]; then
+		set -- "$@" "$source_now"
+	fi
+	review_guard_ignored_paths "$@" || exit 1
+
 	# Return to the review branch and restore the exact pre-finish state: HEAD, then
 	# the working tree (read-tree -m -u brings back additions/edits/deletions and
 	# captured untracked files), then the index. Skip the checkout when already on
@@ -365,23 +379,26 @@ do_abort() {
 	trap 'comments_unlock' 0
 	comments_finish_undo "$rb" || exit 1
 	source_rewound=0
-	if [ -n "$source_before" ] && [ "$source_move" = 1 ] &&
-		{ [ "$source_now" = "$source_target" ] || { [ "$force" -eq 1 ] && [ -n "$outhead" ]; }; }; then
+	if [ "$rewind_source" -eq 1 ]; then
 		# Hold the PR checkout until the guarded ref update is done. Releasing
 		# it first would let another worktree check out the tip we are rewinding.
-		if [ "$cur" != "$asrc" ]; then git switch -q "$asrc"; fi
+		if [ "$cur" != "$asrc" ]; then git switch -q --no-overwrite-ignore "$asrc"; fi
 		[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ] ||
 			die "could not take over the PR branch $asrc to undo finish"
 		git update-ref "refs/heads/$asrc" "$source_before" "$source_now"
 		cur=$asrc
 		source_rewound=1
 	fi
-	if [ "$cur" != "$rb" ] && ! git checkout -q -f "$rb"; then
-		if [ "$source_rewound" -eq 1 ] &&
-			[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ]; then
-			git update-ref "refs/heads/$asrc" "$source_now" "$source_before"
+	if [ "$cur" != "$rb" ]; then
+		if ! git switch -q --discard-changes --no-overwrite-ignore "$rb"; then
+			if [ "$source_rewound" -eq 1 ] &&
+				[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ]; then
+				git update-ref "refs/heads/$asrc" "$source_now" "$source_before"
+			fi
+			exit 1
 		fi
-		exit 1
+		# The checkout hook can write files before the undo trees are restored.
+		review_guard_ignored_paths "$head" "$wttree" || exit 1
 	fi
 	git reset -q --hard "$head"
 	git read-tree -m -u "$wttree"
@@ -611,6 +628,10 @@ if [ "$resume" -eq 0 ] && [ "$onto" -eq 0 ]; then
 fi
 if [ "$resume" -eq 0 ] && [ "$onto" -eq 1 ]; then
 	finish_check_source "$src" "$tip" "$update_source"
+	if [ "$update_source" -eq 1 ]; then review_guard_ignored_paths "$finish_source_head" || exit 1; fi
+fi
+if [ "$resume" -eq 0 ]; then
+	review_guard_ignored_paths "$tip" || exit 1
 fi
 
 # Only a fresh finish records an undo point; --resume continues the same finish
@@ -688,6 +709,7 @@ elif [ "$resume" -eq 1 ]; then
 		if [ "$update_source" -eq 1 ] && [ "$finish_source_head" != "$_expected_source" ]; then
 			die "local $src changed during finish"
 		fi
+		if [ "$update_source" -eq 1 ]; then review_guard_ignored_paths "$finish_source_head" || exit 1; fi
 	fi
 	stage_finish_resolution || exit 1
 	git config --unset "branch.$cur.reviewresume" || true
@@ -719,7 +741,7 @@ if [ "$onto" -eq 1 ]; then
 		fi
 		# Claim the branch through Git before moving it. Its checkout protects
 		# the other worktrees while Git fast-forwards the ref, index and files.
-		if ! git switch -q "$src"; then
+		if ! git switch -q --no-overwrite-ignore "$src"; then
 			die "could not switch to $src; recover with git review finish --abort"
 		fi
 		if [ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||
@@ -727,8 +749,9 @@ if [ "$onto" -eq 1 ]; then
 			die "local $src changed during finish; recover with git review finish --abort"
 		fi
 		git config "branch.$cur.reviewundosourcemove" 1
+		review_guard_ignored_submodules "$tip" || exit 1
 		# Branch merge options can request a squash, which succeeds without moving HEAD.
-		if ! git -c merge.autostash=false merge --ff-only --no-squash --quiet "$tip" ||
+		if ! git -c merge.autostash=false merge --ff-only --no-squash --no-overwrite-ignore --quiet "$tip" ||
 			[ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||
 			[ "$(git rev-parse --verify HEAD)" != "$tip" ]; then
 			die "could not fast-forward $src; recover with git review finish --abort"
@@ -739,9 +762,9 @@ if [ "$onto" -eq 1 ]; then
 			echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 			exit 1
 		fi
-		git switch -q "$src"
+		git switch -q --no-overwrite-ignore "$src"
 	else
-		git switch -q -c "$src" "$tip"
+		git switch -q --no-overwrite-ignore -c "$src" "$tip"
 	fi
 	if [ "$has_edits" -eq 1 ]; then
 		apply_review_patch "$tip" "$cur" --index --3way || {
@@ -765,7 +788,7 @@ else
 		echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 		exit 1
 	}
-	git switch -q -c "$fb" "$tip"
+	git switch -q --no-overwrite-ignore -c "$fb" "$tip"
 	if [ "$has_edits" -eq 1 ]; then
 		apply_review_patch "$tip" "$cur" --index --3way || {
 			echo "error: could not apply review changes onto $fb" >&2

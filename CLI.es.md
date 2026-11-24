@@ -1105,6 +1105,12 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
 - `--onto-source` deja tus ediciones staged sobre la rama local del PR. Si falta, la crea en el commit revisado. Si existe, tiene que apuntar a ese commit.
 - `--update-source` avanza la rama local del PR al commit revisado cuando admite un fast-forward y deja ahí tus ediciones staged. Undo restaura el commit local anterior si la rama y las ediciones siguen como las dejó Finish.
 - `--destinations --porcelain` consulta los destinos disponibles sin tocar las ediciones. Si la rama está adelantada, diverge o está en uso en otro worktree, elegí la rama separada.
+- La apertura de una review, Finish, Undo (incluso con `--force`), Save,
+  Cancel y la navegación por commits se detienen si el destino pisaría un
+  archivo ignorado del working tree, incluidos los de submódulos. Mové el
+  archivo y volvé a intentar. Al actualizar la rama del PR, un hook de checkout
+  puede crear una colisión después de que Finish haya empezado. En ese caso,
+  Undo sigue disponible.
 - En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
   mano cuando estés listo.
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del

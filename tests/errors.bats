@@ -1999,7 +1999,7 @@ assert_start_matches_git() {
 #!/bin/sh
 set -eu
 case "$*" in
-	"switch -q feature/x"|"update-ref -m git review finish: fast-forward PR branch refs/heads/feature/x "*)
+	"switch -q --no-overwrite-ignore feature/x"|"update-ref -m git review finish: fast-forward PR branch refs/heads/feature/x "*)
 		"$FINISH_TEST_GIT" -C "$FINISH_TEST_WORKTREE" switch -q feature/x
 		;;
 esac
@@ -2044,6 +2044,194 @@ EOF
 	[ "$(git rev-parse refs/heads/feature/x)" = "$before" ]
 	[ "$(git rev-parse HEAD)" = "$review_before" ]
 	[ "$(git write-tree)" = "$index_before" ]
+}
+
+ignored_checkout_fixture() {
+	git switch -q feature/x
+	printf 'tracked artifact\n' >build-output
+	git add build-output
+	git commit -qm 'track build output'
+	git branch -q before-ignore
+	git switch -qc publish-output-removal
+	git rm -q build-output
+	printf 'build-output\n' >.gitignore
+	git add .gitignore
+	git commit -qm 'ignore build output'
+	git push -q origin HEAD:feature/x
+	git switch -q develop
+}
+
+assert_ignored_checkout_blocked() {
+	bats_require_minimum_version 1.5.0
+	local branch head index
+	branch=$(git symbolic-ref HEAD)
+	head=$(git rev-parse HEAD)
+	index=$(git write-tree)
+	run --separate-stderr git review "$@"
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'would overwrite an ignored working tree path: build-output'* ]]
+	[ "$(git symbolic-ref HEAD)" = "$branch" ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat build-output)" = 'private build output' ]
+}
+
+# bats test_tags=legacy-git
+@test "finish update protects ignored files before recording undo" {
+	ignored_checkout_fixture
+	git review start --no-walk feature/x
+	printf 'private build output\n' >build-output
+	printf 'reviewer correction\n' >>app.txt
+	before=$(git rev-parse refs/heads/feature/x)
+	assert_ignored_checkout_blocked finish --update-source
+	[ "$(git rev-parse refs/heads/feature/x)" = "$before" ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer correction' ]
+	[ -z "$(git for-each-ref refs/review-undo/feature/x/)" ]
+	mv build-output "$TMP/build-output"
+	run git review finish --update-source
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = feature/x ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer correction' ]
+}
+
+# bats test_tags=legacy-git
+@test "save and cancel protect ignored files before releasing the review" {
+	ignored_checkout_fixture
+	git switch -q before-ignore
+	git review start --no-walk feature/x
+	printf 'private build output\n' >build-output
+	printf 'reviewer correction\n' >>app.txt
+	session=$(git config branch.review/feature/x.reviewcommentssession)
+	assert_ignored_checkout_blocked save
+	! git show-ref --verify --quiet refs/heads/review-saved/feature/x
+	assert_ignored_checkout_blocked abort
+	[ "$(git config branch.review/feature/x.reviewcommentssession)" = "$session" ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer correction' ]
+	mv build-output "$TMP/build-output"
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = before-ignore ]
+}
+
+# bats test_tags=legacy-git
+@test "cancel protects an ignored directory when returning to a file at its path" {
+	bats_require_minimum_version 1.5.0
+	ignored_checkout_fixture
+	git switch -q before-ignore
+	git review start --no-walk feature/x
+	mkdir -p 'build-output/cache with spaces' subdir
+	printf 'private cached data\n' >'build-output/cache with spaces/output'
+	index=$(git write-tree)
+	cd subdir
+	run --separate-stderr git review abort
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: would overwrite an ignored working tree path: build-output/cache with spaces/output' ]
+	[ "$(git symbolic-ref --short HEAD)" = review/feature/x ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat '../build-output/cache with spaces/output')" = 'private cached data' ]
+}
+
+# bats test_tags=legacy-git
+@test "step navigation and finish protect ignored paths before banking edits" {
+	ignored_checkout_fixture
+	git switch -q publish-output-removal
+	printf 'tracked again\n' >build-output
+	git add -f build-output
+	git commit -qm 'track output again'
+	git push -q origin HEAD:feature/x
+	git switch -q develop
+	git review start --step --from before-ignore^ feature/x
+	git review next
+	printf 'private build output\n' >build-output
+	printf 'reviewer correction\n' >>app.txt
+	assert_ignored_checkout_blocked prev
+	assert_ignored_checkout_blocked next
+	assert_ignored_checkout_blocked finish
+	[ "$(git config branch.review/feature/x.reviewstep)" = 2 ]
+	[ -z "$(git for-each-ref refs/review-edits/feature/x/ refs/review-undo/feature/x/)" ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer correction' ]
+	mv build-output "$TMP/build-output"
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewstep)" = 3 ]
+}
+
+# bats test_tags=legacy-git
+@test "finish undo protects ignored files even with force" {
+	ignored_checkout_fixture
+	printf 'build-output\n' >>.git/info/exclude
+	git review start --step --from before-ignore^ feature/x
+	git review finish
+	printf 'private build output\n' >build-output
+	undo=$(git rev-parse refs/review-undo/feature/x/worktree)
+	assert_ignored_checkout_blocked finish --abort
+	assert_ignored_checkout_blocked finish --abort --force
+	[ "$(git symbolic-ref --short HEAD)" = review-fixes/feature/x ]
+	[ "$(git rev-parse refs/review-undo/feature/x/worktree)" = "$undo" ]
+	mv build-output "$TMP/build-output"
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(cat build-output)" = 'tracked artifact' ]
+}
+
+# bats test_tags=legacy-git
+@test "finish undo protects an ignored file created by the return checkout hook" {
+	bats_require_minimum_version 1.5.0
+	ignored_checkout_fixture
+	printf 'build-output\n' >>.git/info/exclude
+	git review start --step --from before-ignore^ feature/x
+	git review finish
+	cat >.git/hooks/post-checkout <<'EOF'
+#!/bin/sh
+printf 'private hook output\n' >build-output
+EOF
+	chmod +x .git/hooks/post-checkout
+	run --separate-stderr git review finish --abort
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: would overwrite an ignored working tree path: build-output' ]
+	[ "$(cat build-output)" = 'private hook output' ]
+	[ "$(git symbolic-ref --short HEAD)" = review/feature/x ]
+	git show-ref --verify --quiet refs/review-undo/feature/x/worktree
+	mv build-output "$TMP/build-output"
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(cat build-output)" = 'tracked artifact' ]
+}
+
+# bats test_tags=legacy-git
+@test "finish fast-forward protects an ignored file created by the checkout hook" {
+	bats_require_minimum_version 1.5.0
+	git switch -q feature/x
+	printf 'build-output\n' >.gitignore
+	git add .gitignore
+	git commit -qm 'ignore build output'
+	before=$(git rev-parse HEAD)
+	git switch -qc publish-output
+	printf 'tracked build output\n' >build-output
+	git add -f build-output
+	git commit -qm 'track build output'
+	git push -q origin HEAD:feature/x
+	git switch -q develop
+	git review start --no-walk feature/x
+	cat >.git/hooks/post-checkout <<'EOF'
+#!/bin/sh
+if [ "$(git symbolic-ref --short HEAD)" = feature/x ]; then
+	printf 'private hook output\n' >build-output
+fi
+EOF
+	chmod +x .git/hooks/post-checkout
+	run --separate-stderr git review finish --update-source
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'build-output'*'could not fast-forward feature/x'* ]]
+	[ "$(git symbolic-ref --short HEAD)" = feature/x ]
+	[ "$(git rev-parse HEAD)" = "$before" ]
+	[ "$(cat build-output)" = 'private hook output' ]
+	git show-ref --verify --quiet refs/review-undo/feature/x/worktree
+	mv build-output "$TMP/build-output"
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review/feature/x ]
+	[ "$(cat build-output)" = 'tracked build output' ]
 }
 
 @test "finish fast-forwards a PR branch configured to squash merges" {

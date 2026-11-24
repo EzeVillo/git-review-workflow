@@ -70,6 +70,9 @@ This file starts at 0.2.1. Earlier versions are only in the
   and keep any new work the hook left behind.
 - Cleaning a branch by name preserves the edit bank and undo refs of branches
   nested under that name. Drafts for `topic` and `topic.md/next` can coexist.
+- Finish, Undo, Save, Cancel, and step navigation protect ignored local files
+  when the destination tracks the same path or has a file/directory conflict.
+  This also covers opening a review that updates or replaces a submodule.
 
 ## [0.10.0] — 2026-11-10
 

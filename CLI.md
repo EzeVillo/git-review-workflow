@@ -311,9 +311,10 @@ Has two independent axes — **range** (where the review starts) and **layout**
   that view to resolve selectors such as `origin/main~1`, `@{upstream}`,
   `origin/checkpoint@{0}`, and `main-worktree/HEAD`, including refs outside
   `refs/remotes/` and the private refs of linked worktrees.
-  Conditional includes and options supplied with `git -c` or
-  `GIT_CONFIG_COUNT` retain their effective values, order and command scope
-  for each repository, including recursive submodule fetches.
+  The view preserves the effective order of conditional global includes,
+  worktree configuration and options supplied with `git -c` or
+  `GIT_CONFIG_COUNT` for each repository, including recursive submodule
+  fetches. Worktree and command options retain their Git scopes.
   The selected branch and named base can also be fetched outside a
   single-branch refspec. The real repository keeps its branches, tags,
   reflogs, and `FETCH_HEAD`. If the fetch would change the shallow boundary or

@@ -1824,15 +1824,15 @@ dos OID. Las preparaciones anteriores siguen siendo legibles.
 
 Start ejecuta el fetch configurado en una vista temporal. Conserva el gitdir principal y los identificadores y el estado Git de todos los worktrees registrados. Así Git puede resolver refs privadas, reflogs y referencias al índice desde el mismo lugar que en el repositorio original. La vista recibe la configuración efectiva y copia el límite shallow que Git lee, incluso si lo define `GIT_SHALLOW_FILE`. Comparte los objetos y deshabilita el mantenimiento automático. Las ramas, tags, reflogs y `FETCH_HEAD` que modifica Git pertenecen a la vista. Si el fetch cambia el límite shallow, pide actualizar el clon antes de abrir una revisión sobre esos objetos. Offline sigue resolviendo en las refs del clon, sin contactar el remoto.
 
-Git anterior a `GIT_CONFIG_GLOBAL` lee directamente la configuración de sistema
-y los dos archivos globales. La vista conserva `HOME` y pide a Git los valores
-de esos archivos en cada gitdir. Si los valores que siguen activos son un
-prefijo de los originales, carga el resto mediante un include antes de la
-configuración del repositorio. Así conserva el orden y la cantidad de opciones
-acumulativas. `user.name` y `user.email` se comprueban cada uno por separado,
-por lo que un include de identidad puede aparecer entre otras opciones.
-Cuando reproducir la configuración requeriría descartar o reordenar valores
-ya leídos por Git, la CLI pide actualizar Git antes de hacer el fetch.
+Git anterior a `GIT_CONFIG_GLOBAL` conserva su entorno habitual cuando los
+archivos de sistema y globales producen la misma secuencia en ambos gitdirs.
+Si difieren, la vista le pide a Git la secuencia efectiva completa y la carga
+desde una configuración XDG temporal. Así conserva los valores intercalados,
+repetidos y vacíos en el orden original. Cuando el archivo `~/.gitconfig`
+también estaría activo, Git usa un `HOME` temporal con enlaces a los demás
+paths existentes que el sistema permite enlazar. Cada submódulo recibe su
+propia secuencia. La configuración del worktree activo mantiene también su
+archivo y su ámbito propios.
 
 Start y Compare respetan la recursión de fetch configurada en Git. Desactivarla
 siempre dejaba sin descargar el commit de un submódulo que después necesitaba
@@ -1874,6 +1874,11 @@ Las pruebas comparan los OID y el índice con un fetch nativo, además de los
 valores y sus ámbitos; cubren includes anidados, entorno, valores vacíos y
 sin valor, bytes especiales y la configuración efectiva dentro de un hook
 del submódulo.
+
+La CI y el release de la CLI ejecutan las pruebas de configuración y de fetch
+aislado con Git 2.23.0. Forzar un camino de compatibilidad con un Git reciente
+sirve para contrastar ámbitos y bytes, y el binario mínimo comprueba además
+que Git resuelva la configuración y el fetch recursivo con su propio código.
 
 Git evalúa los selectores completos después del fetch. Así un destino que acaba de aparecer puede tener precedencia sobre una rama homónima, @{upstream} puede resolver con la configuración del worktree y @{n} usa el historial de Git. La búsqueda de una base da prioridad a su nombre de rama. El mapeo de la rama remota de Start, el fetch explícito de Compare y la presencia remota de Forget comparten el mapeo de refspecs. Start puede incluir la rama elegida y una base nombrada fuera del refspec de un clon de rama única. Compare en caché conserva su revisión literal.
 

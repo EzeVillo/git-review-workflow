@@ -5425,16 +5425,19 @@ review_view_config() {
 		# Older Git still reads the ordinary global and system files itself.
 		_rvc_format=local
 		"$@" config --local --includes --null --list >"$_rvc_directory/config.records" || return 1
-		if [ "$("$@" config --bool --get extensions.worktreeConfig || true)" = true ]; then
-			"$@" config --worktree --includes --null --list >>"$_rvc_directory/config.records" || return 1
-		fi
 	fi
 	rm -f "$_rvc_directory/config.probe" || return 1
 	: >"$_review_view_common/config" || return 1
 	: >"$_rvc_directory/global-config" || return 1
 	: >"$_rvc_directory/command-values" || return 1
+	: >"$_rvc_directory/worktree-values" || return 1
 	review_view_config_write "$_rvc_directory/config.records" "$_rvc_format" "$_rvc_directory" || return 1
 	if [ "$_review_view_global" -eq 0 ]; then
+		_rvc_repository_config=$("$@" rev-parse --git-path config) || return 1
+		if [ "$(git config --file "$_rvc_repository_config" --bool --get extensions.worktreeConfig || true)" = true ]; then
+			"$@" config --worktree --includes --null --list >"$_rvc_directory/config.records" || return 1
+			review_view_config_write "$_rvc_directory/config.records" worktree "$_rvc_directory" || return 1
+		fi
 		# Git 2.23 has origins but not scopes or GIT_CONFIG_GLOBAL. Extract the
 		# raw command options, then let Git expand their includes at the original
 		# gitdir. Selecting a file excludes the inherited command options, so
@@ -5459,6 +5462,7 @@ review_view_config_write() {
 			local_config = ENVIRON["REVIEW_VIEW_CONFIG"]
 			global_config = ENVIRON["REVIEW_VIEW_DIR"] "/global-config"
 			command_config = ENVIRON["REVIEW_VIEW_DIR"] "/command-values"
+			worktree_config = ENVIRON["REVIEW_VIEW_DIR"] "/worktree-values"
 			raw_command = ENVIRON["REVIEW_VIEW_DIR"] "/command-raw"
 			format = ENVIRON["REVIEW_VIEW_FORMAT"]
 		}
@@ -5480,9 +5484,6 @@ review_view_config_write() {
 			section_end = index(name, ".")
 			section = substr(name, 1, section_end - 1)
 			if (format != "raw-command" && (section == "include" || section == "includeif")) return
-			if (format == "ambient" && (name == "user.name" || name == "user.email")) {
-				target = ENVIRON["REVIEW_VIEW_DIR"] "/" name
-			}
 			if (name == "core.worktree" && target != command_config && format != "raw-command" && format != "ambient") return
 			key = name
 			sub(/^.*\./, "", key)
@@ -5504,7 +5505,8 @@ review_view_config_write() {
 				} else {
 					if (format != "raw-command" || source == "command line:") {
 						target = local_config
-						if (source == "global" || source == "system") target = global_config
+						if (source == "global" || source == "system" || format == "ambient") target = global_config
+						if (source == "worktree" || format == "worktree") target = worktree_config
 						if (source == "command" || format == "command") target = command_config
 						if (format == "raw-command") target = raw_command
 						entry(record, target)
@@ -5521,42 +5523,61 @@ review_view_config_write() {
 # read. The ordinary config reader sees both global files, plus system config.
 review_view_ambient_config() (
 	unset GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
-	GIT_COMMON_DIR="$_review_view/empty-common" git --git-dir="$1" config --includes --null --list
+	GIT_COMMON_DIR="$_review_view/empty-common"
+	export GIT_COMMON_DIR
+	git --git-dir="$1" config --includes --null --list
 )
 
-# Old Git cannot redirect its global config. Leave HOME and the native config
-# in place, and add only the values that would otherwise disappear. A tail
-# preserves the order and multiplicity of the settings used by fetch. Name and
-# email are independent of other keys and can each be checked in their own order.
-review_view_legacy_config() (
+# Old Git can only select its global files through HOME and XDG_CONFIG_HOME.
+# Keep the native environment when it sees the same values at both gitdirs.
+# Otherwise replace the complete sequence, including values that still match:
+# replaying only the differences cannot preserve interleaved multivars.
+review_view_legacy_config() {
 	_rvl_original="$_review_view/original-config"
 	_rvl_snapshot="$_review_view/snapshot-config"
-	mkdir -p "$_rvl_original" "$_rvl_snapshot" \
-		"$_review_view/empty-common/refs" "$_review_view/empty-common/objects" || exit 1
-	review_view_ambient_config "$1" >"$_rvl_original/records" || exit 1
-	review_view_ambient_config "$2" >"$_rvl_snapshot/records" || exit 1
-	if cmp -s "$_rvl_original/records" "$_rvl_snapshot/records"; then exit 0; fi
-	for _rvl_key in config user.name user.email; do
-		: >"$_rvl_original/$_rvl_key" || exit 1
-		: >"$_rvl_snapshot/$_rvl_key" || exit 1
+	mkdir -p "$_review_view/empty-common/refs" "$_review_view/empty-common/objects" || return 1
+	review_view_ambient_config "$1" >"$_rvl_original" || return 1
+	review_view_ambient_config "$2" >"$_rvl_snapshot" || return 1
+	if cmp -s "$_rvl_original" "$_rvl_snapshot"; then return 0; fi
+	review_view_config_write "$_rvl_original" ambient "$_review_view" || return 1
+	_review_view_legacy_global=1
+}
+
+# Keep existing non-config home paths available without copying their contents.
+# On Windows a native link may require privileges, so never let MSYS substitute
+# a recursive copy. Git for Windows programs also retain USERPROFILE.
+review_view_link_home() (
+	[ -n "$1" ] && [ -d "$1" ] || return 0
+	_rvl_source=$(cd "$1" && pwd -P) || return 1
+	for _rvl_item in "$_rvl_source"/* "$_rvl_source"/.[!.]* "$_rvl_source"/..?*; do
+		[ -e "$_rvl_item" ] || [ -L "$_rvl_item" ] || continue
+		_rvl_name=${_rvl_item##*/}
+		if [ "$_rvl_name" = "$3" ] || [ "$_rvl_name" = "${4:-}" ]; then continue; fi
+		MSYS=winsymlinks:nativestrict ln -s "$_rvl_item" "$2/$_rvl_name" 2>/dev/null || {
+			command -v cygpath >/dev/null 2>&1 || return 1
+		}
 	done
-	(_review_view_common=$_rvl_original; review_view_config_write "$_rvl_original/records" ambient "$_rvl_original") || exit 1
-	(_review_view_common=$_rvl_snapshot; review_view_config_write "$_rvl_snapshot/records" ambient "$_rvl_snapshot") || exit 1
-	{
-		for _rvl_key in config user.name user.email; do
-			_rvl_size=$(wc -c <"$_rvl_snapshot/$_rvl_key" | tr -d '[:space:]') || exit 1
-			dd if="$_rvl_original/$_rvl_key" bs=1 count="$_rvl_size" >"$_review_view/config.prefix" 2>/dev/null || exit 1
-			cmp -s "$_review_view/config.prefix" "$_rvl_snapshot/$_rvl_key" ||
-				die 'this Git cannot reproduce conditional configuration in a temporary view. Update Git and retry.'
-			dd if="$_rvl_original/$_rvl_key" bs=1 skip="$_rvl_size" 2>/dev/null || exit 1
-		done
-	} >"$_review_view/ambient-values" || exit 1
-	# Only the ordinary config reader expands the include. Repository format
-	# detection still reads the original repository settings in this file.
-	git config --file "$_review_view/config.replayed" include.path "$_review_view/ambient-values" || exit 1
-	cat "$_review_view_common/config" >>"$_review_view/config.replayed" || exit 1
-	mv "$_review_view/config.replayed" "$_review_view_common/config"
 )
+
+review_view_legacy_home() {
+	_rvl_xdg=${XDG_CONFIG_HOME:-${HOME:+$HOME/.config}}
+	mkdir -p "$_review_view/xdg/git" || return 1
+	review_view_link_home "$_rvl_xdg" "$_review_view/xdg" git || return 1
+	if [ -n "$_rvl_xdg" ]; then
+		review_view_link_home "$_rvl_xdg/git" "$_review_view/xdg/git" config || return 1
+	fi
+	if [ -n "${HOME:-}" ] && [ -f "$HOME/.gitconfig" ]; then
+		mkdir -p "$_review_view/home" || return 1
+		if [ -z "${XDG_CONFIG_HOME:-}" ]; then
+			review_view_link_home "$HOME" "$_review_view/home" .gitconfig .config || return 1
+			mkdir -p "$_review_view/home/.config" || return 1
+			review_view_link_home "$_review_view/xdg" "$_review_view/home/.config" "" || return 1
+		else
+			review_view_link_home "$HOME" "$_review_view/home" .gitconfig || return 1
+		fi
+	fi
+	git config --file "$_review_view/xdg/git/config" include.path "$_review_view/global-config"
+}
 
 # Git treats includeIf gitdir conditions as globs, even for an exact path.
 review_view_config_include() {
@@ -5617,6 +5638,10 @@ review_view_submodule_config() (
 	_review_view_common=$_rvsc_directory
 	review_view_config "$_rvsc_directory" git --git-dir="$_rvsc_gitdir" || return 1
 	if [ "$_review_view_global" -eq 1 ]; then
+		review_view_config_include "$_rvsc_gitdir" "$_rvsc_directory/global-config" "$_review_view/global-config" || return 1
+	elif [ "$_review_view_legacy_global" -eq 1 ]; then
+		review_view_ambient_config "$_rvsc_gitdir" >"$_rvsc_directory/ambient" || return 1
+		review_view_config_write "$_rvsc_directory/ambient" ambient "$_rvsc_directory" || return 1
 		review_view_config_include "$_rvsc_gitdir" "$_rvsc_directory/global-config" "$_review_view/global-config" || return 1
 	fi
 	review_view_config_include "$_rvsc_gitdir" "$_rvsc_directory/command-values" "$_review_view/command-config"
@@ -5692,6 +5717,7 @@ review_view_modules() (
 
 review_view_open() {
 	_review_view=$1
+	_review_view_legacy_global=0
 	_rvo_common=$(git rev-parse --git-common-dir) || return 1
 	_rvo_common=$(cd "$_rvo_common" && pwd -P) || return 1
 	_rvo_native_gitdir=$(git rev-parse --absolute-git-dir) || return 1
@@ -5728,14 +5754,26 @@ review_view_open() {
 		review_view_copy_gitdir "$_rvo_gitdir" "$_review_view_gitdir" || return 1
 		printf '../.git\n' >"$_review_view_gitdir/commondir" || return 1 ;;
 	esac
+	if [ -s "$_review_view/worktree-values" ]; then
+		cp "$_review_view/worktree-values" "$_review_view_gitdir/config.worktree" || return 1
+	fi
 	# Command configuration is inherited by recursive Git processes. Apply the
 	# view's overrides at command scope only when the gitdir is this snapshot.
 	_rvo_parent_gitdir=$(git --git-dir="$_review_view_gitdir" rev-parse --absolute-git-dir) || return 1
-	printf '[extensions]\nworktreeConfig = false\n[maintenance]\nauto = false\n[gc]\nauto = 0\n[fetch]\nwriteCommitGraph = false\n' >"$_review_view/config-overrides" || return 1
+	printf '[maintenance]\nauto = false\n[gc]\nauto = 0\n[fetch]\nwriteCommitGraph = false\n' >"$_review_view/config-overrides" || return 1
 	git config --file "$_review_view/config-overrides" core.logAllRefUpdates "$_review_view_log" || return 1
 	git config --file "$_review_view/config-overrides" core.hooksPath "$_review_view/hooks" || return 1
 	review_view_config_include "$_rvo_parent_gitdir" "$_review_view/command-values" "$_review_view/command-config" || return 1
 	review_view_config_include "$_rvo_parent_gitdir" "$_review_view/config-overrides" "$_review_view/command-config" || return 1
+	if [ "$_review_view_global" -eq 0 ]; then
+		review_view_legacy_config "$_rvo_native_gitdir" "$_rvo_parent_gitdir" || return 1
+	fi
+	if [ "$_review_view_global" -eq 1 ] || [ "$_review_view_legacy_global" -eq 1 ]; then
+		mv "$_review_view/global-config" "$_review_view/parent-global-config" || return 1
+		# Git's native absolute path also matches includeIf on Git for Windows.
+		review_view_config_include "$_rvo_parent_gitdir" "$_review_view/parent-global-config" "$_review_view/global-config" || return 1
+	fi
+	if [ "$_review_view_legacy_global" -eq 1 ]; then review_view_legacy_home || return 1; fi
 	_rvo_index=$(git rev-parse --git-path index) || return 1
 	if [ -f "$_rvo_index" ]; then cp "$_rvo_index" "$_review_view_gitdir/index" || return 1; fi
 	_rvo_modules=$(git rev-parse --git-path modules) || return 1
@@ -5744,20 +5782,12 @@ review_view_open() {
 		_rvo_view_modules=$(review_view_git rev-parse --git-path modules) || return 1
 		review_view_modules "$_rvo_modules" "$_rvo_view_modules" || return 1
 	fi
-	if [ "$_review_view_global" -eq 1 ]; then
-		mv "$_review_view/global-config" "$_review_view/parent-global-config" || return 1
-		# Git's native absolute path also matches includeIf on Git for Windows.
-		review_view_config_include "$_rvo_parent_gitdir" "$_review_view/parent-global-config" "$_review_view/global-config" || return 1
-	fi
 	review_view_module_configs "$_rvo_modules" || return 1
 	# Populated submodules may keep their gitdirs outside modules/.
 	if [ -n "$_review_view_top" ]; then review_view_populated_configs || return 1; fi
 
 	_rvo_shallow=$(review_shallow_path) || return 1
 	if [ -f "$_rvo_shallow" ]; then cp "$_rvo_shallow" "$_review_view_common/shallow" || return 1; fi
-	if [ "$_review_view_global" -eq 0 ]; then
-		review_view_legacy_config "$_rvo_native_gitdir" "$_rvo_parent_gitdir" || return 1
-	fi
 }
 
 review_view_git() (
@@ -5773,6 +5803,10 @@ review_view_git() (
 	if [ "$_review_view_global" -eq 1 ]; then
 		GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$_review_view/global-config"
 		export GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL
+	elif [ "$_review_view_legacy_global" -eq 1 ]; then
+		GIT_CONFIG_NOSYSTEM=1 XDG_CONFIG_HOME="$_review_view/xdg"
+		export GIT_CONFIG_NOSYSTEM XDG_CONFIG_HOME
+		if [ -d "$_review_view/home" ]; then HOME="$_review_view/home"; export HOME; fi
 	fi
 	# Replay each repository's effective command options exactly once at command
 	# scope. Raw includes inherited from -c or GIT_CONFIG_COUNT would otherwise

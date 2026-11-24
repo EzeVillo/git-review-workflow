@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# bats file_tags=legacy-git
 
 setup() {
 	TMP=$(mktemp -d)
@@ -111,6 +112,35 @@ assert_configured_start_matches_git() {
 	assert_configured_start_matches_git
 }
 
+@test "start honors global conditional refspecs before other global settings" {
+	git config --global "$CONDITION" "$FRAGMENT"
+	git config --global --add remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'
+	git config --global color.ui auto
+	CONFIG_GIT=(git)
+	assert_configured_start_matches_git
+}
+
+@test "start keeps home files available during the isolated fetch" {
+	export XDG_CONFIG_HOME="$TMP/xdg"
+	mkdir -p "$XDG_CONFIG_HOME/git"
+	printf 'home input\n' >"$HOME/.review-input"
+	printf 'XDG input\n' >"$XDG_CONFIG_HOME/git/review-input"
+	upload_pack="$TMP/check-upload-pack"
+	cat >"$upload_pack" <<'EOF'
+#!/bin/sh
+set -eu
+[ "$(cat "$HOME/.review-input")" = 'home input' ]
+[ "$(cat "$XDG_CONFIG_HOME/git/review-input")" = 'XDG input' ]
+exec git upload-pack "$@"
+EOF
+	chmod +x "$upload_pack"
+	git config remote.origin.uploadpack "\"$upload_pack\""
+	git config --global "$CONDITION" "$FRAGMENT"
+	git config --global color.ui auto
+	CONFIG_GIT=(git)
+	assert_configured_start_matches_git
+}
+
 @test "start keeps nested conditional includes supplied at command scope" {
 	outer="$TMP/outer.config"
 	git config --file "$outer" "$CONDITION" fetch.config
@@ -207,6 +237,39 @@ EOF
 			-c 'alias.config-probe=!sh "$REVIEW_TEST_SCRIPT"' config-probe
 		[ "$status" -eq 0 ]
 		[ "$output" = 'configuration and scopes match Git' ]
+	done
+}
+
+@test "temporary config replays the complete global sequence for each Git reader" {
+	make_config_probe
+	outer="$TMP/outer.config"
+	after="$TMP/after.config"
+	export XDG_CONFIG_HOME="$TMP/xdg"
+	mkdir -p "$XDG_CONFIG_HOME/git"
+	git config --file "$XDG_CONFIG_HOME/git/config" audit.order xdg
+	git config --global --add audit.order before
+	git config --global "$CONDITION" "$outer"
+	git config --file "$outer" --add include.path fetch.config
+	git config --file "$FRAGMENT" --add audit.order included
+	git config --file "$FRAGMENT" --add audit.order ''
+	git config --file "$FRAGMENT" audit.multiline $'one\ntwo'
+	git config --file "$after" audit.order after
+	git config --global --add include.path "$after"
+	git config --local --add audit.order local
+	git config --local extensions.worktreeConfig true
+	git config --worktree --add audit.order worktree
+	[ "$(git config --get-all audit.order)" = $'xdg\nbefore\nincluded\n\nafter\nlocal\nworktree' ]
+	linked="$TMP/clients/linked"
+	git worktree add -q --detach "$linked" main
+	git -C "$linked" config --worktree --replace-all audit.order linked
+	for reader in "$READER" "$linked"; do
+		cd "$reader"
+		for legacy in 0 1; do
+			run env REVIEW_TEST_LEGACY="$legacy" git -c audit.order=command \
+				-c 'alias.config-probe=!sh "$REVIEW_TEST_SCRIPT"' config-probe
+			[ "$status" -eq 0 ]
+			[ "$output" = 'configuration and scopes match Git' ]
+		done
 	done
 }
 

@@ -18,6 +18,9 @@ permissions:
   contents: write
 
 jobs:
+  legacy-git:
+    uses: ./.github/workflows/legacy-git.yml
+
   # Gate the release on a green test suite: a tag must not ship if the code it
   # points at is broken. This mirrors ci.yml but runs against the tagged commit
   # so the gate and the artifact are guaranteed to be the same code.
@@ -55,7 +58,7 @@ jobs:
         run: bats tests/
 
   release:
-    needs: verify
+    needs: [verify, legacy-git]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -168,7 +171,7 @@ jobs:
   # older Node lines (npm 12 requires Node >= 22.22.2), so `latest` breaks the
   # release the day a new major lands.
   npm:
-    needs: verify
+    needs: [verify, legacy-git]
     runs-on: ubuntu-latest
     permissions:
       contents: read

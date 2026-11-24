@@ -1,0 +1,19 @@
+name: Minimum supported Git
+
+on: workflow_call
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the minimum supported Git
+        run: docker build --target legacy-git -t git-review-legacy tests
+      - name: Check isolated fetch configuration and state against Git 2.23
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro" -w /repo git-review-legacy
+          --print-output-on-failure --filter-tags legacy-git
+          tests/start-config.bats tests/compare.bats tests/submodules.bats

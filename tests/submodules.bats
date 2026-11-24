@@ -108,6 +108,7 @@ assert_reviewed_gitlink() {
 	assert_reviewed_gitlink review/topic
 }
 
+# bats test_tags=legacy-git
 @test "remote compare fetches submodule commits without updating tracking refs" {
 	git config fetch.recurseSubmodules on-demand
 	advance_submodule
@@ -200,6 +201,7 @@ assert_reviewed_gitlink() {
 	assert_parent_fetch_unchanged
 }
 
+# bats test_tags=legacy-git
 @test "start preserves global configuration scoped to each submodule" {
 	mirror="$TMP/mirror"
 	git clone -q --bare "$CHILD" "$mirror"
@@ -207,6 +209,10 @@ assert_reviewed_gitlink() {
 	child_gitdir=$(git -C "$MODULE" rev-parse --absolute-git-dir)
 	git config --file "$global_fragment" "url.$mirror.insteadOf" "$TMP/unavailable"
 	git config --global "includeIf.gitdir:$child_gitdir.path" "$global_fragment"
+	parent_fragment="$TMP/parent-global"
+	git config --file "$parent_fragment" fetch.prune true
+	git config --global "includeIf.gitdir:$(git rev-parse --absolute-git-dir).path" "$parent_fragment"
+	git config --global color.ui auto
 	advance_submodule
 	git -C "$CHILD" push -q "$mirror" main
 	# Only the submodule-specific include supplies this now-unavailable remote.
@@ -266,6 +272,7 @@ assert_reviewed_gitlink() {
 	assert_parent_fetch_unchanged
 }
 
+# bats test_tags=legacy-git
 @test "submodule fetch failure leaves no usable Start or Compare preparation" {
 	bats_require_minimum_version 1.5.0
 	advance_submodule
@@ -278,7 +285,7 @@ assert_reviewed_gitlink() {
 		esac
 		run --separate-stderr git review "$@"
 		[ "$status" -eq 1 ]
-		[[ "$stderr" == *'Errors during submodule fetch:'* ]]
+		[[ "$stderr" == *"/unavailable' does not appear to be a git repository"* ]]
 		[[ "$output" != *'-prepared'* ]]
 		assert_still_on_main
 		assert_parent_fetch_unchanged

@@ -10,6 +10,7 @@
 #   v2.0  touches more.txt  more.txt added
 # So v1.0..v2.0 spans two commits (c1, then the v2.0 commit).
 
+# bats test_tags=legacy-git
 @test "prepared compare fetches exactly the selected history and pins it for the session" {
 	remote="$BATS_TEST_TMPDIR/remote.git"
 	git init -q --bare "$remote"
@@ -81,11 +82,16 @@
 	! git cat-file -e "$new_tip^{commit}" 2>/dev/null
 }
 
+# bats test_tags=legacy-git
 @test "prepared remote compare leaves a missing FETCH_HEAD absent" {
 	remote="$TMP/remote.git"
 	git clone -q --bare . "$remote"
 	git --git-dir="$remote" branch topic v2.0
 	git remote add isolated "$remote"
+	global_fragment="$TMP/compare-global"
+	git config --file "$global_fragment" fetch.prune true
+	git config --global "includeIf.gitdir:$(git rev-parse --absolute-git-dir).path" "$global_fragment"
+	git config --global color.ui auto
 	fetch_head=$(git rev-parse --git-path FETCH_HEAD)
 	[ ! -e "$fetch_head" ]
 
@@ -100,6 +106,7 @@
 	! git show-ref --verify --quiet refs/remotes/isolated/topic
 }
 
+# bats test_tags=legacy-git
 @test "compare refreshes the upstream of a renamed tracking branch" {
 	remote="$TMP/remote.git"
 	git init -q --bare "$remote"

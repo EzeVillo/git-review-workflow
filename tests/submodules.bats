@@ -556,9 +556,10 @@ EOF
 }
 
 start_deep_file_handoff() {
+	local child_name=${1:-version} parent_name=${2:-version}
 	git config submodule.recurse false
 	mkdir -p "$CHILD/lib/deep"
-	printf 'original child file\n' >"$CHILD/lib/deep/version"
+	printf 'original child file\n' >"$CHILD/lib/deep/$child_name"
 	printf 'original sibling\n' >"$CHILD/lib/deep/other"
 	git -C "$CHILD" add lib
 	git -C "$CHILD" commit -qm 'add deep child file'
@@ -572,7 +573,7 @@ start_deep_file_handoff() {
 	git -C "$SERVER" rm -qf -- "$MODULE"
 	git -C "$SERVER" commit -qm 'remove gitlink'
 	mkdir -p "$SERVER/$MODULE/lib/deep"
-	printf 'parent file\n' >"$SERVER/$MODULE/lib/deep/version"
+	printf 'parent file\n' >"$SERVER/$MODULE/lib/deep/$parent_name"
 	printf 'parent sibling\n' >"$SERVER/$MODULE/lib/deep/other"
 	git -C "$SERVER" add -- "$MODULE/lib"
 	git -C "$SERVER" commit -qm 'vendor deep file'
@@ -660,6 +661,68 @@ start_deep_file_handoff() {
 	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
 	[ -z "$(git for-each-ref refs/review-edits/topic/)" ]
 	[ "$(cat "$MODULE/lib/deep/other")" = 'original sibling' ]
+}
+
+# bats test_tags=legacy-git
+@test "handoff protects and restores child files across non-ASCII case aliases" {
+	bats_require_minimum_version 1.5.0
+	lower=$(printf '\303\251.txt')
+	upper=$(printf '\303\211.txt')
+	printf 'filesystem probe\n' >"$lower"
+	if [ ! -f "$upper" ]; then skip 'filesystem distinguishes these two spellings'; fi
+	rm -- "$lower"
+	start_deep_file_handoff "$lower" "$upper"
+	path=lib/deep/$lower
+	git -C "$MODULE" update-index --assume-unchanged "$path"
+	printf 'private child edit\n' >"$MODULE/$path"
+	git -C "$MODULE" diff --quiet
+	index=$(git write-tree)
+	for locale in C C.UTF-8; do
+		run --separate-stderr env LC_ALL="$locale" git review next
+		[ "$status" -eq 1 ]
+		[[ "$stderr" == *'would overwrite a local path in a nested Git working tree:'*"/$path" ]]
+		[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+		[ "$(git write-tree)" = "$index" ]
+		[ "$(cat "$MODULE/$path")" = 'private child edit' ]
+		[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+		[ -z "$(git for-each-ref refs/review-edits/topic/)" ]
+	done
+	git -C "$MODULE" update-index --no-assume-unchanged "$path"
+	git -C "$MODULE" checkout -- "$path"
+	run env LC_ALL=C git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/$path")" = 'parent file' ]
+	run env LC_ALL=C git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/$path")" = 'original child file' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+	[ -z "$(git ls-files -- "$MODULE")" ]
+}
+
+@test "handoff protects child files through a Windows short file alias" {
+	bats_require_minimum_version 1.5.0
+	command -v cygpath >/dev/null 2>&1 || skip 'requires Windows short names'
+	long="Private output document's data.txt"
+	printf 'filesystem probe\n' >"$long"
+	short=$(cygpath -asm -- "$long")
+	short=${short##*/}
+	if [[ "$short" != *~[0-9]* ]] || [ ! -f "$short" ]; then skip 'short names are disabled'; fi
+	rm -- "$long"
+	start_deep_file_handoff "$long" "$short"
+	path=lib/deep/$long
+	[ -f "$MODULE/lib/deep/$short" ] || skip 'the filesystem allocated a different short name'
+	git -C "$MODULE" update-index --assume-unchanged "$path"
+	printf 'private child edit\n' >"$MODULE/$path"
+	git -C "$MODULE" diff --quiet
+	index=$(git write-tree)
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'would overwrite a local path in a nested Git working tree:'*"/$path" ]]
+	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat "$MODULE/$path")" = 'private child edit' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+	[ -z "$(git for-each-ref refs/review-edits/topic/)" ]
 }
 
 # bats test_tags=legacy-git

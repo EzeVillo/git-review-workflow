@@ -73,6 +73,8 @@ This file starts at 0.2.1. Earlier versions are only in the
 - Finish, Undo, Save, Cancel, and step navigation protect ignored local files
   when the destination tracks the same path or has a file/directory conflict.
   This also covers opening a review that updates or replaces a submodule.
+- On Windows, checkout protection and submodule file transfers also recognize
+  non-ASCII case aliases under the C locale and Windows-generated short names.
 - Step navigation and Finish protect local work in submodules even after the
   gitlink disappears from the index. Preview and saved reviews no longer
   capture an embedded checkout as a new submodule.

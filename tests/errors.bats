@@ -2157,6 +2157,84 @@ assert_ignored_checkout_blocked() {
 }
 
 # bats test_tags=legacy-git
+@test "checkout guards protect non-ASCII case aliases under the C locale" {
+	bats_require_minimum_version 1.5.0
+	lower=$(printf '\303\251.tmp')
+	upper=$(printf '\303\211.tmp')
+	printf 'filesystem probe\n' >"$lower"
+	if [ ! -f "$upper" ]; then skip 'filesystem distinguishes these two spellings'; fi
+	rm -- "$lower"
+	git switch -q feature/x
+	printf '*.tmp\n' >.gitignore
+	git add .gitignore
+	git commit -qm 'ignore local output'
+	before=$(git rev-parse HEAD)
+	printf 'PR output\n' >"$upper"
+	git add -f -- "$upper"
+	git commit -qm 'track the output'
+	git switch -q develop
+	git review start --offline --step --from "$before^" feature/x
+	printf 'private output\n' >"$lower"
+	index=$(git write-tree)
+	head=$(git rev-parse HEAD)
+	for verb in next finish; do
+		run --separate-stderr env LC_ALL=C git review "$verb"
+		[ "$status" -eq 1 ]
+		[ "$stderr" = "error: would overwrite an ignored working tree path: $lower" ]
+		[ "$(git config branch.review/feature/x.reviewstep)" = 1 ]
+		[ "$(git rev-parse HEAD)" = "$head" ]
+		[ "$(git write-tree)" = "$index" ]
+		[ "$(cat "$lower")" = 'private output' ]
+		[ -z "$(git for-each-ref refs/review-edits/feature/x/ refs/review-undo/feature/x/)" ]
+	done
+	mv -- "$lower" "$TMP/private-output"
+	run env LC_ALL=C git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$upper")" = 'PR output' ]
+	[ "$(cat "$TMP/private-output")" = 'private output' ]
+}
+
+# bats test_tags=legacy-git
+@test "checkout guards protect ignored files through a Windows short directory alias" {
+	bats_require_minimum_version 1.5.0
+	command -v cygpath >/dev/null 2>&1 || skip 'requires Windows short names'
+	long="Private output directory's data"
+	mkdir "$long"
+	short=$(cygpath -asm -- "$long")
+	short=${short##*/}
+	if [[ "$short" != *~[0-9]* ]] || [ ! -d "$short" ]; then skip 'short names are disabled'; fi
+	rmdir -- "$long"
+
+	git switch -q feature/x
+	printf '/Private*\n' >.gitignore
+	git add .gitignore
+	git commit -qm 'ignore local output'
+	before=$(git rev-parse HEAD)
+	mkdir "$short"
+	printf 'PR output\n' >"$short/output"
+	git add -- "$short/output"
+	git commit -qm 'track the output'
+	git switch -q develop
+	git review start --offline --step --from "$before^" feature/x
+	mkdir "$long"
+	printf 'private output\n' >"$long/output"
+	[ -f "$short/output" ] || skip 'the filesystem allocated a different short name'
+	index=$(git write-tree)
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[ "$stderr" = "error: would overwrite an ignored working tree path: $long/output" ]
+	[ "$(git config branch.review/feature/x.reviewstep)" = 1 ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat "$long/output")" = 'private output' ]
+	[ -z "$(git for-each-ref refs/review-edits/feature/x/)" ]
+	mv -- "$long" "$TMP/private-output"
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$short/output")" = 'PR output' ]
+	[ "$(cat "$TMP/private-output/output")" = 'private output' ]
+}
+
+# bats test_tags=legacy-git
 @test "finish undo protects ignored files even with force" {
 	ignored_checkout_fixture
 	printf 'build-output\n' >>.git/info/exclude

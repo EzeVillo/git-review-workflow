@@ -1110,6 +1110,9 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
   Cancel y la navegación por commits se detienen si el destino pisaría un
   archivo ignorado del working tree o descartaría trabajo local en un checkout
   de Git anidado. Esto incluye submódulos que un commit anterior dejó en disco.
+  En Windows, la comprobación incluye las variantes de mayúsculas y minúsculas
+  de caracteres fuera de ASCII y los nombres cortos que genera el sistema de
+  archivos.
   Mové el archivo o checkout que bloquea el cambio, o preservá los cambios en
   el repositorio anidado, y volvé a intentar. Al actualizar la rama del PR, un
   hook de checkout puede crear una colisión durante Finish y Undo sigue

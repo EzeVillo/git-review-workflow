@@ -1938,8 +1938,11 @@ archivos ignorados con el árbol entrante y protege cambios trackeados en el
 hijo si el checkout recursivo lo actualiza o lo elimina. Cuando el destino
 convierte el submódulo en un directorio, compara sólo las rutas que escribe
 el padre para conservar los archivos que quedan al lado. En un working tree
-con `core.ignoreCase`, la búsqueda también contempla destinos que escriben
-la misma ruta con otra capitalización.
+con `core.ignoreCase`, las protecciones y el traspaso comparten una clave que
+compara mayúsculas y minúsculas con una locale UTF-8 explícita. En Windows
+se consulta el nombre largo de cada prefijo que usa un alias corto de DOS,
+aunque todavía falte el archivo que escribiría el destino. Las operaciones
+sobre archivos y sobre el índice conservan los bytes de la ruta original.
 
 Si el gitlink ya salió del índice, los archivos que rastrea el padre como
 entradas ordinarias le pertenecen en el working tree. Esas rutas se excluyen

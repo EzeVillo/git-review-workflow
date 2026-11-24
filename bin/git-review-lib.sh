@@ -2930,17 +2930,92 @@ require_clean_work_tree() {
 	fi
 }
 
-# Encode paths from Git's NUL records. POSIX read can carry the octal paths
-# without losing bytes.
-review_path_records() {
-	LC_ALL=C od -An -v -tu1 "$1" | LC_ALL=C awk -v mode="$2" -v icase="${3:-false}" '
+# Use the same pathname keys for checkout guards and ownership transfers.
+# Case conversion must see whole characters under a UTF-8 locale.
+review_path_awk() {
+	_rpa_case=$1 _rpa_program=$2
+	shift 2
+	_rpa_locale=C _rpa_windows=0
+	if [ "$_rpa_case" = true ]; then
+		_rpa_locale=C.UTF-8
+		case "$(uname -s)" in
+		Darwin) _rpa_locale=en_US.UTF-8 ;;
+		MINGW*|MSYS*) _rpa_windows=1 ;;
+		esac
+	fi
+	LC_ALL=$_rpa_locale awk -v icase="$_rpa_case" -v windows="$_rpa_windows" "$@" '
+		BEGIN {
+			for (byte = 1; byte < 32; byte++) escape[sprintf("%c", byte)] = sprintf("\\%03o", byte)
+			escape["\177"] = "\\177"
+			escape["\a"] = "\\a"; escape["\b"] = "\\b"; escape["\t"] = "\\t"
+			escape["\n"] = "\\n"; escape["\v"] = "\\v"; escape["\f"] = "\\f"; escape["\r"] = "\\r"
+			escape["\\"] = "\\\\"; escape["\""] = "\\\""
+		}
+		function quote_char(c) {
+			return c in escape ? escape[c] : c
+		}
+		function unquote(path) {
+			if (substr(path, 1, 1) == "\"") return substr(path, 2, length(path) - 2)
+			return path
+		}
+		function shell_quote(value,   q, parts, count, i, result) {
+			q = sprintf("%c", 39)
+			count = split(value, parts, q)
+			result = q parts[1]
+			for (i = 2; i <= count; i++) result = result q "\\" q q parts[i]
+			return result q
+		}
+		# Query existing DOS short names through the filesystem. Resolve the
+		# affected prefix, since a new leaf can be absent beneath that directory.
+		function long_path(path,   parts, depth, i, prefix, cmd, full, n) {
+			if (!root_ready) {
+				cmd = "git rev-parse --show-toplevel"
+				cmd | getline win_root
+				close(cmd)
+				sub("/$", "", win_root)
+				root_depth = split(win_root, root_parts, "/")
+				root_ready = 1
+			}
+			if (win_root == "") return path
+			depth = split(path, parts, "/")
+			for (i = 1; i <= depth; i++) {
+				prefix = (i == 1 ? "" : prefix "/") parts[i]
+				if (parts[i] !~ /~[0-9]/) continue
+				if (!(prefix in expanded)) {
+					cmd = "cygpath -alm -- " shell_quote(win_root "/" prefix)
+					expanded[prefix] = prefix
+					if ((cmd | getline full) > 0) {
+						for (n = 0; n < root_depth; n++) sub("^[^/]*/", "", full)
+						expanded[prefix] = full
+					}
+					close(cmd)
+				}
+				prefix = expanded[prefix]
+			}
+			return prefix
+		}
+		function path_key(path) {
+			path = unquote(path)
+			if (windows && path ~ /~[0-9]/ && path !~ /\\/) path = long_path(path)
+			return icase == "true" ? toupper(path) : path
+		}
+	'"$_rpa_program"
+}
+
+# Encode paths from Git's NUL records. Preserve the octal bytes for filesystem
+# operations. Keyed records also carry Git's one-line spelling for comparison.
+review_raw_path_records() {
+	LC_ALL=C od -An -v -tu1 "$1" | review_path_awk false '
 		function emit(kind, path) {
 			if (seen[path]++) return
-			if (mode == "handover" || mode == "parent") print kind, path, (icase == "true" ? folded : path)
-			else if (mode == "ordinary") print kind, path, (icase == "true" ? folded : path), header
+			if (mode == "handover" || mode == "parent") printf "%s\t%s\t%s\n", kind, path, spelling
+			else if (mode == "ordinary") printf "%s\t%s\t%s\t%s\n", kind, path, spelling, header
 			else print kind, path
 		}
-		BEGIN { in_path = mode == "directories" }
+		BEGIN {
+			in_path = mode == "directories"
+			keyed = mode == "handover" || mode == "parent" || mode == "ordinary"
+		}
 		{
 			for (i = 1; i <= NF; i++) {
 				if ($i == 0 && mode == "handover" && !in_path) {
@@ -2953,19 +3028,32 @@ review_path_records() {
 						if (header ~ /^:000000 (100644|100755|120000) .* A$/) emit("return", path)
 						if (header ~ /^:(100644|100755|120000) 000000 .* D$/) emit("take", path)
 					}
-					header = path = folded = ""
+					header = path = spelling = ""
 					in_path = mode == "directories"
 				} else if (in_path == 1) {
 					if (mode == "directories" && $i == 47) emit("directory", path)
 					path = path sprintf("\\0%03o", $i)
-					if (icase == "true") folded = folded sprintf("\\0%03o", $i >= 65 && $i <= 90 ? $i + 32 : $i)
+					if (keyed) spelling = spelling quote_char(sprintf("%c", $i))
 				} else if (in_path == 0) {
 					if ($i == 9 && mode != "handover") in_path = mode == "ordinary" || mode == "parent" || header ~ /^160000 / ? 1 : 2
 					else header = header sprintf("%c", $i)
 				}
 			}
 		}
-	'
+	' -v mode="$2"
+}
+
+review_path_records() {
+	case "$2" in
+	handover|parent|ordinary)
+		review_raw_path_records "$1" "$2" >"$1.spelling" || return 1
+		review_path_awk "${3:-false}" '
+			BEGIN { OFS = FS }
+			{ $3 = path_key($3); print }
+		' -F '\t' <"$1.spelling"
+		;;
+	*) review_raw_path_records "$1" "$2" ;;
+	esac
 }
 
 # Ask Git for the parent paths, then look for repositories on disk. A
@@ -3042,31 +3130,17 @@ EOF
 # Project a parent tree listing into a former submodule directory. A file at
 # the directory or any of its ancestors replaces the entire directory.
 review_submodule_tree_paths() {
-	printf '%s\n' "$2" | REVIEW_SUBMODULE_PATH="$1" LC_ALL=C awk -v icase="${3:-false}" -v records="${4:-false}" '
-		function unquote(path) {
-			if (substr(path, 1, 1) == "\"") return substr(path, 2, length(path) - 2)
-			return path
-		}
-		function key(path) {
-			return icase == "true" ? tolower(path) : path
-		}
+	printf '%s\n' "$2" | REVIEW_SUBMODULE_PATH="$1" review_path_awk "${3:-false}" '
 		BEGIN {
-			for (i = 1; i < 32; i++) escape[sprintf("%c", i)] = sprintf("\\%03o", i)
-			escape["\177"] = "\\177"
-			escape["\a"] = "\\a"; escape["\b"] = "\\b"; escape["\t"] = "\\t"
-			escape["\n"] = "\\n"; escape["\v"] = "\\v"; escape["\f"] = "\\f"; escape["\r"] = "\\r"
-			escape["\\"] = "\\\\"; escape["\""] = "\\\""
 			raw = ENVIRON["REVIEW_SUBMODULE_PATH"]
-			for (i = 1; i <= length(raw); i++) {
-				c = substr(raw, i, 1)
-				prefix = prefix (c in escape ? escape[c] : c)
-			}
-			prefix = key(prefix) "/"
+			for (i = 1; i <= length(raw); i++) prefix = prefix quote_char(substr(raw, i, 1))
+			depth = split(raw, components, "/")
+			prefix = path_key(prefix) "/"
 		}
 		NF {
 			tab = records == "true" ? index($0, "\t") : 0
 			path = unquote(substr($0, tab + 1))
-			match_path = key(path) "/"
+			match_path = path_key(path) "/"
 			if (index(prefix, match_path) == 1) {
 				if (tab && $0 ~ /^160000 /) {
 					if (match_path == prefix) print "/gitlink " $3
@@ -3075,9 +3149,21 @@ review_submodule_tree_paths() {
 				else print "/"
 				exit
 			}
-			if (index(match_path, prefix) == 1) print substr(path, length(prefix) + 1)
+			if (index(match_path, prefix) == 1) {
+				for (i = 0; i < depth; i++) sub("^[^/]*/", "", path)
+				print path
+			}
 		}
-	'
+	' -v records="${4:-false}"
+}
+
+# Git's icase pathspec only folds ASCII. Project the full index through the
+# same keys as the destination whenever the worktree can alias a spelling.
+review_checkout_index_paths() {
+	_rcip_pathspec=:/
+	if [ "$1" != true ]; then _rcip_pathspec=":(top,literal)$2"; fi
+	shift 2
+	git --no-literal-pathspecs -c core.quotePath=false ls-files --stage --full-name "$@" -- "$_rcip_pathspec"
 }
 
 # After a gitlink becomes a directory, the parent's ordinary index entries
@@ -3091,12 +3177,10 @@ review_unowned_worktree_paths() {
 	{
 		printf '%s\n\n' "$_review_guard_parent_paths"
 		printf '%s\n' "$1"
-	} | LC_ALL=C awk -v icase="$2" '
+	} | review_path_awk "$2" '
 		$0 == "" { worktree = 1; next }
 		{
-			path = $0
-			if (substr(path, 1, 1) == "\"") path = substr(path, 2, length(path) - 2)
-			if (icase == "true") path = tolower(path)
+			path = path_key($0)
 			if (!worktree) owned[path] = 1
 			else if (!(path in owned)) print
 		}
@@ -3225,10 +3309,7 @@ EOF
 						if [ "$_rgs_owned" = / ]; then _rgs_owned=''; fi
 					fi
 					if [ "$_rgs_kind" != gitlink ]; then
-						_rgs_magic=top,literal
-						if [ "$_rgs_case" = true ]; then _rgs_magic=$_rgs_magic,icase; fi
-						_rgs_index=$(git --no-literal-pathspecs -c core.quotePath=false ls-files --stage --full-name -- \
-							":($_rgs_magic)$_rgs_path") || exit 1
+						_rgs_index=$(review_checkout_index_paths "$_rgs_case" "$_rgs_path") || exit 1
 						_rgs_index=$(printf '%s\n' "$_rgs_index" | awk '
 							/^(100644|100755|120000) [0-9a-f]+ 0\t/ { print substr($0, index($0, "\t") + 1) }
 						') || exit 1
@@ -3263,13 +3344,7 @@ review_check_worktree_overlap() {
 	{
 		printf '%s\n\n' "$1"
 		printf '%s\n' "$2"
-	} | REVIEW_GUARD_PREFIX="${_review_guard_prefix:-}" awk -v icase="$3" -v records="${5:-false}" \
-		-v description="${4:-an ignored working tree path}" '
-		function path_key(path) {
-			if (substr(path, 1, 1) == "\"") path = substr(path, 2, length(path) - 2)
-			if (icase == "true") path = tolower(path)
-			return path
-		}
+	} | REVIEW_GUARD_PREFIX="${_review_guard_prefix:-}" review_path_awk "$3" '
 		$0 == "" { destination = 1; next }
 		!destination {
 			path = path_key($0)
@@ -3294,7 +3369,7 @@ review_check_worktree_overlap() {
 				exit 1
 			}
 		}
-	' >&2
+	' -v records="${5:-false}" -v description="${4:-an ignored working tree path}" >&2
 }
 
 # Forced switches and resets can overwrite ignored files and local changes
@@ -3358,9 +3433,7 @@ review_checkout_tree() (
 		_rct_path=${_rct_path%.}
 		if review_real_checkout_directory "$_rct_root" "$_rct_path" &&
 			[ -e "$_rct_root/$_rct_path/.git" ]; then
-			_rct_magic=top,literal
-			if [ "$_rct_case" = true ]; then _rct_magic=$_rct_magic,icase; fi
-			git --no-literal-pathspecs ls-files --stage --full-name -z -- ":($_rct_magic)$_rct_path" \
+			review_checkout_index_paths "$_rct_case" "$_rct_path" -z \
 				>"$_rct_tmp/records" || exit 1
 			review_path_records "$_rct_tmp/records" parent "$_rct_case" >"$_rct_tmp/parent" || exit 1
 			review_restore_child_paths "$_rct_root/$_rct_path" "$_rct_tmp" "$_rct_id" || {
@@ -3375,42 +3448,44 @@ review_checkout_tree() (
 review_plan_checkout_paths() {
 	# Enumerate each candidate directory once. A path belongs to its nearest
 	# checkout, even when an ancestor repository also has it in its index.
-	awk '
-		BEGIN { slash = "\\0057" }
+	awk -F '\t' '
 		{
-			for (i = 1; i <= length($3); i += length(slash)) {
-				if (substr($3, i, length(slash)) != slash) continue
-				key = substr($3, 1, i - 1)
-				if (!seen[key]++) print substr($2, 1, i - 1), key
+			depth = split($3, folded, "/")
+			split($2, original, /\\0057/)
+			dir = key = ""
+			for (i = 1; i < depth; i++) {
+				dir = (i == 1 ? "" : dir "\\0057") original[i]
+				key = (i == 1 ? "" : key "/") folded[i]
+				if (!seen[key]++) printf "%s\t%s\n", dir, key
 			}
 		}
 	' "$_rct_tmp/paths" >"$_rct_tmp/directories" || return 1
-	while read -r _rct_encoded _rct_key; do
+	_rct_tab=$(printf '\t')
+	while IFS="$_rct_tab" read -r _rct_encoded _rct_key; do
 		_rct_path=$(printf '%b.' "$_rct_encoded") || return 1
 		_rct_path=${_rct_path%.}
 		[ -e "$_rct_root/$_rct_path/.git" ] || continue
 		review_real_checkout_directory "$_rct_root" "$_rct_path" || continue
-		printf '%s %s\n' "$_rct_encoded" "$_rct_key" || return 1
+		printf '%s\t%s\n' "$_rct_encoded" "$_rct_key" || return 1
 	done <"$_rct_tmp/directories" >"$_rct_tmp/checkouts" || return 1
 	[ -s "$_rct_tmp/checkouts" ] || return 0
-	awk '
+	awk -F '\t' '
 		FNR == NR { checkouts[$2] = $1; next }
 		{
-			for (i = length($3) - 4; i > 0; i -= 5) {
-				if (substr($3, i, 5) != "\\0057") continue
-				key = substr($3, 1, i - 1)
+			key = $3
+			while (sub("/[^/]*$", "", key)) {
 				if (key in checkouts) {
-					print checkouts[key], $1, substr($3, i + 5)
+					printf "%s\t%s\t%s\n", checkouts[key], $1, substr($3, length(key) + 2)
 					break
 				}
 			}
 		}
 	' "$_rct_tmp/checkouts" "$_rct_tmp/paths" >"$_rct_tmp/plan" || return 1
 	_rct_count=0
-	while read -r _rct_encoded _rct_key; do
+	while IFS="$_rct_tab" read -r _rct_encoded _rct_key; do
 		_rct_count=$((_rct_count + 1))
-		REVIEW_CHECKOUT_DIRECTORY="$_rct_encoded" awk '
-			$1 == ENVIRON["REVIEW_CHECKOUT_DIRECTORY"] { print $2, $3 }
+		REVIEW_CHECKOUT_DIRECTORY="$_rct_encoded" awk -F '\t' '
+			$1 == ENVIRON["REVIEW_CHECKOUT_DIRECTORY"] { printf "%s\t%s\n", $2, $3 }
 		' "$_rct_tmp/plan" >"$_rct_tmp/paths.$_rct_count" || return 1
 		[ -s "$_rct_tmp/paths.$_rct_count" ] || continue
 		_rct_path=$(printf '%b.' "$_rct_encoded") || return 1
@@ -3451,10 +3526,13 @@ review_child_identity() {
 review_child_index_paths() {
 	git ls-files -t --stage -z >"$1/records" || return 1
 	review_path_records "$1/records" ordinary "$_rct_case" >"$1/child" || return 1
-	awk '
+	awk -F '\t' '
 		NR == FNR { wanted[$2] = $1; next }
-		wanted[$3] == "take" || (wanted[$3] == "return" && $4 != "S") {
-			print wanted[$3], $2, $5, $6, $3
+		{
+			split($4, entry, " ")
+			if (wanted[$3] == "take" || (wanted[$3] == "return" && entry[1] != "S")) {
+				printf "%s\t%s\t%s\t%s\t%s\n", wanted[$3], $2, entry[2], entry[3], $3
+			}
 		}
 	' "$1/paths.$2" "$1/child" >"$1/owned"
 }
@@ -3465,12 +3543,12 @@ review_prepare_child_paths() (
 	[ -z "$_rphp_prefix" ] || exit 0
 	review_child_index_paths "$2" "$3" || exit 1
 	if [ "$4" = false ]; then
-		awk '$1 == "return"' "$2/owned" >"$2/selected.$3" || exit 1
+		awk -F '\t' '$1 == "return"' "$2/owned" >"$2/selected.$3" || exit 1
 		if [ -s "$2/selected.$3" ]; then
 			review_child_identity >"$2/return.$3" || exit 1
 		fi
 	fi
-	awk '$1 == "take" {print $2}' "$2/owned" >"$2/take" || exit 1
+	awk -F '\t' '$1 == "take" {print $2}' "$2/owned" >"$2/take" || exit 1
 	review_hold_child_paths "$1" "$2" "$3" <"$2/take"
 )
 
@@ -3580,27 +3658,23 @@ review_restore_child_paths() (
 	cmp -s "$_rrcp_tmp/return.$_rrcp_id" "$_rrcp_tmp/live" || exit 0
 	review_child_index_paths "$_rrcp_tmp" "$_rrcp_id" || exit 1
 	_rrcp_key=$(cat "$_rrcp_tmp/key.$_rrcp_id") || exit 1
-	REVIEW_CHECKOUT_KEY="$_rrcp_key" awk '
-		BEGIN { slash = "\\0057"; root = ENVIRON["REVIEW_CHECKOUT_KEY"]; prefix = root slash }
+	REVIEW_CHECKOUT_KEY="$_rrcp_key" awk -F '\t' '
+		BEGIN { root = ENVIRON["REVIEW_CHECKOUT_KEY"]; prefix = root "/" }
 		FILENAME == ARGV[1] { original[$0] = 1; next }
 		FILENAME == ARGV[2] {
 			if ($3 == root && $1 != "160000") exit
 			if (index($3, prefix) == 1) {
 				path = substr($3, length(prefix) + 1)
 				parent[path] = $1
-				for (i = 1; i <= length(path); i += 5) {
-					if (substr(path, i, 5) == slash) below[substr(path, 1, i - 1)] = 1
-				}
+				while (sub("/[^/]*$", "", path)) below[path] = 1
 			}
 			next
 		}
 		$1 == "return" && ($0 in original) {
 			path = $5
 			if (path in parent || path in below) next
-			for (i = 1; i <= length(path); i += 5) {
-				if (substr(path, i, 5) != slash) continue
-				ancestor = substr(path, 1, i - 1)
-				if (ancestor in parent && parent[ancestor] != "160000") next
+			while (sub("/[^/]*$", "", path)) {
+				if (path in parent && parent[path] != "160000") next
 			}
 			print $2
 		}

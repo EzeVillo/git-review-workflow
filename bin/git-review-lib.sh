@@ -2937,10 +2937,8 @@ review_snapshot_worktree() (
 	_rsw_candidate=$(mktemp "$_rsw_index.review.XXXXXX") || exit 1
 	trap 'rm -f "$_rsw_candidate" "$_rsw_candidate.lock"' 0
 	cp "$_rsw_index" "$_rsw_candidate" || exit 1
-	GIT_INDEX_FILE=$_rsw_candidate
-	export GIT_INDEX_FILE
-	git -c core.splitIndex=false add -A || exit 1
-	git write-tree
+	GIT_INDEX_FILE=$_rsw_candidate git -c core.splitIndex=false add -A || exit 1
+	GIT_INDEX_FILE=$_rsw_candidate git write-tree
 )
 
 # apply_review_patch FROM TO [git-apply-args...]

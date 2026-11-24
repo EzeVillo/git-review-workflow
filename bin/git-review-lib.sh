@@ -2936,7 +2936,8 @@ review_path_records() {
 	LC_ALL=C od -An -v -tu1 "$1" | LC_ALL=C awk -v mode="$2" -v icase="${3:-false}" '
 		function emit(kind, path) {
 			if (seen[path]++) return
-			if (mode == "handover" || mode == "ordinary") print kind, path, (icase == "true" ? folded : path)
+			if (mode == "handover" || mode == "parent") print kind, path, (icase == "true" ? folded : path)
+			else if (mode == "ordinary") print kind, path, (icase == "true" ? folded : path), header
 			else print kind, path
 		}
 		BEGIN { in_path = mode == "directories" }
@@ -2946,12 +2947,11 @@ review_path_records() {
 					in_path = 1
 				} else if ($i == 0) {
 					if (mode == "gitlinks" && header ~ /^160000 /) emit("gitlink", path)
-					if (mode == "ordinary" && header ~ /^(100644|100755|120000) [0-9a-f]+ 0$/) emit("file", path)
+					if (mode == "ordinary" && header ~ /^(H|S) (100644|100755|120000) [0-9a-f]+ 0$/) emit("file", path)
+					if (mode == "parent" && header ~ /^(100644|100755|120000|160000) /) emit(substr(header, 1, 6), path)
 					if (mode == "handover") {
-						if (header ~ /^:160000 000000 .* D$/) emit("return-link", path)
-						if (header ~ /^:000000 (100644|100755|120000) .* A$/) emit("return-file", path)
-						if (header ~ /^:000000 160000 .* A$/) emit("take-link", path)
-						if (header ~ /^:(100644|100755|120000) 000000 .* D$/) emit("take-file", path)
+						if (header ~ /^:000000 (100644|100755|120000) .* A$/) emit("return", path)
+						if (header ~ /^:(100644|100755|120000) 000000 .* D$/) emit("take", path)
 					}
 					header = path = folded = ""
 					in_path = mode == "directories"
@@ -2960,7 +2960,7 @@ review_path_records() {
 					path = path sprintf("\\0%03o", $i)
 					if (icase == "true") folded = folded sprintf("\\0%03o", $i >= 65 && $i <= 90 ? $i + 32 : $i)
 				} else if (in_path == 0) {
-					if ($i == 9 && mode != "handover") in_path = mode == "ordinary" || header ~ /^160000 / ? 1 : 2
+					if ($i == 9 && mode != "handover") in_path = mode == "ordinary" || mode == "parent" || header ~ /^160000 / ? 1 : 2
 					else header = header sprintf("%c", $i)
 				}
 			}
@@ -3326,104 +3326,119 @@ review_guard_checkout_paths() (
 	done
 )
 
-# Transfer only shared paths at the boundary of a gitlink and a directory.
-# Keep Git's normal checkout protections for every other path.
+# Transfer paths when the parent gains or gives up ownership of a file inside
+# a retained checkout, even when neither tree has a gitlink at its root.
 review_checkout_tree() (
 	_rct_tree=$1
 	shift
 	if [ -z "$_rct_tree" ]; then exec git "$@"; fi
-	_rct_tmp=$(mktemp -d) || exit 1
+	_rct_tmp=$(mktemp -d "${TMPDIR:-/tmp}/git-review-checkout.XXXXXX") || exit 1
+	case "$_rct_tmp" in /*|[A-Za-z]:/*) ;; *) _rct_tmp=$PWD/$_rct_tmp ;; esac
 	trap 'review_checkout_cleanup "$_rct_tmp"' 0
 	trap 'exit 1' 1 2 15
+	# Git reports the diff from the destination tree to the current index.
 	git -c diff.relative=false diff --cached --raw -z --no-renames --no-ext-diff --ignore-submodules=none \
 		--diff-filter=AD "$_rct_tree" -- >"$_rct_tmp/records" || exit 1
-	_rct_count=0
 	if [ -s "$_rct_tmp/records" ]; then
 		_rct_case=$(git config --bool core.ignoreCase || true)
 		review_path_records "$_rct_tmp/records" handover "$_rct_case" >"$_rct_tmp/paths" || exit 1
-		_rct_links=$(awk '$1 ~ /-link$/ {print}' "$_rct_tmp/paths") || exit 1
-		if [ -n "$_rct_links" ]; then
-			_rct_recurse=$(git config --bool submodule.recurse || true)
-			_rct_root=$(git rev-parse --show-toplevel) || exit 1
-			while read -r _rct_kind _rct_link _rct_key; do
-				if [ "$_rct_kind" = return-link ] && [ "$_rct_recurse" = true ]; then continue; fi
-				review_plan_checkout_paths || exit 1
-			done <<EOF
-$_rct_links
-EOF
-		fi
+		_rct_root=$(git rev-parse --show-toplevel) || exit 1
+		_rct_recurse=$(git config --bool submodule.recurse || true)
+		review_plan_checkout_paths || exit 1
 	fi
 
-	git "$@" || exit $?
-	for _rct_link_file in "$_rct_tmp"/link.*; do
-		[ -f "$_rct_link_file" ] || continue
-		_rct_id=${_rct_link_file##*.}
-		read -r _rct_encoded <"$_rct_link_file" || exit 1
-		_rct_path=$(printf '%b.' "$_rct_encoded") || exit 1
+	# A hook can fail after Git has already switched. Restore the paths that
+	# Git actually released even when the requested operation reports a failure.
+	_rct_status=0
+	git "$@" || _rct_status=$?
+	for _rct_pending in "$_rct_tmp"/return.*; do
+		[ -f "$_rct_pending" ] || continue
+		_rct_id=${_rct_pending##*.}
+		_rct_path=$(cat "$_rct_tmp/root.$_rct_id" && printf .) || exit 1
 		_rct_path=${_rct_path%.}
-		_rct_link_path=$(cat "$_rct_tmp/parent.$_rct_id" && printf .) || exit 1
-		_rct_link_path=${_rct_link_path%.}
-		if [ -e "$_rct_root/$_rct_path/.git" ] && review_real_checkout_directory "$_rct_root" "$_rct_path" &&
-			git --no-literal-pathspecs diff --cached --quiet --ignore-submodules=none \
-				"$_rct_tree" -- ":(top,literal)$_rct_link_path"; then
+		if review_real_checkout_directory "$_rct_root" "$_rct_path" &&
+			[ -e "$_rct_root/$_rct_path/.git" ]; then
+			_rct_magic=top,literal
+			if [ "$_rct_case" = true ]; then _rct_magic=$_rct_magic,icase; fi
+			git --no-literal-pathspecs ls-files --stage --full-name -z -- ":($_rct_magic)$_rct_path" \
+				>"$_rct_tmp/records" || exit 1
+			review_path_records "$_rct_tmp/records" parent "$_rct_case" >"$_rct_tmp/parent" || exit 1
 			review_restore_child_paths "$_rct_root/$_rct_path" "$_rct_tmp" "$_rct_id" || {
-				echo "error: checkout completed but could not restore files in the retained submodule: $_rct_path" >&2
-				exit 1
+				echo "error: could not restore files in the retained submodule: $_rct_path" >&2
+				_rct_status=1
 			}
 		fi
 	done
+	exit "$_rct_status"
 )
 
-# A parent tree can have written through several retained checkouts. Project
-# the changed ordinary paths into each directory that actually has a gitdir.
 review_plan_checkout_paths() {
-	_rct_link_path=$(printf '%b.' "$_rct_link") || return 1
-	_rct_link_path=${_rct_link_path%.}
-	_rct_file_kind=${_rct_kind%-link}-file
-	_rct_directories=$(REVIEW_CHECKOUT_LINK="$_rct_link" REVIEW_CHECKOUT_KEY="$_rct_key" \
-		awk -v kind="$_rct_file_kind" '
-			BEGIN { slash = "\\0057"; key = ENVIRON["REVIEW_CHECKOUT_KEY"]; prefix = key slash }
-			$1 == kind && index($3, prefix) == 1 {
-				if (!root++) print ENVIRON["REVIEW_CHECKOUT_LINK"], key
-				for (i = length(prefix) + 1; i <= length($3); i += length(slash)) {
-					if (substr($3, i, length(slash)) != slash) continue
-					dir = substr($3, 1, i - 1)
-					if (!seen[dir]++) print substr($2, 1, i - 1), dir
-				}
+	# Enumerate each candidate directory once. A path belongs to its nearest
+	# checkout, even when an ancestor repository also has it in its index.
+	awk '
+		BEGIN { slash = "\\0057" }
+		{
+			for (i = 1; i <= length($3); i += length(slash)) {
+				if (substr($3, i, length(slash)) != slash) continue
+				key = substr($3, 1, i - 1)
+				if (!seen[key]++) print substr($2, 1, i - 1), key
 			}
-		' "$_rct_tmp/paths") || return 1
-	while read -r _rct_encoded _rct_dir_key; do
-		[ -n "$_rct_encoded" ] || continue
+		}
+	' "$_rct_tmp/paths" >"$_rct_tmp/directories" || return 1
+	while read -r _rct_encoded _rct_key; do
 		_rct_path=$(printf '%b.' "$_rct_encoded") || return 1
 		_rct_path=${_rct_path%.}
-		if [ ! -e "$_rct_root/$_rct_path/.git" ] ||
-			! review_real_checkout_directory "$_rct_root" "$_rct_path"; then continue; fi
+		[ -e "$_rct_root/$_rct_path/.git" ] || continue
+		review_real_checkout_directory "$_rct_root" "$_rct_path" || continue
+		printf '%s %s\n' "$_rct_encoded" "$_rct_key" || return 1
+	done <"$_rct_tmp/directories" >"$_rct_tmp/checkouts" || return 1
+	[ -s "$_rct_tmp/checkouts" ] || return 0
+	awk '
+		FNR == NR { checkouts[$2] = $1; next }
+		{
+			for (i = length($3) - 4; i > 0; i -= 5) {
+				if (substr($3, i, 5) != "\\0057") continue
+				key = substr($3, 1, i - 1)
+				if (key in checkouts) {
+					print checkouts[key], $1, substr($3, i + 5)
+					break
+				}
+			}
+		}
+	' "$_rct_tmp/checkouts" "$_rct_tmp/paths" >"$_rct_tmp/plan" || return 1
+	_rct_count=0
+	while read -r _rct_encoded _rct_key; do
 		_rct_count=$((_rct_count + 1))
-		REVIEW_CHECKOUT_KEY="$_rct_dir_key" awk -v kind="$_rct_file_kind" '
-			BEGIN { prefix = ENVIRON["REVIEW_CHECKOUT_KEY"] "\\0057" }
-			$1 == kind && index($3, prefix) == 1 { print substr($3, length(prefix) + 1) }
-		' "$_rct_tmp/paths" >"$_rct_tmp/paths.$_rct_count" || return 1
-		if [ "$_rct_kind" = take-link ]; then
-			review_hold_child_paths "$_rct_root/$_rct_path" "$_rct_tmp" "$_rct_count" || return 1
-			continue
+		REVIEW_CHECKOUT_DIRECTORY="$_rct_encoded" awk '
+			$1 == ENVIRON["REVIEW_CHECKOUT_DIRECTORY"] { print $2, $3 }
+		' "$_rct_tmp/plan" >"$_rct_tmp/paths.$_rct_count" || return 1
+		[ -s "$_rct_tmp/paths.$_rct_count" ] || continue
+		_rct_path=$(printf '%b.' "$_rct_encoded") || return 1
+		_rct_path=${_rct_path%.}
+		_rct_git_handles=false
+		if [ "$_rct_recurse" = true ]; then
+			_rct_prefix=$_rct_path
+			while :; do
+				_rct_entry=$(git --literal-pathspecs ls-tree --full-tree "$_rct_tree" -- "$_rct_prefix") || return 1
+				case "$_rct_entry" in '160000 '*) _rct_git_handles=true; break ;; esac
+				case "$_rct_prefix" in */*) _rct_prefix=${_rct_prefix%/*} ;; *) break ;; esac
+			done
 		fi
-		printf '%s\n' "$_rct_encoded" >"$_rct_tmp/link.$_rct_count" || return 1
-		printf '%s' "$_rct_link_path" >"$_rct_tmp/parent.$_rct_count" || return 1
-		(
-			review_enter_nested_worktree "$_rct_root/$_rct_path" || exit 1
-			review_child_identity
-		) >"$_rct_tmp/identity.$_rct_count" || return 1
-	done <<EOF
-$_rct_directories
-EOF
+		printf '%s' "$_rct_path" >"$_rct_tmp/root.$_rct_count" || return 1
+		printf '%s' "$_rct_key" >"$_rct_tmp/key.$_rct_count" || return 1
+		review_prepare_child_paths "$_rct_root/$_rct_path" "$_rct_tmp" "$_rct_count" "$_rct_git_handles" || return 1
+	done <"$_rct_tmp/checkouts"
 }
 
-# A checkout can leave a directory behind, but ownership never follows a
-# symlink in the directory components.
+# Existing ancestors must be directories we can enter without following links.
+# Git checkout-index can recreate a missing hierarchy using the child's index.
 review_real_checkout_directory() {
 	_rrcd_path=$2
 	while [ -n "$_rrcd_path" ]; do
-		[ -d "$1/$_rrcd_path" ] && [ ! -L "$1/$_rrcd_path" ] || return 1
+		[ ! -L "$1/$_rrcd_path" ] || return 1
+		if [ "${3:-existing}" = existing ] || [ -e "$1/$_rrcd_path" ]; then
+			[ -d "$1/$_rrcd_path" ] || return 1
+		fi
 		case "$_rrcd_path" in */*) _rrcd_path=${_rrcd_path%/*} ;; *) break ;; esac
 	done
 }
@@ -3434,11 +3449,30 @@ review_child_identity() {
 }
 
 review_child_index_paths() {
-	git ls-files --stage -z >"$1/records" || return 1
+	git ls-files -t --stage -z >"$1/records" || return 1
 	review_path_records "$1/records" ordinary "$_rct_case" >"$1/child" || return 1
-	awk 'NR == FNR {wanted[$1] = 1; next} $3 in wanted {print $2}' \
-		"$1/paths.$2" "$1/child" >"$1/owned"
+	awk '
+		NR == FNR { wanted[$2] = $1; next }
+		wanted[$3] == "take" || (wanted[$3] == "return" && $4 != "S") {
+			print wanted[$3], $2, $5, $6, $3
+		}
+	' "$1/paths.$2" "$1/child" >"$1/owned"
 }
+
+review_prepare_child_paths() (
+	review_enter_nested_worktree "$1" || exit 1
+	_rphp_prefix=$(git rev-parse --show-prefix) || exit 1
+	[ -z "$_rphp_prefix" ] || exit 0
+	review_child_index_paths "$2" "$3" || exit 1
+	if [ "$4" = false ]; then
+		awk '$1 == "return"' "$2/owned" >"$2/selected.$3" || exit 1
+		if [ -s "$2/selected.$3" ]; then
+			review_child_identity >"$2/return.$3" || exit 1
+		fi
+	fi
+	awk '$1 == "take" {print $2}' "$2/owned" >"$2/take" || exit 1
+	review_hold_child_paths "$1" "$2" "$3" <"$2/take"
+)
 
 review_child_path_matches() {
 	if [ "$3" = symlink ]; then
@@ -3447,97 +3481,140 @@ review_child_path_matches() {
 		# readlink adds a newline that is not part of the symlink blob.
 		printf '%s' "${_rcpm_link%??}" | cmp -s - "$2"
 	else
-		[ -f "$1" ] && [ ! -L "$1" ] && cmp -s "$1" "$2"
+		[ -f "$1" ] && [ ! -L "$1" ] && cmp -s "$1" "$2" || return 1
+		if [ "$3" = executable ]; then [ -x "$1" ]; else [ ! -x "$1" ]; fi
 	fi
 }
 
-# Git sees files that belong to the retiring child as untracked by the parent.
-# Set aside only files whose exact bytes are reproducible from the child's index.
+# Set aside only clean files whose bytes Git can reproduce. Rename them next to
+# the original: a move to another device can copy and unlink the old inode,
+# dropping writes made by someone who already had that inode open.
 review_hold_child_paths() (
-	review_enter_nested_worktree "$1" || exit 1
 	_rhcp_tmp=$2
 	_rhcp_id=$3
-	review_child_index_paths "$_rhcp_tmp" "$_rhcp_id" || exit 1
 	_rhcp_number=0
 	while read -r _rhcp_encoded; do
 		_rhcp_path=$(printf '%b.' "$_rhcp_encoded") || exit 1
 		_rhcp_path=${_rhcp_path%.}
-		[ -f "$_rhcp_path" ] || [ -L "$_rhcp_path" ] || continue
+		[ -e "$_rhcp_path" ] || [ -L "$_rhcp_path" ] || continue
 		_rhcp_directory=''
 		case "$_rhcp_path" in */*) _rhcp_directory=${_rhcp_path%/*} ;; esac
 		review_real_checkout_directory "$1" "$_rhcp_directory" || continue
-		git --literal-pathspecs diff --cached --quiet --no-ext-diff -- "$_rhcp_path" || continue
-		git --literal-pathspecs diff --quiet --no-ext-diff -- "$_rhcp_path" || continue
+		if ! git --literal-pathspecs diff --cached --quiet --no-ext-diff -- "$_rhcp_path" ||
+			! git --literal-pathspecs diff --quiet --no-ext-diff -- "$_rhcp_path"; then
+			echo "error: would overwrite a local path in a nested Git working tree: $1/$_rhcp_path" >&2
+			exit 1
+		fi
 		_rhcp_mode='file'
 		if [ -L "$_rhcp_path" ]; then
 			_rhcp_mode=symlink
 			git cat-file blob ":$_rhcp_path" >"$_rhcp_tmp/expected" || exit 1
 		else
+			if [ -x "$_rhcp_path" ]; then _rhcp_mode=executable; fi
 			git cat-file --filters ":$_rhcp_path" >"$_rhcp_tmp/expected" || exit 1
 		fi
-		review_child_path_matches "./$_rhcp_path" "$_rhcp_tmp/expected" "$_rhcp_mode" || continue
+		if ! review_child_path_matches "./$_rhcp_path" "$_rhcp_tmp/expected" "$_rhcp_mode"; then
+			# Git's diff can omit files marked assume-unchanged or skip-worktree.
+			echo "error: would overwrite a local path in a nested Git working tree: $1/$_rhcp_path" >&2
+			exit 1
+		fi
 		_rhcp_number=$((_rhcp_number + 1))
 		_rhcp_slot="$_rhcp_tmp/held.$_rhcp_id.$_rhcp_number"
 		printf '%s' "$1/$_rhcp_path" >"$_rhcp_slot.path" || exit 1
-		mv "./$_rhcp_path" "$_rhcp_slot" || exit 1
-		if ! review_child_path_matches "$_rhcp_slot" "$_rhcp_tmp/expected" "$_rhcp_mode"; then
+		_rhcp_hold=$(mktemp -d "$1/${_rhcp_directory:+$_rhcp_directory/}.git-review-hold.XXXXXX") || exit 1
+		printf '%s' "$_rhcp_hold" >"$_rhcp_slot.directory" || { rmdir "$_rhcp_hold"; exit 1; }
+		# If changed bytes must remain here, keep Git's normal untracked
+		# enumeration and the review's snapshots from staging the backup.
+		printf '*\n' >"$_rhcp_hold/.gitignore" || exit 1
+		_rhcp_backup="$_rhcp_hold/file"
+		mv "./$_rhcp_path" "$_rhcp_backup" || exit 1
+		if ! review_child_path_matches "$_rhcp_backup" "$_rhcp_tmp/expected" "$_rhcp_mode"; then
 			echo "error: a retained checkout file changed while it was being transferred: $1/$_rhcp_path" >&2
 			exit 1
 		fi
 		printf '%s\n' "$_rhcp_mode" >"$_rhcp_slot.mode" || exit 1
 		mv "$_rhcp_tmp/expected" "$_rhcp_slot.expected" || exit 1
-	done <"$_rhcp_tmp/owned"
+	done
 )
 
 review_checkout_cleanup() (
-	_rqc_keep=false
 	for _rqc_record in "$1"/held.*.path; do
 		[ -f "$_rqc_record" ] || continue
-		_rqc_backup=${_rqc_record%.path}
-		[ -e "$_rqc_backup" ] || [ -L "$_rqc_backup" ] || continue
-		_rqc_path=$(cat "$_rqc_record" && printf .) || { _rqc_keep=true; continue; }
+		_rqc_slot=${_rqc_record%.path}
+		[ -f "$_rqc_slot.directory" ] || continue
+		_rqc_hold=$(cat "$_rqc_slot.directory" && printf .) || continue
+		_rqc_hold=${_rqc_hold%.}
+		_rqc_path=$(cat "$_rqc_record" && printf .) || continue
 		_rqc_path=${_rqc_path%.}
-		_rqc_relative=${_rqc_path#"$_rct_root"/}
-		_rqc_directory=${_rqc_relative%/*}
-		if [ ! -e "$_rqc_path" ] && [ ! -L "$_rqc_path" ] &&
-			review_real_checkout_directory "$_rct_root" "$_rqc_directory"; then
-			mv -n "$_rqc_backup" "$_rqc_path" || true
-		fi
-		# A writer with the old file open can change the held copy during
-		# checkout. Drop it only if Git can still reproduce its bytes.
-		if [ -f "$_rqc_backup.expected" ] && { [ -e "$_rqc_path" ] || [ -L "$_rqc_path" ]; } &&
-			read -r _rqc_mode <"$_rqc_backup.mode" &&
-			review_child_path_matches "$_rqc_backup" "$_rqc_backup.expected" "$_rqc_mode"; then
-			rm -f "$_rqc_backup"
+		_rqc_backup="$_rqc_hold/file"
+		if ! review_real_checkout_directory "$_rct_root" "${_rqc_hold#"$_rct_root"/}"; then continue; fi
+		if [ -e "$_rqc_backup" ] || [ -L "$_rqc_backup" ]; then
+			if [ ! -e "$_rqc_path" ] && [ ! -L "$_rqc_path" ]; then
+				mv -n "$_rqc_backup" "$_rqc_path" || true
+			fi
+			# Only the original bytes and mode are reproducible from Git.
+			if [ -f "$_rqc_slot.expected" ] && { [ -e "$_rqc_path" ] || [ -L "$_rqc_path" ]; } &&
+				read -r _rqc_mode <"$_rqc_slot.mode" &&
+				review_child_path_matches "$_rqc_backup" "$_rqc_slot.expected" "$_rqc_mode"; then
+				rm -f "$_rqc_backup"
+			fi
 		fi
 		if [ -e "$_rqc_backup" ] || [ -L "$_rqc_backup" ]; then
-			_rqc_keep=true
 			echo "note: kept a recoverable copy of $_rqc_path at $_rqc_backup" >&2
+		else
+			rm -f "$_rqc_hold/.gitignore"
+			rmdir "$_rqc_hold"
 		fi
 	done
-	if [ "$_rqc_keep" = false ]; then rm -f "$1"/*; rmdir "$1"; fi
+	rm -f "$1"/*
+	rmdir "$1"
 )
 
-# A non-recursive checkout can remove the old parent files when their directory
-# becomes a gitlink again. Restore only the missing paths from the child's index.
+# Use the same child and index entries that owned the removed paths before
+# Git ran. A hook may have moved the child, edited its index or written files.
 review_restore_child_paths() (
 	review_enter_nested_worktree "$1" || exit 1
 	_rrcp_tmp=$2
 	_rrcp_id=$3
-	# A post-checkout hook may have changed the child or already written a file.
 	review_child_identity >"$_rrcp_tmp/live" || exit 1
-	cmp -s "$_rrcp_tmp/identity.$_rrcp_id" "$_rrcp_tmp/live" || exit 0
+	cmp -s "$_rrcp_tmp/return.$_rrcp_id" "$_rrcp_tmp/live" || exit 0
 	review_child_index_paths "$_rrcp_tmp" "$_rrcp_id" || exit 1
+	_rrcp_key=$(cat "$_rrcp_tmp/key.$_rrcp_id") || exit 1
+	REVIEW_CHECKOUT_KEY="$_rrcp_key" awk '
+		BEGIN { slash = "\\0057"; root = ENVIRON["REVIEW_CHECKOUT_KEY"]; prefix = root slash }
+		FILENAME == ARGV[1] { original[$0] = 1; next }
+		FILENAME == ARGV[2] {
+			if ($3 == root && $1 != "160000") exit
+			if (index($3, prefix) == 1) {
+				path = substr($3, length(prefix) + 1)
+				parent[path] = $1
+				for (i = 1; i <= length(path); i += 5) {
+					if (substr(path, i, 5) == slash) below[substr(path, 1, i - 1)] = 1
+				}
+			}
+			next
+		}
+		$1 == "return" && ($0 in original) {
+			path = $5
+			if (path in parent || path in below) next
+			for (i = 1; i <= length(path); i += 5) {
+				if (substr(path, i, 5) != slash) continue
+				ancestor = substr(path, 1, i - 1)
+				if (ancestor in parent && parent[ancestor] != "160000") next
+			}
+			print $2
+		}
+	' "$_rrcp_tmp/selected.$_rrcp_id" "$_rrcp_tmp/parent" "$_rrcp_tmp/owned" >"$_rrcp_tmp/selected" || exit 1
 	while read -r _rrcp_encoded; do
 		_rrcp_path=$(printf '%b.' "$_rrcp_encoded") || exit 1
 		_rrcp_path=${_rrcp_path%.}
 		_rrcp_directory=''
 		case "$_rrcp_path" in */*) _rrcp_directory=${_rrcp_path%/*} ;; esac
 		if [ ! -e "$_rrcp_path" ] && [ ! -L "$_rrcp_path" ] &&
-			review_real_checkout_directory "$1" "$_rrcp_directory"; then
+			review_real_checkout_directory "$1" "$_rrcp_directory" allow-missing; then
 			printf '%b\000' "$_rrcp_encoded" || exit 1
 		fi
-	done <"$_rrcp_tmp/owned" >"$_rrcp_tmp/missing" || exit 1
+	done <"$_rrcp_tmp/selected" >"$_rrcp_tmp/missing" || exit 1
 	if [ -s "$_rrcp_tmp/missing" ]; then
 		git checkout-index -z --stdin <"$_rrcp_tmp/missing" || exit 1
 	fi

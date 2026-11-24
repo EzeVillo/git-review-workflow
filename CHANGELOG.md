@@ -79,6 +79,10 @@ This file starts at 0.2.1. Earlier versions are only in the
 - Reviews can navigate, finish, undo, save and continue when a submodule
   becomes an ordinary directory. The parent can change the files it tracks,
   and each retained checkout keeps its own files and staged changes.
+  When the parent stops tracking a file, the child can recover it even if
+  Git removed its directories or neither commit contains the gitlink. Writes
+  made during the handoff remain recoverable when temporary files live on
+  a different filesystem.
 
 ## [0.10.0] — 2026-11-10
 

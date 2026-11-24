@@ -1949,16 +1949,27 @@ su propio índice. Una edición staged en el hijo sigue protegida aunque el
 padre también rastree esa ruta. Las entradas de directorio que Git devuelve
 para un checkout embebido se comprueban con su propio inventario de archivos.
 
-Al pasar del gitlink a archivos ordinarios, Git puede ver los archivos del
-hijo como ajenos al padre y rechazar el switch. El cambio de árbol aparta
-sólo los archivos que coinciden byte por byte con el contenido que Git puede
-reproducir desde el índice del hijo. Si el checkout no ocupa esa ruta, se
-devuelve la copia sin pisar una escritura concurrente. En la transición
-inversa sin recursión, Git puede quitar los archivos del padre y dejar al
-hijo con borrados locales. Se restauran desde el índice del hijo únicamente
-las rutas transferidas que siguen ausentes. Así, Save puede volver a la rama
-con el gitlink y Continue puede retomar la review con las ediciones que
-quedaron en el banco.
+El traspaso sigue las altas y bajas de archivos ordinarios del padre. Una
+ruta puede cambiar de dueño varios commits después de que el gitlink
+desapareció. Para cada ruta se toma el checkout válido más cercano. Al
+adquirir una ruta, el padre sólo aparta archivos del hijo cuyos bytes puede
+reproducir Git a partir de su índice. La comprobación también protege
+ediciones ocultas a `git diff` por `assume-unchanged`.
+
+El archivo se renombra a un directorio privado junto al original. Moverlo
+a otro sistema de archivos copiaría los bytes y desvincularía el archivo
+abierto: un editor podría escribir después del movimiento y perder esos
+cambios. Si cambian los bytes o el modo de ejecución durante el checkout,
+la CLI conserva la copia y muestra su ruta. El directorio se ignora para que
+un snapshot de la review no la agregue al índice.
+
+Cuando el padre deja de rastrear una ruta, el hijo recupera su archivo si la
+ruta quedó libre y sigue correspondiendo a la misma entrada de su índice.
+`checkout-index` recrea directorios que Git poda al quitar el último archivo.
+Las rutas `skip-worktree` quedan ausentes, y no se escribe a través de un
+symlink ni sobre archivos dejados por un hook. Se comprueba lo que cambió
+en el índice del padre incluso si un hook hace fallar el comando después
+del checkout.
 
 La captura de correcciones usa el mismo límite de propiedad en Preview,
 Save, navegación, Finish y Undo. Captura los archivos que ya rastrea el

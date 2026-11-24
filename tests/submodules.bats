@@ -515,28 +515,233 @@ EOF
 	[ -z "$(git for-each-ref refs/heads/review/)" ]
 }
 
-# bats test_tags=legacy-git
-@test "checkout retains writes made through an already open submodule file" {
-	if command -v cygpath >/dev/null 2>&1; then skip 'open-file rename needs Unix semantics'; fi
+assert_open_child_write_is_retained() {
+	hold_temp=$1
 	start_vendored_module
 	run git review save
 	[ "$status" -eq 0 ]
 	hook=$(git rev-parse --git-path hooks/post-checkout)
-	mkdir -p "$(dirname "$hook")" "$TMP/hold-temp"
+	mkdir -p "$(dirname "$hook")"
 	cat >"$hook" <<'EOF'
 #!/bin/sh
 printf 'late child write\n' >&9
 EOF
 	chmod +x "$hook"
 
-	run env TMPDIR="$TMP/hold-temp" sh -c 'exec 9>>"$1"; git review continue topic' sh "$MODULE/version"
+	run env TMPDIR="$hold_temp" sh -c 'exec 9>>"$1"; git review continue topic' sh "$MODULE/version"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"kept a recoverable copy of "*"/$MODULE/version at "* ]]
 	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
 	[ "$(cat "$MODULE/version")" = 'vendored version' ]
 	[ "$(git -C "$MODULE" show :version)" = old ]
-	held=$(find "$TMP/hold-temp" -name 'held.1.1' -type f)
+	held=$(find "$MODULE" -type f -path '*/.git-review-hold.*/file')
 	[ "$(cat "$held")" = "$(printf 'old\nlate child write')" ]
+	[ -z "$(git ls-files --others --exclude-standard)" ]
+	git -C "$MODULE" check-ignore -q "${held#"$MODULE"/}"
+}
+
+# bats test_tags=legacy-git
+@test "checkout retains writes made through an already open submodule file" {
+	if command -v cygpath >/dev/null 2>&1; then skip 'open-file rename needs Unix semantics'; fi
+	mkdir "$TMP/hold-temp"
+	assert_open_child_write_is_retained "$TMP/hold-temp"
+}
+
+@test "checkout retains open-file writes when TMPDIR uses a separate filesystem" {
+	if [ ! -w /dev/shm ] || ! stat -c %d "$TMP" /dev/shm >/dev/null 2>&1; then
+		skip 'requires a writable Linux tmpfs at /dev/shm'
+	fi
+	if [ "$(stat -c %d "$TMP")" = "$(stat -c %d /dev/shm)" ]; then skip 'TMP is already on the tmpfs'; fi
+	assert_open_child_write_is_retained /dev/shm
+}
+
+start_deep_file_handoff() {
+	git config submodule.recurse false
+	mkdir -p "$CHILD/lib/deep"
+	printf 'original child file\n' >"$CHILD/lib/deep/version"
+	printf 'original sibling\n' >"$CHILD/lib/deep/other"
+	git -C "$CHILD" add lib
+	git -C "$CHILD" commit -qm 'add deep child file'
+	git -C "$SERVER/$MODULE" pull -q --ff-only origin main
+	git -C "$SERVER" commit -qam 'update base gitlink'
+	git pull -q --ff-only origin main
+	git submodule update -q
+	child_tree=$(git -C "$MODULE" write-tree)
+
+	git -C "$SERVER" switch -qc topic
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	git -C "$SERVER" commit -qm 'remove gitlink'
+	mkdir -p "$SERVER/$MODULE/lib/deep"
+	printf 'parent file\n' >"$SERVER/$MODULE/lib/deep/version"
+	printf 'parent sibling\n' >"$SERVER/$MODULE/lib/deep/other"
+	git -C "$SERVER" add -- "$MODULE/lib"
+	git -C "$SERVER" commit -qm 'vendor deep file'
+	git -C "$SERVER" rm -qr -- "$MODULE/lib"
+	git -C "$SERVER" commit -qm 'remove parent file'
+	git review start --step topic
+}
+
+# bats test_tags=legacy-git
+@test "save and cancel restore a child file whose parent directories Git prunes" {
+	start_deep_file_handoff
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ -z "$(git status --porcelain)" ]
+	run git review continue topic
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
+	run git review abort
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+	[ -z "$(git status --porcelain)" ]
+}
+
+# bats test_tags=legacy-git
+@test "steps transfer file ownership even when neither tree has a gitlink" {
+	start_deep_file_handoff
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git show ":$MODULE/lib/deep/version")" = 'parent file' ]
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ -z "$(git ls-files -- "$MODULE")" ]
+	run git review prev
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
+	run git review prev
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+	[ -z "$(git ls-files -- "$MODULE")" ]
+}
+
+# bats test_tags=legacy-git
+@test "finish and undo hand off the file when the PR drops it at its tip" {
+	start_deep_file_handoff
+	run git review next
+	[ "$status" -eq 0 ]
+	before=$(git write-tree)
+	run git review finish
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review-fixes/topic ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ -z "$(git ls-files -- "$MODULE")" ]
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+}
+
+# bats test_tags=legacy-git
+@test "a forced step protects child edits hidden by assume unchanged" {
+	bats_require_minimum_version 1.5.0
+	start_deep_file_handoff
+	git -C "$MODULE" update-index --assume-unchanged lib/deep/version
+	printf 'private child edit\n' >"$MODULE/lib/deep/version"
+	git -C "$MODULE" diff --quiet
+	before=$(git write-tree)
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'would overwrite a local path in a nested Git working tree:'*'/lib/deep/version'* ]]
+	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'private child edit' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+	[ -z "$(git for-each-ref refs/review-edits/topic/)" ]
+	[ "$(cat "$MODULE/lib/deep/other")" = 'original sibling' ]
+}
+
+# bats test_tags=legacy-git
+@test "returning ownership leaves a child skip-worktree path absent" {
+	start_deep_file_handoff
+	git -C "$MODULE" update-index --skip-worktree lib/deep/version
+	rm "$MODULE/lib/deep/version"
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
+	run git review next
+	[ "$status" -eq 0 ]
+	[ ! -e "$MODULE/lib/deep/version" ]
+	[ "$(git -C "$MODULE" ls-files -t lib/deep/version)" = 'S lib/deep/version' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+}
+
+# bats test_tags=legacy-git
+@test "a failing switch hook still returns the files released by the parent" {
+	bats_require_minimum_version 1.5.0
+	start_deep_file_handoff
+	run git review next
+	[ "$status" -eq 0 ]
+	hook=$(git rev-parse --git-path hooks/post-checkout)
+	mkdir -p "$(dirname "$hook")"
+	printf '#!/bin/sh\nexit 19\n' >"$hook"
+	chmod +x "$hook"
+	run --separate-stderr git review save
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'could not return to main'* ]]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+	[ -z "$(git status --porcelain)" ]
+	git show-ref --verify --quiet refs/heads/review/topic
+	git show-ref --verify --quiet refs/heads/review-saved/topic
+}
+
+@test "a checkout hook can occupy a released path without being overwritten" {
+	if command -v cygpath >/dev/null 2>&1; then skip 'needs a symlink enabled checkout'; fi
+	start_deep_file_handoff
+	run git review next
+	[ "$status" -eq 0 ]
+	hook=$(git rev-parse --git-path hooks/post-checkout)
+	mkdir -p "$(dirname "$hook")" "$TMP/outside"
+	printf 'outside sentinel\n' >"$TMP/outside/version"
+	cat >"$hook" <<'EOF'
+#!/bin/sh
+mkdir -p "$TEST_MODULE/lib" || exit 1
+ln -s "$TEST_OUTSIDE" "$TEST_MODULE/lib/deep"
+EOF
+	chmod +x "$hook"
+	run env TEST_MODULE="$MODULE" TEST_OUTSIDE="$TMP/outside" git review save
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ -L "$MODULE/lib/deep" ]
+	[ "$(cat "$TMP/outside/version")" = 'outside sentinel' ]
+	[ "$(git -C "$MODULE" show :lib/deep/version)" = 'original child file' ]
+	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
+}
+
+# bats test_tags=legacy-git
+@test "a hook staging one child path does not suppress restoration of a sibling" {
+	start_deep_file_handoff
+	run git review next
+	[ "$status" -eq 0 ]
+	hook=$(git rev-parse --git-path hooks/post-checkout)
+	mkdir -p "$(dirname "$hook")"
+	cat >"$hook" <<'EOF'
+#!/bin/sh
+mkdir -p "$TEST_MODULE/lib/deep" || exit 1
+printf 'hook sibling\n' >"$TEST_MODULE/lib/deep/other" || exit 1
+git -C "$TEST_MODULE" add lib/deep/other
+EOF
+	chmod +x "$hook"
+	run env TEST_MODULE="$MODULE" git review save
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
+	[ "$(git -C "$MODULE" show :lib/deep/version)" = 'original child file' ]
+	[ "$(cat "$MODULE/lib/deep/other")" = 'hook sibling' ]
+	[ "$(git -C "$MODULE" show :lib/deep/other)" = 'hook sibling' ]
 }
 
 # bats test_tags=legacy-git

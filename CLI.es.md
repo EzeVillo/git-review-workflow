@@ -1117,9 +1117,13 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
 - Cuando un submódulo pasa a ser un directorio común, podés revisar y editar
   los archivos que el padre ya rastrea como cualquier otro archivo del padre.
   Los checkouts que queden en disco conservan sus cambios staged y protegen
-  sus archivos locales fuera de esas rutas. Cuando un checkout sin recursión
-  restaura el gitlink, el hijo recupera de su propio índice los archivos que
-  le falten en esas rutas.
+  sus archivos locales fuera de esas rutas. Cuando el padre deja de rastrear
+  un archivo, el checkout retenido más cercano lo restaura desde su propio
+  índice si Git todavía no lo restauró y la ruta sigue libre. Esto también
+  funciona cuando ninguno de los dos commits tiene el gitlink y cuando Git
+  elimina directorios vacíos. Si un archivo abierto del hijo cambia durante
+  el traspaso, el comando indica dónde quedó la copia de recuperación, en
+  un directorio ignorado junto a la ruta original.
 - Los snapshots de la review capturan los cambios en rutas que el padre ya
   rastrea y los archivos nuevos del padre. Para incluir un submódulo nuevo,
   agregá su gitlink al índice explícitamente con Git.

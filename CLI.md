@@ -1098,9 +1098,12 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
 - When an earlier submodule becomes an ordinary directory, paths already
   tracked as files by the parent can be reviewed and edited like any other
   parent file. The retained checkouts still keep their staged changes and
-  protect local files outside those paths. When a non-recursive checkout
-  restores the gitlink, the child recovers its missing files at those paths
-  from its own index.
+  protect local files outside those paths. When the parent stops tracking a
+  file, the nearest retained checkout restores it from its own index if Git
+  has not already restored it and the path is still free. This also works
+  when neither commit has the gitlink and when Git removes empty directories.
+  If an open child file changes while Git takes over the path, the command
+  prints the location of the recovery copy in an ignored directory beside it.
 - Review snapshots capture changes to paths the parent already tracks and new
   files owned by the parent. To include a new submodule, stage its gitlink
   explicitly with Git.

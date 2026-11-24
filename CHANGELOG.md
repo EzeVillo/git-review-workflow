@@ -63,7 +63,11 @@ This file starts at 0.2.1. Earlier versions are only in the
   shallow boundaries before opening a review or creating a reading draft.
 - Start and Compare can open `topic/next` while a review of `topic` is
   saved. Ref collisions fail before changing the checkout. Save and Continue
-  check their destination branch before moving review state.
+  also reject collisions with `review-saved` or `review` before changing the
+  checkout. Original edit refs and drafts survive an interrupted transfer.
+- A failed checkout hook in Start, Compare or Continue can leave Git on the
+  requested branch. These commands restore the original checkout when safe
+  and keep any new work the hook left behind.
 - Cleaning a branch by name preserves the edit bank and undo refs of branches
   nested under that name. Drafts for `topic` and `topic.md/next` can coexist.
 

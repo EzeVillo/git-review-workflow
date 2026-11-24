@@ -1905,10 +1905,23 @@ Una revisión guardada de `topic` puede coexistir con una activa de
 la ref usa una clave plana derivada del nombre. Se conservan la lectura y la
 limpieza de las refs de sesión anteriores. Git crea la rama y fija su rango en
 una transacción antes de cambiar el checkout. Así una colisión de refs falla
-con HEAD, el índice y los archivos intactos. Save y Continue comprueban antes
-de transferir el estado si la rama de destino choca por prefijo en su
-namespace. El mantenimiento de ediciones y Undo identifica al dueño exacto
-de cada ref, incluso si los nombres de dos ramas comparten prefijo.
+con HEAD, el índice y los archivos intactos. La comprobación de Save y Continue
+incluye las ramas raíz `review-saved` y `review`. Reservan el destino con Git
+antes de copiar las ediciones y conservan el banco y el borrador de origen
+hasta entregar el destino. Save captura el árbol con un índice temporal para
+que un fallo al reservar la rama no stagee las correcciones en curso.
+
+Git puede cambiar el checkout y devolver un error cuando falla
+`post-checkout`. Start, Compare y Continue vuelven al checkout original si
+la rama y los archivos todavía corresponden a la apertura. El regreso omite
+el hook fallido y usa un switch que protege cambios locales. Si la rama cambió
+o quedó trabajo nuevo, se conserva la rama y se informa que la apertura quedó
+incompleta. Continue aplica las correcciones desde el banco guardado antes de
+publicar las refs activas, por lo que `Clean` conserva el original de una
+reanudación abortada por un fallo de checkout.
+
+El mantenimiento de ediciones y Undo identifica al dueño exacto de cada ref,
+incluso si los nombres de dos ramas comparten prefijo.
 
 Un nombre como `topic.md/next` también puede chocar con el archivo de
 `topic`. En los casos que necesitan una ruta alternativa, el nombre

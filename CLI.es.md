@@ -337,6 +337,11 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   Incluye los submódulos anidados inicializados y los repositorios conservados
   después de desinicializarlos. Al abrir la review se respeta
   `submodule.recurse`. `--offline` mantiene deshabilitados todos los fetches.
+- Si falla el cambio de rama o el staging del diff, Start intenta restaurar el
+  checkout original y quitar la rama temporal y la ref del rango. Si volver
+  pudiera sobrescribir trabajo nuevo, como cambios que dejó un hook de checkout,
+  conserva la rama e informa que la apertura quedó incompleta. Los objetos de
+  Git descargados pueden quedar disponibles para reintentar.
 - `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
   Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
   sobreescribe. **Obligatoria para una review completa** — no hay default, así que
@@ -989,6 +994,14 @@ que empezaste, llevándose todo lo necesario para retomar justo donde lo dejaste
 Si la rama de regreso está activa en otro worktree, Save deja la review como
 está. Cambiá ese worktree a otra rama y volvé a intentar.
 
+Save y Continue reservan el destino antes de copiar las refs de ediciones o el
+borrador. Una rama llamada `review-saved` o `review` puede bloquear el destino
+correspondiente. La colisión conserva el checkout, el índice y los datos de la
+review original. Continue también restaura el checkout tras un fallo al cambiar
+de rama o aplicar las correcciones cuando puede hacerlo sin pisar cambios. Una
+interrupción posterior puede dejar visibles el original y el destino. Las refs
+de ediciones y el borrador de origen se liberan cuando el destino toma custodia.
+
 `git review continue` convierte `review-saved/<rama>` de nuevo en la
 `review/<rama>` activa y restaura ese estado exacto — en modo `--step` te deja de
 vuelta en el mismo commit, con `git review next` / `git review prev` funcionando
@@ -1010,6 +1023,10 @@ Ambas operaciones vuelven a comprobar y transfieren la custodia de comentarios
 antes de crear una rama o cambiar el índice o el checkout. Si la transferencia
 falla, la sesión original y cualquier candidato de recuperación quedan
 disponibles. Podés reintentar cuando se resuelva la causa del fallo.
+
+Finish puede conservar un replay interrumpido para resolver el conflicto. Si el
+código ya quedó staged y falla la entrega de comentarios Shared, conserva el
+código y los comentarios pendientes para reintentar sólo la entrega.
 
 Empezar un `git review start` nuevo sobre una rama que ya tiene una review
 guardada se rechaza, para que no pierdas la pausada sin querer — retomala o

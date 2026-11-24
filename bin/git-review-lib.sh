@@ -2931,6 +2931,18 @@ require_clean_work_tree() {
 	fi
 }
 
+# Capture the reviewer's full tree without staging changes in the live index.
+review_snapshot_worktree() (
+	_rsw_index=$(git rev-parse --git-path index) || exit 1
+	_rsw_candidate=$(mktemp "$_rsw_index.review.XXXXXX") || exit 1
+	trap 'rm -f "$_rsw_candidate" "$_rsw_candidate.lock"' 0
+	cp "$_rsw_index" "$_rsw_candidate" || exit 1
+	GIT_INDEX_FILE=$_rsw_candidate
+	export GIT_INDEX_FILE
+	git -c core.splitIndex=false add -A || exit 1
+	git write-tree
+)
+
 # apply_review_patch FROM TO [git-apply-args...]
 # Diff FROM..TO and apply it through a temp file, never a shell variable:
 # capturing a binary patch with command substitution drops its NUL bytes and its
@@ -2942,7 +2954,10 @@ apply_review_patch() {
 	_to="$2"
 	shift 2
 	_pf="$(git rev-parse --git-dir)/review-apply.$$"
-	git diff --binary "$_from" "$_to" >"$_pf"
+	if ! git diff --binary "$_from" "$_to" >"$_pf"; then
+		rm -f "$_pf"
+		return 1
+	fi
 	if [ -s "$_pf" ]; then
 		if git apply --binary "$@" <"$_pf"; then _rc=0; else _rc=$?; fi
 	else
@@ -5995,11 +6010,46 @@ review_branch_refs() {
 	done
 }
 
+# Keep the source bank available until the destination owns the review. Use
+# expected values when releasing it so a concurrent edit is never removed.
+review_copy_edit_refs() {
+	_rce_prefix="refs/review-$1/$3/"
+	_rce_refs=$(git for-each-ref --format='%(refname) %(objectname)' "$_rce_prefix") || return 1
+	_review_copied_edits=$(
+		while read -r _rce_ref _rce_oid; do
+			_rce_leaf=${_rce_ref#"$_rce_prefix"}
+			if [ -z "$_rce_leaf" ] || [ "$_rce_leaf" != "${_rce_leaf##*/}" ]; then continue; fi
+			printf '%s %s\n' "$_rce_ref" "$_rce_oid"
+		done <<EOF
+$_rce_refs
+EOF
+	) || return 1
+	_rce_updates=$(
+		while read -r _rce_ref _rce_oid; do
+			[ -n "$_rce_ref" ] || continue
+			_rce_step=${_rce_ref##*/}
+			[ "$_rce_step" != "${4:-}" ] || continue
+			printf 'update refs/review-%s/%s/%s %s\n' "$2" "$3" "$_rce_step" "$_rce_oid"
+		done <<EOF
+$_review_copied_edits
+EOF
+	) || return 1
+	[ -z "$_rce_updates" ] || printf '%s\n' "$_rce_updates" | git update-ref --no-deref --stdin
+}
+
+review_release_edit_refs() {
+	[ -n "${_review_copied_edits:-}" ] || return 0
+	{
+		if [ -n "$_rce_updates" ]; then printf '%s\n' "$_rce_updates" | sed 's/^update /verify /'; fi
+		printf '%s\n' "$_review_copied_edits" | sed 's/^/delete /'
+	} | git update-ref --no-deref --stdin
+}
+
 # Git cannot store two branch names when one is the other's directory.
 # Save and Continue check that before moving comments, drafts or banked edits.
 review_require_branch_slot() {
 	_rrbs_namespace=${1%%/*}
-	_rrbs_refs=$(git for-each-ref --format='%(refname:lstrip=2)' "refs/heads/$_rrbs_namespace/") || return 1
+	_rrbs_refs=$(git for-each-ref --format='%(refname:lstrip=2)' "refs/heads/$_rrbs_namespace") || return 1
 	for _rrbs_ref in $_rrbs_refs; do
 		case "$_rrbs_ref" in "$1/"*) die "cannot create $1: branch $_rrbs_ref already exists" ;; esac
 		case "$1" in "$_rrbs_ref/"*) die "cannot create $1: branch $_rrbs_ref already exists" ;; esac
@@ -6024,6 +6074,10 @@ review_find_session() {
 # branch with switch -c can update the index before Git rejects a ref conflict.
 review_open_branch() {
 	_rob_branch="refs/heads/review/$2"
+	_rob_checkout=$3
+	_rob_return_ref=$(git symbolic-ref --quiet HEAD || true)
+	_rob_return_oid=$(git rev-parse --verify --quiet HEAD || true)
+	[ -n "$_rob_return_ref$_rob_return_oid" ] || die 'could not read the current checkout'
 	_rob_ref='' _rob_old=''
 	if [ -n "${4:-}" ]; then
 		_rob_ref=$(review_session_ref "$1" "$2") || die "could not name review range for $2"
@@ -6038,20 +6092,65 @@ review_open_branch() {
 		fi
 	} | git update-ref --no-deref -m "branch: Created from $3" --stdin ||
 		die "could not create review/$2"
-	if git switch --no-guess -q "review/$2"; then return 0; fi
-	# A failing post-checkout hook may report failure after HEAD moved.
-	# Remove only the refs we installed when the branch was never checked out.
-	if [ "$(git symbolic-ref --quiet HEAD || true)" != "$_rob_branch" ]; then
-		{
-			printf 'delete %s %s\n' "$_rob_branch" "$3"
-			if [ -n "$_rob_old" ]; then
-				printf 'update %s %s %s\n' "$_rob_ref" "$_rob_old" "$4"
-			elif [ -n "$_rob_ref" ]; then
-				printf 'delete %s %s\n' "$_rob_ref" "$4"
-			fi
-		} | git update-ref --no-deref --stdin || die "could not undo creation of review/$2"
-	fi
+	_rob_range=${4:-}
+	if git switch --no-guess --no-overwrite-ignore -q "review/$2"; then return 0; fi
+	review_cancel_open || true
 	die "could not switch to review/$2"
+}
+
+review_stage_open() {
+	if git reset -q --soft "$1"; then return 0; fi
+	review_cancel_open || true
+	die "could not stage ${_rob_branch#refs/heads/}"
+}
+
+# A checkout hook can fail after HEAD and the files changed. Undo only our
+# checkout, with the hook disabled for the return trip. A dirty tree, a moving
+# branch or an occupied return worktree must leave the review ref reachable.
+review_restore_open_checkout() {
+	[ "$(git rev-parse --verify HEAD)" = "$_rob_checkout" ] || return 1
+	git diff --quiet --ignore-submodules=none || return 1
+	git diff --cached --quiet --ignore-submodules=none "$_rob_checkout" || return 1
+	_rob_untracked=$(git ls-files --others --exclude-standard) || return 1
+	[ -z "$_rob_untracked" ] || return 1
+	if [ -n "$_rob_return_ref" ]; then
+		[ "$(git rev-parse --verify --quiet "$_rob_return_ref" || true)" = "$_rob_return_oid" ] || return 1
+		if [ -n "$_rob_return_oid" ]; then
+			set -- "${_rob_return_ref#refs/heads/}"
+		else
+			set -- --orphan "${_rob_return_ref#refs/heads/}"
+		fi
+	else
+		set -- --detach "$_rob_return_oid"
+	fi
+	# Switch without --discard-changes so Git still protects edits made after
+	# our checks.
+	git -c core.hooksPath=/dev/null switch --no-guess --no-overwrite-ignore -q "$@"
+}
+
+review_cancel_open() {
+	_rob_current_ref=$(git symbolic-ref --quiet HEAD || true)
+	if [ "$_rob_current_ref" = "$_rob_branch" ]; then
+		if ! review_restore_open_checkout; then
+			echo "error: ${_rob_branch#refs/heads/} was kept because the original checkout could not be safely restored" >&2
+			return 1
+		fi
+	elif [ "$_rob_current_ref" != "$_rob_return_ref" ] ||
+		[ "$(git rev-parse --verify --quiet HEAD || true)" != "$_rob_return_oid" ]; then
+		echo "error: ${_rob_branch#refs/heads/} was kept because the checkout changed during the review operation" >&2
+		return 1
+	fi
+	if ! {
+		printf 'delete %s %s\n' "$_rob_branch" "$_rob_checkout"
+		if [ -n "$_rob_old" ]; then
+			printf 'update %s %s %s\n' "$_rob_ref" "$_rob_old" "$_rob_range"
+		elif [ -n "$_rob_ref" ]; then
+			printf 'delete %s %s\n' "$_rob_ref" "$_rob_range"
+		fi
+	} | git update-ref --no-deref --stdin; then
+		echo "error: could not undo creation of ${_rob_branch#refs/heads/}" >&2
+		return 1
+	fi
 }
 
 review_drop_session() {

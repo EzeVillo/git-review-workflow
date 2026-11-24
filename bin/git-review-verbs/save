@@ -77,8 +77,16 @@ git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null &&
 	die "$saved already exists; resume it with git review continue or discard it with git review forget --saved $src"
 review_require_branch_slot "$saved"
 
+save_cleanup() {
+	if [ -n "${_save_draft_copy:-}" ]; then rm -f "$_save_draft_copy" || true; fi
+	comments_transfer_rollback || true
+	comments_unlock
+	if [ "$1" -ne 0 ] && [ "${_save_reserved:-0}" -eq 1 ]; then
+		echo "error: saving $src stopped after reserving $saved; the original review was kept" >&2
+	fi
+}
 comments_lock_branch "$cur" || exit 1
-trap 'comments_transfer_rollback || true; comments_unlock' 0
+trap 'save_cleanup "$?"' 0
 trap 'exit 1' 1 2 15
 comments_transfer_preflight "$cur" "$saved" || exit 1
 
@@ -172,52 +180,44 @@ if [ "$mode" = "step" ]; then
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 fi
 
-# Fail custody before banking edits, changing the index or creating a ref.
+# Fail custody before capturing the review or reserving the destination.
 comments_transfer "$cur" "$saved" || exit 1
 
+tree=$(review_snapshot_worktree) || die 'could not capture the review working tree'
 if [ "$mode" = "step" ]; then
-	git add -A
-	tree="$(git write-tree)"
+	_save_edit=''
 	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
-		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
-		git update-ref "refs/review-edits/$src/$step" "$edit"
-	else
-		# Reverting the step back to a clean tree must clear any edits we banked
-		# earlier, or they resurrect when the saved review is restored.
-		git update-ref -d "refs/review-edits/$src/$step" 2>/dev/null || true
+		_save_edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
 	fi
+	_saved_commit=$tip
+else
+	lower="$(git rev-parse HEAD)"
+	# The lower parent keeps a synthetic folded base reachable across a gc.
+	_saved_commit="$(git commit-tree "$tree" -p "$tip" -p "$lower" -m "git review save: $src")"
+fi
 
-	# Move the banked edits aside so git review clean (which prunes refs/review-edits/)
-	# leaves the saved review intact, and so they travel with it.
-	review_branch_refs edits "$src" | while read -r ref; do
-		n="${ref##*/}"
-		git update-ref "refs/review-saved-edits/$src/$n" "$(git rev-parse "$ref")"
-		git update-ref -d "$ref"
-	done
+# The preflight is advisory. A branch can be created between that check and
+# here. Reserve it with Git before copying or releasing any review state.
+printf 'create refs/heads/%s %s\n' "$saved" "$_saved_commit" | git update-ref --no-deref --stdin ||
+	die "could not create $saved"
+_save_reserved=1
 
-	# The visible branch is just an anchor + metadata holder; point it at the tip.
-	git update-ref "refs/heads/$saved" "$tip"
+if [ "$mode" = "step" ]; then
+	# The current step comes from the working tree. Skip the older bank entry
+	# even when the reviewer reverted it to the original tree.
+	review_copy_edit_refs edits saved-edits "$src" "$step"
+	_step_dest="refs/review-saved-edits/$src/$step"
+	if [ -n "$_save_edit" ]; then
+		git update-ref "$_step_dest" "$_save_edit"
+	elif _old_saved_edit=$(git show-ref --hash --verify "$_step_dest" 2>/dev/null); then
+		git update-ref --no-deref -d "$_step_dest" "$_old_saved_edit"
+	fi
 	git config "branch.$saved.reviewmode" step
 	copy_meta reviewstart
 	copy_meta reviewcount
 	copy_meta reviewstep
 	note="on step $step/$count"
 else
-	# whole and walk mode share their captured state: HEAD is the review's lower
-	# bound, the index holds the staged PR diff and the working tree holds that plus
-	# your edits. Capture the working tree as a commit parented on the tip, so its
-	# diff against the tip is exactly your edits — review-continue replays that to
-	# restore the editable state. Walk adds only its reading cursor keys on top.
-	lower="$(git rev-parse HEAD)"
-	git add -A
-	tree="$(git write-tree)"
-	# Parent the saved commit on both the tip and the lower bound. The tip parent
-	# makes "git diff tip..saved" exactly your edits; the lower parent keeps the
-	# lower bound reachable even when it is a synthetic merge-tree commit (the
-	# folded-base case in git review start), so a gc between save and continue cannot
-	# prune it out from under "git reset --soft $lower".
-	commit="$(git commit-tree "$tree" -p "$tip" -p "$lower" -m "git review save: $src")"
-	git update-ref "refs/heads/$saved" "$commit"
 	git config "branch.$saved.reviewsavedlower" "$lower"
 	if [ "$mode" = "walk" ]; then
 		git config "branch.$saved.reviewmode" walk
@@ -255,22 +255,23 @@ copy_meta reviewcomparebase
 copy_meta reviewcomparetarget
 git config "branch.$saved.reviewreturn" "$target"
 
+# Keep the live draft and edit bank until Git has left the review. The saved
+# branch already owns a snapshot of the current working tree or the step edits.
+# Give the checkout the captured index so it also removes newly added files
+# that were untracked in the live index.
+git read-tree "$tree"
+if ! git switch -q --discard-changes "$target"; then
+	die "could not return to $target; the review and its saved code snapshot were kept"
+fi
+
 # Put the reviewer's own walkthrough draft where a paused review's reading order
 # belongs, the same way the banked edits moved to refs/review-saved-edits/ above.
-# Moved, not copied, so an active and a saved draft for one branch can never
-# diverge. Outside the mode branch on purpose: a draft can sit next to any mode.
-#
 # Named by walk_review_draft_src, because the draft's branch is not always the
 # review's — a compare of origin/feature/x drafts for feature/x — and moving the
 # wrong name would leave the real file behind, in the namespace clean is
 # hands-off in, owned by a review that no longer exists.
 #
-# Last, deliberately: everything above can still die (a missing return branch, a
-# key deleted by hand), and a save that aborted after moving the draft would
-# leave the review live but stripped of the order it was reading, with the file
-# parked in a namespace no saved review claims — forget --saved would not find it
-# and clean must not take it. By here review-saved/<src> exists and holds every
-# key, so the draft has an owner whatever happens next.
+# Keep the source until the archived draft has a published owner.
 #
 # The gitdir is resolved here, in this shell: the two lookups below happen inside
 # "$(...)", where a cache written by walk_draft_path dies with the subshell and
@@ -286,9 +287,14 @@ if [ -f "$_save_draft" ]; then
 	# what is there, but it is still prose someone typed, and this is the only mv in
 	# the suite that lands on top of some.
 	if [ "$_save_replaces" -eq 1 ]; then
+		_save_draft_copy=$(mktemp "$_saved_draft.save.XXXXXX")
+		cp "$_save_draft" "$_save_draft_copy"
+		mv "$_save_draft_copy" "$_saved_draft"
+		_save_draft_copy=''
 		echo "note: replaced an archived walkthrough draft for $draftsrc that no paused review could restore" >&2
+	else
+		(set -C; cat "$_save_draft" >"$_saved_draft") || die "could not archive the draft at $_saved_draft"
 	fi
-	mv "$_save_draft" "$_saved_draft"
 	_save_filed=1
 fi
 
@@ -300,12 +306,15 @@ fi
 # and hand it the next review's prose at continue.
 git config "branch.$saved.reviewdraftfiled" "$_save_filed"
 
-# Leave the review branch: drop its working-tree changes (captured above), return
-# to the starting branch and delete review/<src>. Its config goes with it; the
-# saved copy already holds everything.
-git switch -q --discard-changes "$target"
-comments_transfer_commit || echo 'note: could not remove the comments rollback manifest' >&2
+# The saved branch now holds the code and draft. Releasing the active branch
+# also releases its config. Keep its bank until that deletion succeeds.
 git branch -D "$cur" >/dev/null
+_save_reserved=0
+comments_transfer_commit || echo 'note: could not remove the comments rollback manifest' >&2
+review_release_edit_refs || echo 'note: the original active edit refs were kept' >&2
+if [ "$_save_filed" -eq 1 ] && cmp -s "$_save_draft" "$_saved_draft"; then
+	rm -f "$_save_draft" || echo 'note: the original live draft was kept' >&2
+fi
 
 # Reporting must not hold Comments custody or change the successful result.
 comments_unlock

@@ -149,6 +149,12 @@ se crean en la misma transacción antes del checkout. Se siguen leyendo las
 refs anteriores. Las operaciones apuntadas sobre refs de ediciones o Undo
 seleccionan únicamente las refs que pertenecen a esa rama.
 
+Save y Continue reservan la rama destino antes de copiar las ediciones y
+conservan las refs y el borrador de origen hasta entregar la sesión. Start,
+Compare y Continue pueden revertir un checkout fallido mientras se pueda
+volver sin pisar trabajo nuevo. Los fallos posteriores conservan las copias
+disponibles para recuperar la review. El detalle está en `decisiones.md` §18.
+
 **Archivos del walkthrough** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
 en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en ningún momento y
 `finish` no se los puede llevar a `review-fixes/`:

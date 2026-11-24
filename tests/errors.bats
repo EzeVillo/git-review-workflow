@@ -120,32 +120,246 @@ start_session_ref() {
 	original_index=$(git write-tree)
 	original_head=$(git rev-parse HEAD)
 	session=$(git config branch.review/topic.reviewcommentssession)
-	git branch review-saved/topic/next develop
 	printf 'reviewer edit\n' >>app.txt
-	run --separate-stderr git review save
-	[ "$status" -eq 1 ]
-	[ "$stderr" = 'error: cannot create review-saved/topic: branch review-saved/topic/next already exists' ]
-	[ "$(git branch --show-current)" = review/topic ]
-	[ "$(git rev-parse HEAD)" = "$original_head" ]
-	[ "$(git write-tree)" = "$original_index" ]
-	[ "$(git config branch.review/topic.reviewcommentssession)" = "$session" ]
-	[ "$(git hash-object "$draft")" = "$original_draft" ]
-	! git show-ref --verify --quiet refs/review-saved-edits/topic/1
+	for blocking in review-saved review-saved/topic/next; do
+		git branch "$blocking" develop
+		run --separate-stderr git review save
+		[ "$status" -eq 1 ]
+		[ "$stderr" = "error: cannot create review-saved/topic: branch $blocking already exists" ]
+		[ "$(git branch --show-current)" = review/topic ]
+		[ "$(git rev-parse HEAD)" = "$original_head" ]
+		[ "$(git write-tree)" = "$original_index" ]
+		[ "$(tail -n 1 app.txt)" = 'reviewer edit' ]
+		[ "$(git config branch.review/topic.reviewcommentssession)" = "$session" ]
+		[ "$(git hash-object "$draft")" = "$original_draft" ]
+		! git show-ref --verify --quiet refs/review-saved-edits/topic/1
+		git branch -D "$blocking"
+	done
 
-	git branch -D review-saved/topic/next
 	git review save
-	git branch review/topic/next develop
 	saved_draft=.git/review-saved-walkthrough/topic.md
 	saved_edit=$(git rev-parse refs/review-saved-edits/topic/1)
-	run --separate-stderr git review continue topic
+	for blocking in review review/topic/next; do
+		git branch "$blocking" develop
+		run --separate-stderr git review continue topic
+		[ "$status" -eq 1 ]
+		[ "$stderr" = "error: cannot create review/topic: branch $blocking already exists" ]
+		[ "$(git branch --show-current)" = develop ]
+		[ -z "$(git status --porcelain)" ]
+		[ "$(git hash-object "$saved_draft")" = "$original_draft" ]
+		[ "$(git config branch.review-saved/topic.reviewcommentssession)" = "$session" ]
+		[ "$(git rev-parse refs/review-saved-edits/topic/1)" = "$saved_edit" ]
+		[ ! -e "$draft" ]
+		! git show-ref --verify --quiet refs/review-edits/topic/1
+		git branch -D "$blocking"
+	done
+	run git review clean
+	[ "$status" -eq 0 ]
+	run git review continue topic
+	[ "$status" -eq 0 ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer edit' ]
+}
+
+reject_checkout() {
+	mkdir -p .git/hooks
+	cat >.git/hooks/post-checkout <<'EOF'
+#!/bin/sh
+printf 'checkout hook refused\n' >&2
+if [ "${REVIEW_HOOK_EDIT:-0}" = 1 ]; then printf 'hook work\n' >>app.txt; fi
+exit 1
+EOF
+	chmod +x .git/hooks/post-checkout
+}
+
+@test "start restores the original checkout when the post-checkout hook fails" {
+	bats_require_minimum_version 1.5.0
+	head=$(git rev-parse HEAD)
+	index=$(git write-tree)
+	pin=$(start_session_ref feature/x)
+	git update-ref "$pin" "$head"
+	for position in branch detached; do
+		if [ "$position" = detached ]; then git switch --detach "$head"; fi
+		reject_checkout
+		run --separate-stderr git review start --offline --base develop --no-walk feature/x
+		[ "$status" -eq 1 ]
+		[[ "$stderr" == *'checkout hook refused'*'error: could not switch to review/feature/x'* ]]
+		[ "$(git rev-parse HEAD)" = "$head" ]
+		[ "$(git write-tree)" = "$index" ]
+		[ -z "$(git status --porcelain)" ]
+		if [ "$position" = branch ]; then
+			[ "$(git branch --show-current)" = develop ]
+		else
+			! git symbolic-ref --quiet HEAD
+		fi
+		! git show-ref --verify --quiet refs/heads/review/feature/x
+		[ "$(git rev-parse "$pin")" = "$head" ]
+		! git config --get reviewworkflowlocal.feature/x.reviewed
+		rm .git/hooks/post-checkout
+	done
+}
+
+@test "start leaves work written by a failing checkout hook intact" {
+	bats_require_minimum_version 1.5.0
+	reject_checkout
+	run --separate-stderr env REVIEW_HOOK_EDIT=1 git review start --offline feature/x
 	[ "$status" -eq 1 ]
-	[ "$stderr" = 'error: cannot create review/topic: branch review/topic/next already exists' ]
+	[[ "$stderr" == *'checkout hook refused'*'review/feature/x was kept'* ]]
+	[ "$(git branch --show-current)" = review/feature/x ]
+	[ "$(tail -n 1 app.txt)" = 'hook work' ]
+	! git config --get reviewworkflowlocal.feature/x.reviewed
+}
+
+@test "start restores an unborn branch if its checkout hook fails" {
+	bats_require_minimum_version 1.5.0
+	git switch --quiet --orphan empty
+	reject_checkout
+	run --separate-stderr git review start --offline --base develop --no-walk feature/x
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'checkout hook refused'*'error: could not switch to review/feature/x'* ]]
+	[ "$(git symbolic-ref HEAD)" = refs/heads/empty ]
+	! git rev-parse --verify --quiet HEAD
+	[ -z "$(git status --porcelain)" ]
+	! git show-ref --verify --quiet refs/heads/review/feature/x
+	! git show-ref --verify --quiet "$(start_session_ref feature/x)"
+}
+
+@test "continue preserves a saved review when the post-checkout hook fails" {
+	bats_require_minimum_version 1.5.0
+	git review start --offline --step feature/x
+	git review walkthrough draft --offline
+	printf 'reviewer edit\n' >>app.txt
+	git review save
+	saved=refs/heads/review-saved/feature/x
+	edit=refs/review-saved-edits/feature/x/1
+	draft=.git/review-saved-walkthrough/feature/x.md
+	original_saved=$(git rev-parse "$saved")
+	original_edit=$(git rev-parse "$edit")
+	original_draft=$(git hash-object "$draft")
+	session=$(git config branch.review-saved/feature/x.reviewcommentssession)
+	reject_checkout
+	run --separate-stderr git review continue feature/x
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'checkout hook refused'*'error: could not switch to review/feature/x'* ]]
 	[ "$(git branch --show-current)" = develop ]
 	[ -z "$(git status --porcelain)" ]
+	[ "$(git rev-parse "$saved")" = "$original_saved" ]
+	[ "$(git rev-parse "$edit")" = "$original_edit" ]
+	[ "$(git hash-object "$draft")" = "$original_draft" ]
+	[ "$(git config branch.review-saved/feature/x.reviewcommentssession)" = "$session" ]
+	! git show-ref --verify --quiet refs/heads/review/feature/x
+	! git show-ref --verify --quiet refs/review-edits/feature/x/1
+	rm .git/hooks/post-checkout
+	run git review clean
+	[ "$status" -eq 0 ]
+	run git review continue feature/x
+	[ "$status" -eq 0 ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer edit' ]
+}
+
+fail_review_git_call() {
+	export REVIEW_REAL_GIT="$(command -v git)"
+	export REVIEW_FAIL_GIT_CALL="$1"
+	mkdir -p "$TMP/failing-git"
+	cat >"$TMP/failing-git/git" <<'EOF'
+#!/bin/sh
+if [ "$*" = "$REVIEW_FAIL_GIT_CALL" ]; then
+	printf 'injected Git failure\n' >&2
+	exit 1
+fi
+exec "$REVIEW_REAL_GIT" "$@"
+EOF
+	chmod +x "$TMP/failing-git/git"
+	export PATH="$TMP/failing-git:$PATH"
+}
+
+@test "start restores the checkout if staging the review fails" {
+	bats_require_minimum_version 1.5.0
+	head=$(git rev-parse HEAD)
+	index=$(git write-tree)
+	fail_review_git_call "reset -q --soft $head"
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" start --offline --base develop --no-walk feature/x
+	[ "$status" -eq 1 ]
+	[ "$stderr" = $'injected Git failure\nerror: could not stage review/feature/x' ]
+	[ "$(git branch --show-current)" = develop ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ -z "$(git status --porcelain)" ]
+	! git show-ref --verify --quiet refs/heads/review/feature/x
+	! git show-ref --verify --quiet "$(start_session_ref feature/x)"
+	! git config --get reviewworkflowlocal.feature/x.reviewed
+}
+
+@test "save leaves the live review intact if reserving the destination fails" {
+	bats_require_minimum_version 1.5.0
+	git review start --offline --step feature/x
+	git review walkthrough draft --offline
+	printf 'reviewer edit\n' >>app.txt
+	head=$(git rev-parse HEAD)
+	index=$(git write-tree)
+	draft=.git/review-walkthrough/feature/x.md
+	original_draft=$(git hash-object "$draft")
+	session=$(git config branch.review/feature/x.reviewcommentssession)
+	fail_review_git_call 'update-ref --no-deref --stdin'
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" save
+	[ "$status" -eq 1 ]
+	[ "$stderr" = $'injected Git failure\nerror: could not create review-saved/feature/x' ]
+	[ "$(git branch --show-current)" = review/feature/x ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer edit' ]
+	[ "$(git hash-object "$draft")" = "$original_draft" ]
+	[ "$(git config branch.review/feature/x.reviewcommentssession)" = "$session" ]
+	! git show-ref --verify --quiet refs/heads/review-saved/feature/x
+	! git show-ref --verify --quiet refs/review-saved-edits/feature/x/1
+}
+
+@test "continue keeps the saved bank when applying the reviewer patch fails" {
+	bats_require_minimum_version 1.5.0
+	git review start --offline --step feature/x
+	printf 'reviewer edit\n' >>app.txt
+	git review save
+	edit=refs/review-saved-edits/feature/x/1
+	original_edit=$(git rev-parse "$edit")
+	fail_review_git_call 'apply --binary'
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" continue feature/x
+	[ "$status" -eq 1 ]
+	[ "$stderr" = $'injected Git failure\nerror: could not restore your edits for step 1' ]
+	[ "$(git branch --show-current)" = develop ]
+	[ -z "$(git status --porcelain)" ]
+	[ "$(git rev-parse "$edit")" = "$original_edit" ]
+	! git show-ref --verify --quiet refs/heads/review/feature/x
+	! git show-ref --verify --quiet refs/review-edits/feature/x/1
+	unset REVIEW_FAIL_GIT_CALL
+	run git review continue feature/x
+	[ "$status" -eq 0 ]
+	[ "$(tail -n 1 app.txt)" = 'reviewer edit' ]
+}
+
+@test "continue preserves both drafts if a live copy appears during checkout" {
+	bats_require_minimum_version 1.5.0
+	git review start --offline --step feature/x
+	git review walkthrough draft --offline
+	printf 'reviewer edit\n' >>app.txt
+	git review save
+	saved_draft=.git/review-saved-walkthrough/feature/x.md
+	saved_edit=refs/review-saved-edits/feature/x/1
+	original_draft=$(git hash-object "$saved_draft")
+	original_edit=$(git rev-parse "$saved_edit")
+	mkdir -p .git/hooks
+	cat >.git/hooks/post-checkout <<'EOF'
+#!/bin/sh
+mkdir -p .git/review-walkthrough/feature
+printf 'new reviewer draft\n' >.git/review-walkthrough/feature/x.md
+EOF
+	chmod +x .git/hooks/post-checkout
+	run --separate-stderr git review continue feature/x
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'error: could not restore the draft at '* ]]
+	[[ "$stderr" == *'the saved review and its original edits are still available'* ]]
+	[ "$(cat .git/review-walkthrough/feature/x.md)" = 'new reviewer draft' ]
 	[ "$(git hash-object "$saved_draft")" = "$original_draft" ]
-	[ "$(git config branch.review-saved/topic.reviewcommentssession)" = "$session" ]
-	[ "$(git rev-parse refs/review-saved-edits/topic/1)" = "$saved_edit" ]
-	[ ! -e "$draft" ]
+	[ "$(git rev-parse "$saved_edit")" = "$original_edit" ]
+	git show-ref --verify --quiet refs/heads/review-saved/feature/x
 }
 
 # Push a second PR commit that appends a line; leaves you on develop.

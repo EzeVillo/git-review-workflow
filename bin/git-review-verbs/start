@@ -433,7 +433,7 @@ if [ "$step" -eq 1 ]; then
 	fi
 
 	start_open_review "$first"
-	git reset --soft HEAD^
+	review_stage_open HEAD^
 	git config "branch.$rb.reviewsource" "$src"
 	git config "branch.$rb.reviewbase" "$base"
 	if [ -n "$baseref" ]; then git config "branch.$rb.reviewbasecommit" "$baseref"; fi
@@ -523,7 +523,7 @@ elif [ "$keys_only" -eq 1 ]; then
 fi
 
 start_open_review "$tip"
-git reset -q --soft "$lower"
+review_stage_open "$lower"
 
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"

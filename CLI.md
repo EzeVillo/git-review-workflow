@@ -329,6 +329,11 @@ Has two independent axes — **range** (where the review starts) and **layout**
   This includes initialized nested submodules and repositories retained after
   deinitialization. Opening the review follows `submodule.recurse`.
   `--offline` keeps all fetches disabled.
+- If switching to the review or staging its diff fails, Start tries to restore
+  the original checkout and remove the temporary branch and range ref. If
+  restoring it could overwrite new work, such as changes written by a checkout
+  hook, Start keeps the branch and reports the incomplete opening. Downloaded
+  Git objects may remain available for a retry.
 - `base` — commit-ish to diff against: a branch, a **tag**, or a commit. Taken
   from `reviewworkflow.base` (see below); a positional argument overrides it.
   **Required for a full review** — there is no built-in default, so a full review
@@ -965,6 +970,14 @@ left off:
 If the return branch is checked out in another worktree, Save leaves the review
 as it is. Switch that worktree to a different branch, then retry.
 
+Save and Continue reserve the destination before copying the edit refs or draft.
+A branch named `review-saved` or `review` can block the corresponding destination.
+The collision leaves the original checkout, index and review data available.
+Continue also restores the original checkout after a failed switch or patch
+application when it can do so safely. A later interruption can leave both the
+original and the destination visible. The original edit refs and draft are
+released after the destination has taken over.
+
 `git review continue` turns `review-saved/<branch>` back into the active
 `review/<branch>` and restores that exact state — in `--step` mode it drops you
 back on the same commit, with `git review next` / `git review prev` working as
@@ -985,6 +998,10 @@ Both operations recheck and transfer comments custody before creating a branch
 or changing the index or checkout. If the transfer fails, the original session
 and any prepared recovery candidate remain available. You can retry once the
 cause of the transfer failure is resolved.
+
+Finish can keep an interrupted replay available for conflict resolution. If the
+code is already staged and Shared comment delivery fails, Finish keeps the code
+and the pending comments so delivery can be retried separately.
 
 Starting a fresh `git review start` on a branch that already has a saved review
 is refused, so you do not silently lose the paused one — resume it or discard it

@@ -183,8 +183,8 @@ if [ "$step" -eq 1 ]; then
 	first="$(printf '%s\n' "$commits" | sed -n '1p')"
 
 	review_open_branch compare "$name" "$first" "${compare_pack_oid:-}"
+	review_stage_open HEAD^
 	git config "branch.$rb.reviewreadonly" "1"
-	git reset --soft HEAD^
 	git config "branch.$rb.reviewsource" "$name"
 	git config "branch.$rb.reviewbase" "$a"
 	git config "branch.$rb.reviewtip" "$bcommit"
@@ -254,8 +254,8 @@ fi
 # is exactly <a>..<b>, with a clean working tree — the same shape as start, minus the
 # merged-base folding (compare's bounds are explicit) and any writeback metadata.
 review_open_branch compare "$name" "$bcommit" "${compare_pack_oid:-}"
+review_stage_open "$acommit"
 git config "branch.$rb.reviewreadonly" "1"
-git reset -q --soft "$acommit"
 
 git config "branch.$rb.reviewsource" "$name"
 git config "branch.$rb.reviewbase" "$a"

@@ -81,18 +81,6 @@ if [ "$porcelain" -eq 1 ] || { [ "$resume" -eq 1 ] && [ "$update_source" -eq 1 ]
 	die 'invalid finish options'
 fi
 
-# worktree_tree: the tree of the current working tree captured with `git add -A`
-# (so brand-new untracked files count too), via a throwaway index that leaves the
-# real index untouched. Used to snapshot state and to detect later divergence.
-worktree_tree() {
-	_gd="$(git rev-parse --git-dir)"
-	_ti="$_gd/finish-wt-index.$$"
-	cp "$(git rev-parse --git-path index)" "$_ti"
-	GIT_INDEX_FILE="$_ti" git add -A
-	GIT_INDEX_FILE="$_ti" git write-tree
-	rm -f "$_ti"
-}
-
 # Stage the same bytes as the ordinary finish, but keep the real index (and
 # its unmerged entries) intact until the candidate passes the conflict check.
 stage_finish_resolution() (
@@ -108,7 +96,7 @@ stage_finish_resolution() (
 	cp "$index" "$lock" || exit 1
 	export GIT_INDEX_FILE="$lock"
 	unmerged=$(git -c core.quotePath=true ls-files --unmerged --full-name) || exit 1
-	git add -A || exit 1
+	review_worktree_files stage || exit 1
 
 	# Git checks added lines and respects conflict-marker-size. A whitespace
 	# diagnostic alone is not a conflict and must not block an otherwise valid
@@ -174,8 +162,9 @@ stage_finish_resolution() (
 record_exit() {
 	_finish_comments_failed=0
 	comments_finish_complete "$cur" "$1" || _finish_comments_failed=1
+	_finish_exit_tree=$(review_snapshot_worktree) || die 'could not capture the finish destination for undo'
 	git config "branch.$cur.reviewundoouthead" "$(git rev-parse HEAD)"
-	git config "branch.$cur.reviewundoouttree" "$(worktree_tree)"
+	git config "branch.$cur.reviewundoouttree" "$_finish_exit_tree"
 	echo "note: commits you make on $1 are kept, and uncommitted edits too while you stay on $1$(advice_suffix ' — git review finish --abort refuses to discard them without --force')." >&2
 	if [ "$_finish_comments_failed" -ne 0 ]; then exit 1; fi
 }
@@ -346,7 +335,7 @@ do_abort() {
 		# Only the working tree of the branch we are actually on is meaningful; if
 		# you switched away, fall back to the committed-divergence check above.
 		if [ "$diverged" -eq 0 ] && [ "$cur" = "$outbranch" ] && [ -n "$outtree" ] &&
-			[ "$(worktree_tree)" != "$outtree" ]; then
+		[ "$(review_snapshot_worktree)" != "$outtree" ]; then
 			diverged=1
 		fi
 		if [ "$diverged" -eq 1 ]; then
@@ -368,7 +357,7 @@ do_abort() {
 	if [ "$rewind_source" -eq 1 ] && [ "$cur" != "$asrc" ]; then
 		set -- "$@" "$source_now"
 	fi
-	review_guard_ignored_paths "$@" || exit 1
+	review_guard_checkout_paths "$@" || exit 1
 
 	# Return to the review branch and restore the exact pre-finish state: HEAD, then
 	# the working tree (read-tree -m -u brings back additions/edits/deletions and
@@ -382,7 +371,11 @@ do_abort() {
 	if [ "$rewind_source" -eq 1 ]; then
 		# Hold the PR checkout until the guarded ref update is done. Releasing
 		# it first would let another worktree check out the tip we are rewinding.
-		if [ "$cur" != "$asrc" ]; then git switch -q --no-overwrite-ignore "$asrc"; fi
+		if [ "$cur" != "$asrc" ]; then
+			git switch -q --no-overwrite-ignore "$asrc"
+			# The intermediate checkout may have created another obstruction.
+			review_guard_checkout_paths "refs/heads/$rb" "$head" "$wttree" || exit 1
+		fi
 		[ "$(git symbolic-ref --quiet HEAD || true)" = "refs/heads/$asrc" ] ||
 			die "could not take over the PR branch $asrc to undo finish"
 		git update-ref "refs/heads/$asrc" "$source_before" "$source_now"
@@ -398,7 +391,7 @@ do_abort() {
 			exit 1
 		fi
 		# The checkout hook can write files before the undo trees are restored.
-		review_guard_ignored_paths "$head" "$wttree" || exit 1
+		review_guard_checkout_paths "$head" "$wttree" || exit 1
 	fi
 	git reset -q --hard "$head"
 	git read-tree -m -u "$wttree"
@@ -553,7 +546,7 @@ fi
 # (captured via a throwaway index so brand-new untracked edits are included).
 # The trees are pinned under refs/review-undo/<src>/ so gc cannot drop them.
 record_undo() {
-	wttree="$(worktree_tree)"
+	wttree=$(review_snapshot_worktree) || die 'could not capture the review working tree for undo'
 	idxtree="$(git write-tree)"
 	orig="$(git rev-parse HEAD)"
 
@@ -628,10 +621,10 @@ if [ "$resume" -eq 0 ] && [ "$onto" -eq 0 ]; then
 fi
 if [ "$resume" -eq 0 ] && [ "$onto" -eq 1 ]; then
 	finish_check_source "$src" "$tip" "$update_source"
-	if [ "$update_source" -eq 1 ]; then review_guard_ignored_paths "$finish_source_head" || exit 1; fi
+	if [ "$update_source" -eq 1 ]; then review_guard_checkout_paths "$finish_source_head" || exit 1; fi
 fi
 if [ "$resume" -eq 0 ]; then
-	review_guard_ignored_paths "$tip" || exit 1
+	review_guard_checkout_paths "$tip" || exit 1
 fi
 
 # Only a fresh finish records an undo point; --resume continues the same finish
@@ -651,7 +644,7 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 	# missing reviewstart kill us under set -e with no message.
 	load_step_review_meta "$cur"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
-	git add -A
+	review_worktree_files stage
 	tree="$(git write-tree)"
 	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
 		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
@@ -709,7 +702,7 @@ elif [ "$resume" -eq 1 ]; then
 		if [ "$update_source" -eq 1 ] && [ "$finish_source_head" != "$_expected_source" ]; then
 			die "local $src changed during finish"
 		fi
-		if [ "$update_source" -eq 1 ]; then review_guard_ignored_paths "$finish_source_head" || exit 1; fi
+		if [ "$update_source" -eq 1 ]; then review_guard_checkout_paths "$finish_source_head" || exit 1; fi
 	fi
 	stage_finish_resolution || exit 1
 	git config --unset "branch.$cur.reviewresume" || true
@@ -723,13 +716,21 @@ fi
 # keeps the undo point either way, including the empty-extract case
 # (review-fixes/<src> at the tip with nothing staged).
 if [ "$resume" -eq 0 ]; then
-	git add -A
+	review_worktree_files stage
 fi
 has_edits=1
 if git diff --cached --quiet "$tip"; then
 	has_edits=0
 else
 	git commit -q -m "review session ($src)"
+fi
+
+# A commit hook may have created a new obstruction after the initial check.
+# Resuming a conflict also reaches here without the fresh Finish preflight.
+if [ "$has_edits" -eq 1 ] || [ "$resume" -eq 1 ]; then
+	_finish_checkout=$tip
+	if [ "$update_source" -eq 1 ]; then _finish_checkout=$finish_source_head; fi
+	review_guard_checkout_paths "$_finish_checkout" || exit 1
 fi
 
 if [ "$onto" -eq 1 ]; then
@@ -749,7 +750,7 @@ if [ "$onto" -eq 1 ]; then
 			die "local $src changed during finish; recover with git review finish --abort"
 		fi
 		git config "branch.$cur.reviewundosourcemove" 1
-		review_guard_ignored_submodules "$tip" || exit 1
+		review_guard_nested_worktrees "$tip" || exit 1
 		# Branch merge options can request a squash, which succeeds without moving HEAD.
 		if ! git -c merge.autostash=false merge --ff-only --no-squash --no-overwrite-ignore --quiet "$tip" ||
 			[ "$(git symbolic-ref --quiet HEAD || true)" != "refs/heads/$src" ] ||

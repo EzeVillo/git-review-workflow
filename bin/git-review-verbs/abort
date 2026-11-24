@@ -70,7 +70,7 @@ fi
 	echo "error: could not determine a branch to return to; switch away manually, then run git review clean $src" >&2
 	exit 1
 }
-review_guard_ignored_paths "refs/heads/$target" || exit 1
+review_guard_checkout_paths "refs/heads/$target" || exit 1
 
 comments_lock_branch "$cur" || exit 1
 trap 'comments_unlock' 0

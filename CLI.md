@@ -409,7 +409,8 @@ Has two independent axes — **range** (where the review starts) and **layout**
   name points somewhere else, it prints a note: the review reflects the remote,
   not your checkout, and a later `git review finish --onto-source` would refuse
   until your local branch matches.
-- Refuses to run if you have local changes (tracked **or** untracked, non-ignored)
+- Refuses to run if you have local changes (tracked **or** untracked, non-ignored
+  files in the parent working tree)
   — start from a clean branch.
 - **Merges of the base branch are excluded.** If the author merged the base
   (e.g. `develop`) into the PR, that merged-in content is left out of the review
@@ -1089,9 +1090,14 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   add `--force` to discard those changes and abort anyway.
 - Opening a review, Finish, Undo (including `--force`), Save, Cancel, and step
   navigation stop if the destination would overwrite an ignored working tree
-  file, including files in submodules. Move the file aside and retry. During
-  an update of the PR branch, a checkout hook can create a collision after
-  Finish has started. In that case, Undo remains available.
+  file or discard local work in a nested Git checkout. This includes submodules
+  left on disk by an earlier commit. Move the obstructing file or checkout
+  aside, or preserve your changes in the nested repository, and retry. During
+  an update of the PR branch, a checkout hook can create a collision after Finish
+  has started. In that case, Undo remains available.
+- Review snapshots capture changes to paths the parent already tracks and new
+  files owned by the parent. To include a new submodule, stage its gitlink
+  explicitly with Git.
 - Refuses on a read-only `git review compare` — there is no writable branch to
   write your edits back to.
 

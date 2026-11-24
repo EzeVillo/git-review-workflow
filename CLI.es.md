@@ -419,7 +419,8 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   mismo nombre apunta a otro lado, te avisa: la review refleja el remoto, no tu
   checkout, y un `git review finish --onto-source` posterior se va a negar hasta
   que tu rama local coincida.
-- No corre si tenés cambios locales (tracked **o** untracked no ignorados) —
+- No corre si tenés cambios locales (tracked **o** untracked no ignorados
+  en el working tree del padre) —
   arrancá desde una rama limpia.
 - **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
   `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en
@@ -1107,10 +1108,15 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
 - `--destinations --porcelain` consulta los destinos disponibles sin tocar las ediciones. Si la rama está adelantada, diverge o está en uso en otro worktree, elegí la rama separada.
 - La apertura de una review, Finish, Undo (incluso con `--force`), Save,
   Cancel y la navegación por commits se detienen si el destino pisaría un
-  archivo ignorado del working tree, incluidos los de submódulos. Mové el
-  archivo y volvé a intentar. Al actualizar la rama del PR, un hook de checkout
-  puede crear una colisión después de que Finish haya empezado. En ese caso,
-  Undo sigue disponible.
+  archivo ignorado del working tree o descartaría trabajo local en un checkout
+  de Git anidado. Esto incluye submódulos que un commit anterior dejó en disco.
+  Mové el archivo o checkout que bloquea el cambio, o preservá los cambios en
+  el repositorio anidado, y volvé a intentar. Al actualizar la rama del PR, un
+  hook de checkout puede crear una colisión durante Finish y Undo sigue
+  disponible.
+- Los snapshots de la review capturan los cambios en rutas que el padre ya
+  rastrea y los archivos nuevos del padre. Para incluir un submódulo nuevo,
+  agregá su gitlink al índice explícitamente con Git.
 - En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
   mano cuando estés listo.
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del

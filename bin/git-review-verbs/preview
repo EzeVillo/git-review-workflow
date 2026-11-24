@@ -18,6 +18,9 @@ set -eu
 
 prog="git review preview"
 
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
 usage() {
 	cat <<EOF
 usage: $prog [--stat]
@@ -83,22 +86,13 @@ fi
 # Throwaway indexes live inside the git dir and are removed on exit, so the real
 # index is never touched and a preview leaves no residue.
 gitdir="$(git rev-parse --git-dir)"
-idx="$gitdir/review-preview-index.$$"
 idx2="$gitdir/review-preview-replay.$$"
 # Patches go through files, never shell variables: command substitution corrupts
 # a binary hunk (dropped NUL bytes and trailing newline). curpatch holds the
 # current step's edits, ppatch each banked edit in turn.
 curpatch="$gitdir/review-preview-curpatch.$$"
 ppatch="$gitdir/review-preview-patch.$$"
-trap 'rm -f "$idx" "$idx2" "$curpatch" "$ppatch"' EXIT
-
-# worktree_tree: capture the current working tree — staged, unstaged and any new
-# files — as a tree object, the same content git review finish folds in with git add -A.
-worktree_tree() {
-	cp "$(git rev-parse --git-path index)" "$idx"
-	GIT_INDEX_FILE="$idx" git add -A
-	GIT_INDEX_FILE="$idx" git write-tree
-}
+trap 'rm -f "$idx2" "$curpatch" "$ppatch"' 0
 
 if [ "$mode" = "step" ]; then
 	start="$(git config "branch.$cur.reviewstart" || true)"
@@ -124,7 +118,8 @@ if [ "$mode" = "step" ]; then
 
 	# The current step's edits are not banked yet (they live in the working tree),
 	# so derive them from the working tree against the commit being reviewed.
-	git diff --binary "$cstep" "$(worktree_tree)" >"$curpatch"
+	tree=$(review_snapshot_worktree)
+	git diff --binary "$cstep" "$tree" >"$curpatch"
 
 	# Replay onto the tip exactly like finish: walk the steps in order into a fresh
 	# index seeded with the tip, the current step's edits in its slot and each other
@@ -162,7 +157,7 @@ if [ "$mode" = "step" ]; then
 	done
 	tree="$good"
 else
-	tree="$(worktree_tree)"
+	tree=$(review_snapshot_worktree)
 	conflict=0
 fi
 

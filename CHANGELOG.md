@@ -73,6 +73,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 - Finish, Undo, Save, Cancel, and step navigation protect ignored local files
   when the destination tracks the same path or has a file/directory conflict.
   This also covers opening a review that updates or replaces a submodule.
+- Step navigation and Finish protect local work in submodules even after the
+  gitlink disappears from the index. Preview and saved reviews no longer
+  capture an embedded checkout as a new submodule.
 
 ## [0.10.0] — 2026-11-10
 

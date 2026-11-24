@@ -1930,13 +1930,22 @@ ejecutar el cambio. Git 2.23 puede pisarlos en un switch forzado incluso con
 fast-forward protege además los archivos que escribe un hook al tomar la rama
 local atrasada.
 
-Git delega el checkout recursivo a `read-tree` dentro de cada submódulo;
-el flag del padre no protege los archivos ignorados de los hijos. La misma
-comprobación recorre los submódulos presentes en el índice y compara sus
-archivos con el commit hijo que va a materializar Git. También contempla
-reemplazar un gitlink por un archivo o directorio del repositorio padre.
-Al reemplazarlo por un directorio, se verifica el árbol entrante para que
-los archivos ignorados que queden al lado de los nuevos puedan conservarse.
+Git delega el checkout recursivo a `read-tree` dentro de cada submódulo.
+La comprobación busca los checkouts anidados en disco usando el inventario
+de rutas del padre, incluidos los gitlinks del índice. Git puede dejar un
+checkout presente después de eliminar su gitlink. El guard contrasta los
+archivos ignorados con el árbol entrante y protege cambios trackeados en el
+hijo si el checkout recursivo lo actualiza o lo elimina. Cuando el destino
+convierte el submódulo en un directorio, compara sólo las rutas que escribe
+el padre para conservar los archivos que quedan al lado. En un working tree
+con `core.ignoreCase`, la búsqueda también contempla destinos que escriben
+la misma ruta con otra capitalización.
+
+La captura de correcciones usa el mismo límite de propiedad en Preview,
+Save, navegación, Finish y Undo. Captura los archivos que ya rastrea el
+padre y excluye los nuevos de checkouts anidados, incluidos los checkouts
+que `git add -A` convertiría implícitamente en gitlinks. Un gitlink que se
+stagea explícitamente sigue siendo parte de la review.
 
 El mantenimiento de ediciones y Undo identifica al dueño exacto de cada ref,
 incluso si los nombres de dos ramas comparten prefijo.

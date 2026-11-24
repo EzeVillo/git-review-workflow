@@ -2920,66 +2920,206 @@ require_not_pending_finish() {
 
 # require_clean_work_tree
 # Refuse start/compare/continue when the worktree is dirty: tracked changes
-# (diff / cached) *or* untracked non-ignored files. finish/save capture untracked
-# with `git add -A` as review edits, so letting pre-existing untracked through
-# start would absorb junk as if the reviewer wrote it.
+# (diff / cached) *or* untracked non-ignored files that the review would capture.
+# An embedded worktree owns its own files and is outside that capture.
 require_clean_work_tree() {
 	if ! git diff --quiet || ! git diff --cached --quiet ||
-		[ -n "$(git ls-files --others --exclude-standard)" ]; then
+		! _rcwt_untracked=$(review_worktree_files list) || [ -n "$_rcwt_untracked" ]; then
 		echo "error: you have local changes; commit or stash them first" >&2
 		exit 1
 	fi
 }
 
-# Encode Gitlinks from ls-files --stage -z or ls-tree -z. A POSIX read loop
-# can decode the octal path even if it contains tabs, quotes, or newlines.
-review_gitlink_records() {
-	LC_ALL=C od -An -v -tu1 "$1" | LC_ALL=C awk '
+# Encode gitlinks from staged records, or the directory prefixes of plain
+# path records. POSIX read can carry the octal paths without losing bytes.
+review_path_records() {
+	LC_ALL=C od -An -v -tu1 "$1" | LC_ALL=C awk -v mode="$2" '
+		function emit(kind, path) {
+			if (!seen[path]++) print kind, path
+		}
+		BEGIN { in_path = mode == "directories" }
 		{
 			for (i = 1; i <= NF; i++) {
 				if ($i == 0) {
-					if (header ~ /^160000 / && !seen[path]++) print path
+					if (mode == "gitlinks" && header ~ /^160000 /) emit("gitlink", path)
 					header = path = ""
-					in_path = 0
-				} else if (in_path) path = path sprintf("\\0%03o", $i)
-				else if ($i == 9) in_path = 1
-				else header = header sprintf("%c", $i)
+					in_path = mode == "directories"
+				} else if (in_path == 1) {
+					if (mode == "directories" && $i == 47) emit("directory", path)
+					path = path sprintf("\\0%03o", $i)
+				} else if (in_path == 0) {
+					if ($i == 9) in_path = header ~ /^160000 / ? 1 : 2
+					else header = header sprintf("%c", $i)
+				}
 			}
 		}
 	'
 }
 
+# Ask Git for the parent paths, then look for repositories on disk. A
+# populated checkout can outlive its gitlink, including beneath a directory
+# whose ordinary files are already in the parent's index.
+review_nested_worktrees() (
+	_rnw_mode=$1
+	_rnw_root=$(git rev-parse --show-toplevel) || exit 1
+	_rnw_list=$(mktemp) || exit 1
+	trap 'rm -f "$_rnw_list"' 0
+	if [ "$_rnw_mode" = checkout ]; then
+		git --no-literal-pathspecs ls-files --stage --full-name -z -- :/ >"$_rnw_list" || exit 1
+		review_path_records "$_rnw_list" gitlinks || exit 1
+		set -- --cached --others
+	else
+		set -- --others --exclude-standard
+	fi
+	git --no-literal-pathspecs ls-files "$@" --full-name -z -- :/ >"$_rnw_list" || exit 1
+	[ -s "$_rnw_list" ] || exit 0
+	_rnw_candidates=$(review_path_records "$_rnw_list" directories) || exit 1
+	while read -r _rnw_kind _rnw_encoded; do
+		[ -n "$_rnw_encoded" ] || continue
+		_rnw_path=$(printf '%b.' "$_rnw_encoded") || exit 1
+		_rnw_path=${_rnw_path%.}
+		[ ! -L "$_rnw_root/$_rnw_path" ] || continue
+		[ -e "$_rnw_root/$_rnw_path/.git" ] || continue
+		printf '%s %s\n' "$_rnw_kind" "$_rnw_encoded"
+	done <<EOF
+$_rnw_candidates
+EOF
+)
+
+review_worktree_add() {
+	if [ "$_rwf_action" = snapshot ]; then
+		git -c core.splitIndex=false "$@"
+	else
+		git "$@"
+	fi
+}
+
+# A gitlink already in the index is intentional. Never let a blanket add
+# invent one, or import untracked files from a neighbouring repository.
+# In a mixed directory, update paths the parent explicitly tracks as well.
+review_worktree_files() (
+	_rwf_action=$1
+	_rwf_nested=$(review_nested_worktrees untracked) || exit 1
+	set --
+	if [ -n "$_rwf_nested" ]; then
+		while read -r _rwf_kind _rwf_encoded; do
+			_rwf_path=$(printf '%b.' "$_rwf_encoded") || exit 1
+			set -- "$@" ":(top,literal,exclude)${_rwf_path%.}"
+		done <<EOF
+$_rwf_nested
+EOF
+	fi
+	if [ "$_rwf_action" = list ]; then
+		git --no-literal-pathspecs ls-files --others --exclude-standard --full-name -- :/ "$@"
+	elif [ "$#" -gt 0 ]; then
+		review_worktree_add --no-literal-pathspecs add -u -- :/ || exit 1
+		review_worktree_add --no-literal-pathspecs add -A -- :/ "$@"
+	else
+		review_worktree_add add -A
+	fi
+)
+
 # Project a parent tree listing into a former submodule directory. A file at
 # the directory or any of its ancestors replaces the entire directory.
 review_submodule_tree_paths() {
-	printf '%s\n' "$2" | REVIEW_SUBMODULE_PATH="$1" awk '
+	printf '%s\n' "$2" | REVIEW_SUBMODULE_PATH="$1" LC_ALL=C awk -v icase="${3:-false}" -v records="${4:-false}" '
 		function unquote(path) {
 			if (substr(path, 1, 1) == "\"") return substr(path, 2, length(path) - 2)
 			return path
 		}
-		BEGIN { prefix = unquote(ENVIRON["REVIEW_SUBMODULE_PATH"]) "/" }
+		function key(path) {
+			return icase == "true" ? tolower(path) : path
+		}
+		BEGIN {
+			for (i = 1; i < 32; i++) escape[sprintf("%c", i)] = sprintf("\\%03o", i)
+			escape["\177"] = "\\177"
+			escape["\a"] = "\\a"; escape["\b"] = "\\b"; escape["\t"] = "\\t"
+			escape["\n"] = "\\n"; escape["\v"] = "\\v"; escape["\f"] = "\\f"; escape["\r"] = "\\r"
+			escape["\\"] = "\\\\"; escape["\""] = "\\\""
+			raw = ENVIRON["REVIEW_SUBMODULE_PATH"]
+			for (i = 1; i <= length(raw); i++) {
+				c = substr(raw, i, 1)
+				prefix = prefix (c in escape ? escape[c] : c)
+			}
+			prefix = key(prefix) "/"
+		}
 		NF {
-			path = unquote($0)
-			if (index(prefix, path "/") == 1) { print "/"; exit }
-			if (index(path, prefix) == 1) print substr(path, length(prefix) + 1)
+			tab = records == "true" ? index($0, "\t") : 0
+			path = unquote(substr($0, tab + 1))
+			match_path = key(path) "/"
+			if (index(prefix, match_path) == 1) {
+				if (match_path == prefix && tab && $0 ~ /^160000 /) print "/gitlink " $3
+				else print "/"
+				exit
+			}
+			if (index(match_path, prefix) == 1) print substr(path, length(prefix) + 1)
 		}
 	'
 }
 
-# A recursive parent checkout uses read-tree in each child, so the parent's
-# --no-overwrite-ignore does not protect those files. Replacing a gitlink
-# with an ordinary file can also delete the child's directory without recursion.
-review_guard_ignored_submodules() (
-	_rgs_index=$(git --no-literal-pathspecs ls-files --stage --full-name -- :/) || exit 1
-	if ! printf '%s\n' "$_rgs_index" | grep -q '^160000 '; then exit 0; fi
+# A parent index only stores the gitlink, never the child's local changes.
+# Even a staged addition absent from the target can be lost in a recursive
+# checkout. An ordinary directory written into a child only affects overlaps.
+review_guard_child_checkout() {
+	_rgcc_prefix=${_review_guard_prefix:-}
+	_rgcc_local=$(
+		git -c core.quotePath=false diff --name-only --no-renames --ignore-submodules=dirty --no-ext-diff -- || exit 1
+		git -c core.quotePath=false diff --cached --name-only --no-renames --ignore-submodules=dirty --no-ext-diff -- || exit 1
+	) || return 1
+	case "$1" in
+	--paths|--replace|--remove)
+		_rgcc_others=$(git --no-literal-pathspecs -c core.quotePath=false ls-files \
+			--others --exclude-standard --full-name -- :/) || return 1
+		# A path untracked by the child may be an ordinary file owned by
+		# the parent after a gitlink became a directory.
+		if [ "$1" = --paths ] && [ -n "$_rgcc_others" ] && [ -n "$_review_guard_parent_paths" ]; then
+			_rgcc_others=$(
+				{
+					printf '%s\n\n' "$_review_guard_parent_paths"
+					printf '%s\n' "$_rgcc_others"
+				} | awk '
+					$0 == "" { child = 1; next }
+					{
+						path = $0
+						if (substr(path, 1, 1) == "\"") path = substr(path, 2, length(path) - 2)
+						if (!child) tracked[path] = 1
+						else if (!(path in tracked)) print
+					}
+				'
+			) || return 1
+		fi
+		if [ -n "$_rgcc_others" ]; then
+			_rgcc_local=${_rgcc_local:+$_rgcc_local
+}$_rgcc_others
+		fi
+		;;
+	esac
+	if [ "$1" = --paths ]; then
+		if [ -n "$_rgcc_local" ]; then
+			_rgcc_case=$(git config --bool core.ignoreCase || true)
+			review_check_worktree_overlap "$_rgcc_local" "$2" "$_rgcc_case" 'a local path in a nested Git working tree' || return 1
+		fi
+	elif [ -n "$_rgcc_local" ]; then
+		echo "error: would discard local changes in a nested Git working tree: ${_rgcc_prefix%/}" >&2
+		return 1
+	elif { [ "$1" = --replace ] || [ "$1" = --remove ]; } && [ -d .git ]; then
+		echo "error: would remove Git metadata in a nested Git working tree: ${_rgcc_prefix%/}" >&2
+		return 1
+	fi
+	review_guard_checkout_paths "$@"
+}
+
+# Recursive checkout delegates to read-tree inside each child. Replacing a
+# directory with a file can remove a nested worktree even without recursion.
+review_guard_nested_worktrees() (
+	_rgs_inventory=$(review_nested_worktrees checkout) || exit 1
+	[ -n "$_rgs_inventory" ] || exit 0
+	_rgs_links=$(printf '%s\n' "$_rgs_inventory" | awk '!seen[$2]++') || exit 1
 	_rgs_root=$(git rev-parse --show-toplevel) || exit 1
 	_rgs_recurse=${_review_guard_recurse:-$(git config --bool submodule.recurse || true)}
-	_rgs_tmp=$(mktemp) || exit 1
-	trap 'rm -f "$_rgs_tmp"' 0
-	git --no-literal-pathspecs ls-files --stage --full-name -z -- :/ >"$_rgs_tmp" || exit 1
-	_rgs_links=$(review_gitlink_records "$_rgs_tmp") || exit 1
+	_rgs_case=$(git config --bool core.ignoreCase || true)
 	if [ "$1" = --paths ]; then _rgs_parent_paths=$2; set -- --paths; fi
-	while IFS= read -r _rgs_encoded; do
+	while read -r _rgs_kind _rgs_encoded; do
 		_rgs_path=$(printf '%b.' "$_rgs_encoded") || exit 1
 		_rgs_path=${_rgs_path%.}
 		[ ! -L "$_rgs_root/$_rgs_path" ] || continue
@@ -2988,15 +3128,9 @@ review_guard_ignored_submodules() (
 			_rgs_destination=''
 			_rgs_paths=''
 			case "$_rgs_tree" in
-			--replace) _rgs_destination=--replace ;;
+			--replace|--remove) _rgs_destination=$_rgs_tree ;;
 			--paths)
-				_rgs_quoted=$(git --no-literal-pathspecs -c core.quotePath=false ls-files --stage --full-name -- \
-					":(top,literal)$_rgs_path") || exit 1
-				IFS= read -r _rgs_quoted <<EOF
-$_rgs_quoted
-EOF
-				_rgs_tab=$(printf '\t')
-				_rgs_paths=$(review_submodule_tree_paths "${_rgs_quoted#*"$_rgs_tab"}" "$_rgs_parent_paths") || exit 1
+				_rgs_paths=$(review_submodule_tree_paths "$_rgs_path" "$_rgs_parent_paths" "$_rgs_case") || exit 1
 				case "$_rgs_paths" in
 				/) _rgs_destination=--replace ;;
 				'') ;;
@@ -3023,10 +3157,33 @@ EOF
 					fi
 					case "$_rgs_prefix" in */*) _rgs_prefix=${_rgs_prefix%/*} ;; *) break ;; esac
 				done
+				# ls-tree's literal lookup is case-sensitive even when the
+				# working tree can alias a destination with another spelling.
+				if [ "$_rgs_case" = true ] && [ -z "$_rgs_destination" ] &&
+					{ [ -z "$_rgs_entry" ] || [ "$_rgs_prefix" != "$_rgs_path" ]; }; then
+					_rgs_records=$(git -c core.quotePath=false ls-tree -r --full-tree "$_rgs_tree") || exit 1
+					_rgs_paths=$(review_submodule_tree_paths "$_rgs_path" "$_rgs_records" true true) || exit 1
+					case "$_rgs_paths" in
+					'/gitlink '*)
+						if [ "$_rgs_recurse" = true ]; then _rgs_destination=${_rgs_paths#'/gitlink '}; fi ;;
+					/) _rgs_destination=--replace ;;
+					'') ;;
+					*) _rgs_destination=--paths ;;
+					esac
+				fi
+				if [ -z "$_rgs_destination" ] && [ "$_rgs_recurse" = true ] && [ "$_rgs_kind" = gitlink ]; then
+					_rgs_destination=--remove
+				fi
 				;;
 			esac
 			[ -n "$_rgs_destination" ] || continue
 			(
+				_rgs_owned=''
+				if [ "$_rgs_destination" = --paths ] && [ "$_rgs_kind" != gitlink ]; then
+					_rgs_owned=$(git --no-literal-pathspecs -c core.quotePath=false ls-files --full-name -- \
+						":(top,literal)$_rgs_path") || exit 1
+					_rgs_owned=$(review_submodule_tree_paths "$_rgs_path" "$_rgs_owned" "$_rgs_case") || exit 1
+				fi
 				for _rgs_var in $(git rev-parse --local-env-vars); do
 					case "$_rgs_var" in GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT) ;; *) unset "$_rgs_var" ;; esac
 				done
@@ -3036,7 +3193,8 @@ EOF
 				set -- "$_rgs_destination"
 				if [ "$_rgs_destination" = --paths ]; then set -- "$@" "$_rgs_paths"; fi
 				_review_guard_recurse=true _review_guard_prefix="${_review_guard_prefix:-}$_rgs_path/" \
-					review_guard_ignored_paths "$@"
+					_review_guard_parent_paths="$_rgs_owned" \
+					review_guard_child_checkout "$@"
 			) || exit 1
 		done
 	done <<EOF
@@ -3044,14 +3202,15 @@ $_rgs_links
 EOF
 )
 
-# Compare the destination paths with the ignored files in the live worktree,
+# Compare the destination paths with protected paths in the live worktree,
 # including file/directory obstructions in either direction. Git's C quoting
 # keeps each path on one line and never escapes the slash between components.
-review_check_ignored_overlap() {
+review_check_worktree_overlap() {
 	{
 		printf '%s\n\n' "$1"
 		printf '%s\n' "$2"
-	} | REVIEW_GUARD_PREFIX="${_review_guard_prefix:-}" awk -v icase="$3" '
+	} | REVIEW_GUARD_PREFIX="${_review_guard_prefix:-}" awk -v icase="$3" \
+		-v description="${4:-an ignored working tree path}" '
 		function path_key(path) {
 			if (substr(path, 1, 1) == "\"") path = substr(path, 2, length(path) - 2)
 			sub("/$", "", path)
@@ -3061,7 +3220,7 @@ review_check_ignored_overlap() {
 		$0 == "" { destination = 1; next }
 		!destination {
 			path = path_key($0)
-			ignored[path] = $0
+			protected[path] = $0
 			while (sub("/[^/]*$", "", path)) below[path] = $0
 			next
 		}
@@ -3069,36 +3228,38 @@ review_check_ignored_overlap() {
 			path = path_key($0)
 			if (path in below) { collision = below[path]; exit }
 			do {
-				if (path in ignored) { collision = ignored[path]; exit }
+				if (path in protected) { collision = protected[path]; exit }
 			} while (sub("/[^/]*$", "", path))
 		}
 		END {
 			if (collision != "") {
-				print "error: would overwrite an ignored working tree path: " ENVIRON["REVIEW_GUARD_PREFIX"] collision
+				print "error: would overwrite " description ": " ENVIRON["REVIEW_GUARD_PREFIX"] collision
 				exit 1
 			}
 		}
 	' >&2
 }
 
-# Forced switches and resets can overwrite ignored files that snapshots omit.
-review_guard_ignored_paths() (
+# Forced switches and resets can overwrite ignored files and local changes
+# in nested worktrees which the parent snapshot cannot restore.
+review_guard_checkout_paths() (
 	_rgi_ignored=$(git --no-literal-pathspecs -c core.quotePath=false ls-files \
 		--others --ignored --exclude-standard --full-name -- :/) || exit 1
-	if [ "$1" = --replace ] && [ -n "$_rgi_ignored" ]; then
-		echo "error: would replace a submodule containing ignored working tree files: ${_review_guard_prefix%/}" >&2
+	if { [ "$1" = --replace ] || [ "$1" = --remove ]; } && [ -n "$_rgi_ignored" ]; then
+		_rgi_prefix=${_review_guard_prefix:-}
+		echo "error: would replace a submodule containing ignored working tree files: ${_rgi_prefix%/}" >&2
 		exit 1
 	fi
-	review_guard_ignored_submodules "$@" || exit 1
+	review_guard_nested_worktrees "$@" || exit 1
 	[ -n "$_rgi_ignored" ] || exit 0
 	_rgi_icase=$(git config --bool core.ignoreCase || true)
 	if [ "$1" = --paths ]; then
-		review_check_ignored_overlap "$_rgi_ignored" "$2" "$_rgi_icase"
+		review_check_worktree_overlap "$_rgi_ignored" "$2" "$_rgi_icase"
 		exit $?
 	fi
 	for _rgi_tree do
 		_rgi_paths=$(git -c core.quotePath=false ls-tree -r --name-only --full-tree "$_rgi_tree") || exit 1
-		review_check_ignored_overlap "$_rgi_ignored" "$_rgi_paths" "$_rgi_icase" || exit 1
+		review_check_worktree_overlap "$_rgi_ignored" "$_rgi_paths" "$_rgi_icase" || exit 1
 	done
 )
 
@@ -3108,7 +3269,7 @@ review_snapshot_worktree() (
 	_rsw_candidate=$(mktemp "$_rsw_index.review.XXXXXX") || exit 1
 	trap 'rm -f "$_rsw_candidate" "$_rsw_candidate.lock"' 0
 	cp "$_rsw_index" "$_rsw_candidate" || exit 1
-	GIT_INDEX_FILE=$_rsw_candidate git -c core.splitIndex=false add -A || exit 1
+	GIT_INDEX_FILE=$_rsw_candidate review_worktree_files snapshot || exit 1
 	GIT_INDEX_FILE=$_rsw_candidate git write-tree
 )
 
@@ -3276,8 +3437,8 @@ goto_step() {
 	prev_step="$step"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	ctarget="$(printf '%s\n' "$commits" | sed -n "${target}p")"
-	review_guard_ignored_paths "$ctarget" || exit 1
-	git add -A
+	review_guard_checkout_paths "$ctarget" || exit 1
+	review_worktree_files stage
 	tree="$(git write-tree)"
 	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
 		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
@@ -3296,7 +3457,7 @@ goto_step() {
 		if ! apply_review_patch "${ref}^" "$ref"; then
 			echo "error: could not restore banked edits for step $target" >&2
 			# Roll back: hard-reset to the origin step and re-apply its bank.
-			review_guard_ignored_paths "$cstep" || exit 1
+			review_guard_checkout_paths "$cstep" || exit 1
 			git reset -q --hard "$cstep"
 			pref="refs/review-edits/$src/$prev_step"
 			if git rev-parse --verify --quiet "$pref" >/dev/null; then
@@ -3807,7 +3968,7 @@ walk_reviewed_draft_list() {
 # walk_draft_path <src>
 # Where the reviewer's own walkthrough for <src> lives while a review is in play:
 # inside the working tree's gitdir, per AGENTS.md's prose-files table (invisible
-# to git status, start's dirty check and finish's git add -A). Same idiom as
+# to git status, start's dirty check and finish's snapshot). Same idiom as
 # COMMIT_EDITMSG/MERGE_MSG. Preserve accessible legacy document paths so open
 # editors and existing drafts keep working.
 #
@@ -5780,8 +5941,8 @@ review_view_populated_configs() (
 	_rvpc_paths="$_review_view/populated-$_rvpc_key"
 	[ ! -f "$_rvpc_paths" ] || return 0
 	git ls-files --stage --full-name -z -- ':/' >"$_rvpc_paths.index" || return 1
-	review_gitlink_records "$_rvpc_paths.index" >"$_rvpc_paths" || return 1
-	while IFS= read -r _rvpc_encoded; do
+	review_path_records "$_rvpc_paths.index" gitlinks >"$_rvpc_paths" || return 1
+	while read -r _rvpc_kind _rvpc_encoded; do
 		_rvpc_path=$(printf '%b.' "$_rvpc_encoded") || return 1
 		review_view_populated_path "$_rvpc_top/${_rvpc_path%.}" || return 1
 	done <"$_rvpc_paths"
@@ -6237,7 +6398,7 @@ review_open_branch() {
 	_rob_return_ref=$(git symbolic-ref --quiet HEAD || true)
 	_rob_return_oid=$(git rev-parse --verify --quiet HEAD || true)
 	[ -n "$_rob_return_ref$_rob_return_oid" ] || die 'could not read the current checkout'
-	review_guard_ignored_paths "$3" || exit 1
+	review_guard_checkout_paths "$3" || exit 1
 	_rob_ref='' _rob_old=''
 	if [ -n "${4:-}" ]; then
 		_rob_ref=$(review_session_ref "$1" "$2") || die "could not name review range for $2"
@@ -6276,13 +6437,13 @@ review_restore_open_checkout() {
 	if [ -n "$_rob_return_ref" ]; then
 		[ "$(git rev-parse --verify --quiet "$_rob_return_ref" || true)" = "$_rob_return_oid" ] || return 1
 		if [ -n "$_rob_return_oid" ]; then
-			review_guard_ignored_paths "$_rob_return_oid" || return 1
+			review_guard_checkout_paths "$_rob_return_oid" || return 1
 			set -- "${_rob_return_ref#refs/heads/}"
 		else
 			set -- --orphan "${_rob_return_ref#refs/heads/}"
 		fi
 	else
-		review_guard_ignored_paths "$_rob_return_oid" || return 1
+		review_guard_checkout_paths "$_rob_return_oid" || return 1
 		set -- --detach "$_rob_return_oid"
 	fi
 	# Switch without --discard-changes so Git still protects edits made after

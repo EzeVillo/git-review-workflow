@@ -177,6 +177,158 @@ assert_reviewed_gitlink() {
 	[ "$(cat "$MODULE/build-output")" = 'tracked by the PR' ]
 }
 
+start_without_gitlink() {
+	git config submodule.recurse false
+	git -C "$SERVER" switch -qc topic
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	git -C "$SERVER" commit -qm 'remove submodule'
+	case "$1" in
+	file)
+		printf 'ordinary file\n' >"$SERVER/$MODULE"
+		git -C "$SERVER" add -- "$MODULE"
+		;;
+	case)
+		alias_path=$(printf '%s' "$MODULE" | LC_ALL=C tr '[:lower:]' '[:upper:]')
+		mkdir -p "$SERVER/${alias_path%/*}"
+		printf 'ordinary file\n' >"$SERVER/$alias_path"
+		git -C "$SERVER" add -- "$alias_path"
+		git config core.ignoreCase true
+		;;
+	directory)
+		mkdir -p "$SERVER/$MODULE"
+		printf 'parent owns this file\n' >"$SERVER/$MODULE/owned"
+		git -C "$SERVER" add -- "$MODULE/owned"
+		;;
+	other)
+		printf 'unrelated file\n' >"$SERVER/other"
+		git -C "$SERVER" add other
+		;;
+	esac
+	git -C "$SERVER" commit -qm 'next change'
+	git review start "${2:---step}" topic
+	[ -z "$(git ls-files -- "$MODULE")" ]
+	[ -f "$MODULE/.git" ]
+	exclude=$(git -C "$MODULE" rev-parse --absolute-git-dir)/info/exclude
+	mkdir -p "$(dirname "$exclude")"
+	printf 'build-output\n' >>"$exclude"
+	printf 'private child data\n' >"$MODULE/build-output"
+}
+
+# bats test_tags=legacy-git
+@test "next and finish protect a checkout retained after gitlink removal" {
+	bats_require_minimum_version 1.5.0
+	start_without_gitlink file
+	index=$(git write-tree)
+	head=$(git rev-parse HEAD)
+	for verb in next finish; do
+		run --separate-stderr git review "$verb"
+		[ "$status" -eq 1 ]
+		[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
+		[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+		[ "$(git rev-parse HEAD)" = "$head" ]
+		[ "$(git write-tree)" = "$index" ]
+		[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+		[ -z "$(git for-each-ref refs/review-edits/topic/ refs/review-undo/topic/)" ]
+		[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	done
+	mv "$MODULE" "${MODULE}-held"
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(cat "$MODULE")" = 'ordinary file' ]
+	[ "$(cat "${MODULE}-held/build-output")" = 'private child data' ]
+}
+
+# bats test_tags=legacy-git
+@test "step navigation protects a nested checkout across case aliases" {
+	bats_require_minimum_version 1.5.0
+	start_without_gitlink case
+	index=$(git write-tree)
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
+	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	[ -z "$(git for-each-ref refs/review-edits/topic/)" ]
+}
+
+# bats test_tags=legacy-git
+@test "preview leaves the retained checkout outside the review snapshot" {
+	start_without_gitlink other --no-walk
+	printf 'reviewer correction\n' >correction
+	index=$(git write-tree)
+	run git review preview --stat
+	[ "$status" -eq 0 ]
+	[[ "$output" == *correction* ]]
+	[[ "$output" != *'shared library'* ]]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+}
+
+# bats test_tags=legacy-git
+@test "save continue and finish do not stage a retained checkout" {
+	printf 'original text\n' >"$SERVER/correction"
+	git -C "$SERVER" add correction
+	git -C "$SERVER" commit -qm 'track the correction file'
+	git pull -q --ff-only origin main
+	start_without_gitlink other
+	printf 'reviewer correction\n' >correction
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(git diff-tree --no-commit-id --name-only -r 'refs/review-saved-edits/topic/1^' 'refs/review-saved-edits/topic/1')" = correction ]
+	run git review continue topic
+	[ "$status" -eq 0 ]
+	run git review next
+	[ "$status" -eq 0 ]
+	[ -z "$(git ls-files -- "$MODULE")" ]
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+	run git review finish
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review-fixes/topic ]
+	[ "$(git diff --cached --name-only)" = correction ]
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+}
+
+# bats test_tags=legacy-git
+@test "a forced recursive step cannot discard changes in a removed submodule" {
+	bats_require_minimum_version 1.5.0
+	git -C "$SERVER" switch -qc topic
+	printf 'first step\n' >"$SERVER/other"
+	git -C "$SERVER" add other
+	git -C "$SERVER" commit -qm 'first change'
+	git -C "$SERVER" rm -qf -- "$MODULE"
+	git -C "$SERVER" commit -qm 'remove submodule'
+	git review start --step topic
+	index=$(git write-tree)
+	printf 'private tracked edit\n' >"$MODULE/version"
+	git -C "$MODULE" add version
+
+	run --separate-stderr git review next
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would discard local changes in a nested Git working tree: $MODULE"* ]]
+	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+	[ "$(git write-tree)" = "$index" ]
+	[ -z "$(git for-each-ref refs/review-edits/topic/)" ]
+	[ "$(cat "$MODULE/version")" = 'private tracked edit' ]
+	[ "$(git -C "$MODULE" show :version)" = 'private tracked edit' ]
+}
+
+# bats test_tags=legacy-git
+@test "capture updates parent paths beside files owned by a retained checkout" {
+	start_without_gitlink directory
+	run git review next
+	[ "$status" -eq 0 ]
+	[ -f "$MODULE/.git" ]
+	printf 'reviewer correction\n' >"$MODULE/owned"
+	printf 'private untracked sibling\n' >"$MODULE/private"
+	run git review finish
+	[ "$status" -eq 0 ]
+	[ "$(git symbolic-ref --short HEAD)" = review-fixes/topic ]
+	[ "$(git diff --cached --name-only)" = "$MODULE/owned" ]
+	[ "$(cat "$MODULE/private")" = 'private untracked sibling' ]
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
+}
+
 @test "start preparation fetches submodule commits without checking them out" {
 	git config fetch.recurseSubmodules on-demand
 	advance_submodule

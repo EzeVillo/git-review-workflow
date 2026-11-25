@@ -3,7 +3,8 @@ import * as vscode from "vscode";
 import {sendCommentComposerMessage, commentComposerState, CommentComposerState} from "./views/commentsComposer";
 import {commentTarget, addComment, commentRowAction, CommentBlobProvider, commentHighlights, COMMENT_BLOB_SCHEME, rememberCommentRange, rememberCommentEditor, commentProvenance, setCommentDocumentSaverForTest} from "./commands/comments";
 import {initCliLog, showCliLog} from "./cli/cliLog";
-import {InvokeOptions} from "./cli/invoke";
+import {invokeGitReview, InvokeOptions} from "./cli/invoke";
+import {STEP_CHECKOUT_FAILED, STEP_CHECKOUT_PROGRESS} from "./review/userCopy";
 import {EntryRecord} from "./cli/porcelain";
 import {PathRef} from "./cli/unquote";
 import {abortReview} from "./commands/abortReview";
@@ -315,6 +316,27 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
      * decide (contracts/extension-surface.md § Protocolo).
      */
     async function handlePanelMessage(message: PanelMessage, extra?: unknown): Promise<void> {
+        if (message === "openStepCheckout") {
+            const state = stateManager.state;
+            if (!target || state.situation !== "review" || !state.state?.stepCheckout) return;
+            const options = getInvokeOptions();
+            let folder: string | undefined;
+            await lock.run(async () => {
+                const result = await vscode.window.withProgress(
+                    {location: vscode.ProgressLocation.Notification, title: STEP_CHECKOUT_PROGRESS},
+                    () => invokeGitReview("workspace", ["checkout", "--porcelain"], {...options, timeoutMs: 300_000}),
+                );
+                await stateManager.refreshPrimary();
+                const record = result.stdout.split(/\r?\n/).find(line => line.startsWith("step-checkout\t"));
+                if (result.exitCode === 0 && record) {
+                    folder = record.slice("step-checkout\t".length);
+                    return;
+                }
+                void vscode.window.showErrorMessage(result.stderr.trim() || STEP_CHECKOUT_FAILED);
+            });
+            if (folder) await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(folder), {forceNewWindow: true});
+            return;
+        }
         if (message === "deleteComments" || message === "initComments" || message === "openComments" || message === "copyCommentPath" || message === "renumberComments" || message === "openCommentDiff" || message === "prepareSharedComments") {
             await commentRowAction(message, extra, lock, stateManager, getInvokeOptions); return;
         }
@@ -392,6 +414,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             Exclude<
                 PanelMessage,
                 | "openSupport"
+                | "openStepCheckout"
                 | "copyCliInstall"
                 | "openDraft"
                 | "copyDraftPrompt"

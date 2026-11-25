@@ -1,6 +1,6 @@
 import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
-import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY, COMPARE_COPY} from "../review/userCopy";
+import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY, COMPARE_COPY, STEP_CHECKOUT_LABEL} from "../review/userCopy";
 
 /**
  * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
@@ -1667,6 +1667,11 @@ export function panelHtml(nonce: string): string {
     const open = el("div", "row");
     if (model.mode === "step") {
       open.appendChild(button("Diff", "openChange", null, "diff"));
+      if (model.stepCheckout && !model.navigationLocked) {
+        const checkout = button(${JSON.stringify(STEP_CHECKOUT_LABEL)}, "openStepCheckout", null);
+        checkout.disabled = model.busy;
+        open.appendChild(checkout);
+      }
     } else {
       open.appendChild(button("File", "openEntry", null, "file"));
       open.appendChild(button("Diff", "openChange", null, "diff"));

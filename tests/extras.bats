@@ -110,7 +110,7 @@ teardown() {
 @test "review status accepts the last valid step (no off-by-one false positive)" {
 	git review start feature/x --step
 	# step 2 of 2 is the boundary: it must NOT be rejected as out of range
-	git config branch.review/feature/x.reviewstep 2
+	git config branch.review/feature/x.reviewreadstep 2
 	run git review status
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/2]"* ]]
@@ -187,9 +187,11 @@ teardown() {
 	printf 'edited1\n' >f.txt
 	run git review next
 	[ "$status" -eq 0 ]
-	# Step 1 edit banked under refs/review-edits; step 2 tree is C2's content.
-	[ -n "$(git rev-parse --verify --quiet refs/review-edits/feature/x/1)" ]
-	[ "$(cat f.txt)" = "$(printf 'c1\nextra\n')" ]
+	[ -z "$(git for-each-ref refs/review-edits/feature/x/)" ]
+	[ "$(cat f.txt)" = "edited1" ]
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	[ "$(cat "$checkout/f.txt")" = "$(printf 'c1\nextra\n')" ]
 	run git review prev
 	[ "$status" -eq 0 ]
 	[ "$(cat f.txt)" = "edited1" ]
@@ -226,7 +228,9 @@ teardown() {
 @test "review abort drops banked edit refs" {
 	git review start feature/x --step
 	printf 'edited1\n' >f.txt
-	git review next
+	git add f.txt
+	bank=$(git commit-tree "$(git write-tree)" -p 'feature/x^' -m 'legacy edit')
+	git update-ref refs/review-edits/feature/x/1 "$bank"
 	git review abort
 	run git for-each-ref refs/review-edits/feature/x/
 	[ -z "$output" ]

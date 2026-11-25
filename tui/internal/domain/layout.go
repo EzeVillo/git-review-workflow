@@ -65,7 +65,7 @@ var Layout = map[LayoutSituation][]ControlID{
 	// layout_contract_test.go actually asserts instead of an empty literal.
 	LayoutReviewWhole:    {},
 	LayoutReviewWalk:     {"showWhy", "openEntry", "openChange", "prev", "next"},
-	LayoutReviewStep:     {"openChange", "prev", "next"},
+	LayoutReviewStep:     {"openChange", "openStepCheckout", "prev", "next"},
 	LayoutFinishPending:  {"cleanReview", "undoFinish"},
 	LayoutFinishConflict: {"undoFinish", "resumeFinish", "showWhy", "openEntry", "openChange", "openChange"},
 	LayoutOutOfRange:     {"outOfRangeHelp"},

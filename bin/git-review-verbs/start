@@ -467,6 +467,7 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
+	git config "branch.$rb.reviewreadstep" "1"
 	# Recorded even though a step review reads no walkthrough: it still holds
 	# custody of a draft (save/list/forget --saved need the name). See the
 	# whole-mode write below for the full rationale.

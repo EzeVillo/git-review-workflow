@@ -98,6 +98,12 @@ Ejemplo, modo step, commit 2 de 9:
 state	review/feat-x	origin/feat-x	a1b2c3d4e5f6...	step	none	2	9	9	9fe1c0d
 ```
 
+En modo step, el cursor informa el commit que se está leyendo. El registro
+`capability\tstep-checkout` habilita el control **Open checkout**. El cliente
+invoca `workspace checkout --porcelain` con el guard vigente y recibe
+`step-checkout\t<ruta absoluta>`. La CLI decide si devuelve el checkout
+original, uno ya abierto o uno nuevo.
+
 ## Registros `entry` (cero o más, uno por posición de la secuencia o del listado)
 
 ```

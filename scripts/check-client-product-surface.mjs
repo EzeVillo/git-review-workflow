@@ -751,8 +751,13 @@ function extractPanelCalls(src) {
       let label = null;
       let dynamic = false;
       const lit = first.match(/^"([^"]*)"$/) || first.match(/^'([^']*)'$/);
+      const copy = first.match(/^\$\{JSON\.stringify\(([A-Z_]+)\)\}$/);
       if (lit) {
         label = lit[1];
+      } else if (copy) {
+        label = new RegExp(`\\bconst ${copy[1]} = "([^"]*)"`).exec(
+          readText(join(root, "vscode-extension/src/review/userCopy.ts"), "utf8"),
+        )?.[1];
       } else {
         // ternary or expression — harvest string literals inside
         dynamic = true;

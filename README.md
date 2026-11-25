@@ -295,12 +295,15 @@ git config --global http.sslBackend openssl
 
 </details>
 
-## Isolated reviews in the CLI
+## Commit-by-commit reviews
+
+Next and Previous move the reading cursor without changing your files. Choose
+**Open checkout** in the panel or run `git review workspace checkout` to edit
+or test the selected commit.
 
 Add `--workspace ../review-folder` to `git review start` or `git review compare`
-to open a staged diff in its own repository. In commit-by-commit mode, moving
-the reading cursor preserves the open folder. Create a separate checkout to
-edit or test another commit. [See the workspace commands](CLI.md#isolated-review-workspaces).
+to open the review itself in its own repository.
+[See the workspace commands](CLI.md#isolated-review-workspaces).
 
 ## CLI reference
 

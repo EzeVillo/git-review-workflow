@@ -176,9 +176,10 @@ if [ "$mode" = "step" ]; then
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
-	# Bank the edits on the commit we are sitting on, the same way review-next does
-	# before it moves, so the current step's work joins the other banked steps.
+	# The local checkout supplies edits for its original step. Other checked-out
+	# steps supply their edits from their own directories.
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+	review_refresh_step_workspaces || die 'could not capture edits from the step workspaces'
 fi
 
 # Fail custody before capturing the review or reserving the destination.
@@ -217,7 +218,9 @@ if [ "$mode" = "step" ]; then
 	copy_meta reviewstart
 	copy_meta reviewcount
 	copy_meta reviewstep
-	note="on step $step/$count"
+	copy_meta reviewreadstep
+	copy_meta reviewstepworkspaces
+	note="on step $(review_config_get "branch.$cur.reviewreadstep" || printf '%s' "$step")/$count"
 else
 	git config "branch.$saved.reviewsavedlower" "$lower"
 	if [ "$mode" = "walk" ]; then

@@ -4,8 +4,8 @@
 #
 # Turns review-saved/<branch> back into the active review/<branch>, restoring the
 # exact state you left: in whole mode the staged PR diff with your edits in the
-# working tree; in step mode the commit you were on, its edits and every other
-# banked edit, so next/prev keep working as before.
+# working tree; in step mode the original checkout, its edits and the reading
+# cursor, with any isolated checkouts still available at their saved paths.
 #
 set -eu
 
@@ -160,11 +160,16 @@ if [ "$mode" = "step" ]; then
 	count=$_review_config_value
 	review_config_read "branch.$saved.reviewstep"
 	step=$_review_config_value
+	review_config_read "branch.$saved.reviewreadstep" "$step"
+	readstep=$_review_config_value
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
 		die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+	case "$readstep" in ''|*[!0-9]*) die 'invalid saved step reading cursor' ;; esac
+	selected=$(printf '%s\n' "$commits" | sed -n "${readstep}p")
+	[ -n "$selected" ] || die 'saved step reading cursor is outside the review range'
 else
 	review_config_read "branch.$saved.reviewsavedlower"
 	lower=$_review_config_value
@@ -175,10 +180,8 @@ prepare_draft_restore
 comments_transfer "$saved" "$rb" || exit 1
 
 if [ "$mode" = "step" ]; then
-	# Land on the saved step exactly like review-next's goto_step does: hard-reset
-	# to the commit, re-apply its banked edits (temp file, worktree-only — not
-	# --3way/--index, or the edit lands staged and vanishes from git diff),
-	# then soft-reset so the commit's diff is staged and the edit stays unstaged.
+	# Rebuild the original checkout with the commit diff staged and the saved
+	# edits unstaged. External checkouts remain at their registered paths.
 	review_open_branch start "$src" "$cstep"
 	ref="refs/review-saved-edits/$src/$step"
 	if ! git show-ref --verify --quiet "$ref"; then
@@ -198,6 +201,8 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewstart
 	restore_meta reviewcount
 	git config "branch.$rb.reviewstep" "$step"
+	restore_meta reviewreadstep
+	restore_meta reviewstepworkspaces
 else
 	# whole and walk mode: rebuild the pristine review state (PR diff staged at the
 	# lower bound) and replay your edits into the working tree; walk restores its
@@ -263,8 +268,8 @@ if [ "$porcelain" -eq 1 ]; then
 else
 	case "$mode" in
 	step)
-		echo "resumed review of $src — step $step/$count"
-		show_commit "$cstep" "$step" "$count"
+		echo "resumed review of $src — step $readstep/$count"
+		show_commit "$selected" "$readstep" "$count"
 		;;
 	walk)
 		# Report the restored cursor (including the keys-only filter).

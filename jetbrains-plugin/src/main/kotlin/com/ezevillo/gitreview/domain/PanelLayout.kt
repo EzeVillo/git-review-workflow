@@ -30,6 +30,7 @@ enum class ControlId {
     // Body (21)
     OPEN_ENTRY,
     OPEN_CHANGE,
+    OPEN_STEP_CHECKOUT,
     OPEN_ALL_CHANGES,
     SHOW_WHY,
     NEXT,
@@ -87,6 +88,7 @@ enum class ControlId {
             PREPARE_SHARED_COMMENTS -> "prepareSharedComments"
             OPEN_ENTRY -> "openEntry"
             OPEN_CHANGE -> "openChange"
+            OPEN_STEP_CHECKOUT -> "openStepCheckout"
             OPEN_ALL_CHANGES -> "openAllChanges"
             SHOW_WHY -> "showWhy"
             NEXT -> "next"
@@ -540,7 +542,12 @@ private fun identityBar(model: PanelModel, skeleton: Boolean = false): Block.Ide
 
 private fun openRow(model: PanelModel, enabled: Boolean): Block.Row {
     return if (model.mode == ReviewMode.STEP) {
-        Block.Row(listOf(ctrl(ControlId.OPEN_CHANGE, "Diff", Emphasis.SECONDARY, enabled)))
+        Block.Row(buildList {
+            add(ctrl(ControlId.OPEN_CHANGE, "Diff", Emphasis.SECONDARY, enabled))
+            if (model.stepCheckout && !model.navigationLocked) {
+                add(ctrl(ControlId.OPEN_STEP_CHECKOUT, UserCopy.STEP_CHECKOUT_LABEL, Emphasis.SECONDARY, enabled && !model.busy))
+            }
+        })
     } else {
         Block.Row(
             listOf(

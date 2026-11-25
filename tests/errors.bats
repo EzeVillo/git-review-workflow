@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+load helpers/legacy-step
 #
 # State-dependent error and side-effect tests that the per-command files did not
 # already cover: wrong-branch guards, missing metadata, branch-already-exists,
@@ -409,7 +410,7 @@ step_review_two_with_edits() {
 	make_two_commit_feature
 	git review start feature/two --step
 	printf 'a2\nFIXA\n' >a.txt
-	git review next                # bank step 1 (FIXA), now on step 2
+	legacy_review_step next        # bank step 1 (FIXA), now on step 2
 	printf 'b2\nFIXB\n' >b.txt     # current step edit, not yet banked
 }
 
@@ -2132,7 +2133,7 @@ assert_ignored_checkout_blocked() {
 }
 
 # bats test_tags=legacy-git
-@test "step navigation and finish protect ignored paths before banking edits" {
+@test "step navigation leaves ignored paths alone and finish guards its checkout" {
 	ignored_checkout_fixture
 	git switch -q publish-output-removal
 	printf 'tracked again\n' >build-output
@@ -2140,20 +2141,22 @@ assert_ignored_checkout_blocked() {
 	git commit -qm 'track output again'
 	git push -q origin HEAD:feature/x
 	git switch -q develop
-	git review start --step --from before-ignore^ feature/x
-	git review next
+	git review start --step --from before-ignore feature/x
 	printf 'private build output\n' >build-output
 	printf 'reviewer correction\n' >>app.txt
-	assert_ignored_checkout_blocked prev
-	assert_ignored_checkout_blocked next
+	git review next
+	git review prev
 	assert_ignored_checkout_blocked finish
-	[ "$(git config branch.review/feature/x.reviewstep)" = 2 ]
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = 1 ]
+	[ "$(git config branch.review/feature/x.reviewstep)" = 1 ]
 	[ -z "$(git for-each-ref refs/review-edits/feature/x/ refs/review-undo/feature/x/)" ]
 	[ "$(tail -n 1 app.txt)" = 'reviewer correction' ]
-	mv build-output "$TMP/build-output"
 	run git review next
 	[ "$status" -eq 0 ]
-	[ "$(git config branch.review/feature/x.reviewstep)" = 3 ]
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = 2 ]
+	git review workspace checkout "$TMP/step-2"
+	[ "$(cat "$TMP/step-2/build-output")" = 'tracked again' ]
+	[ "$(cat build-output)" = 'private build output' ]
 }
 
 # bats test_tags=legacy-git
@@ -2177,21 +2180,16 @@ assert_ignored_checkout_blocked() {
 	printf 'private output\n' >"$lower"
 	index=$(git write-tree)
 	head=$(git rev-parse HEAD)
-	for verb in next finish; do
-		run --separate-stderr env LC_ALL=C git review "$verb"
-		[ "$status" -eq 1 ]
-		[ "$stderr" = "error: would overwrite an ignored working tree path: $lower" ]
-		[ "$(git config branch.review/feature/x.reviewstep)" = 1 ]
-		[ "$(git rev-parse HEAD)" = "$head" ]
-		[ "$(git write-tree)" = "$index" ]
-		[ "$(cat "$lower")" = 'private output' ]
-		[ -z "$(git for-each-ref refs/review-edits/feature/x/ refs/review-undo/feature/x/)" ]
-	done
-	mv -- "$lower" "$TMP/private-output"
-	run env LC_ALL=C git review next
+	run --separate-stderr env LC_ALL=C git review next
 	[ "$status" -eq 0 ]
-	[ "$(cat "$upper")" = 'PR output' ]
-	[ "$(cat "$TMP/private-output")" = 'private output' ]
+	[ "$stderr" = '' ]
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = 2 ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git write-tree)" = "$index" ]
+	git review workspace checkout "$TMP/step-2"
+	[ "$(cat "$TMP/step-2/$upper")" = 'PR output' ]
+	[ "$(cat "$lower")" = 'private output' ]
+	[ -z "$(git for-each-ref refs/review-edits/feature/x/ refs/review-undo/feature/x/)" ]
 }
 
 # bats test_tags=legacy-git
@@ -2220,18 +2218,18 @@ assert_ignored_checkout_blocked() {
 	printf 'private output\n' >"$long/output"
 	[ -f "$short/output" ] || skip 'the filesystem allocated a different short name'
 	index=$(git write-tree)
-	run --separate-stderr git review next
+	run --separate-stderr git review finish
 	[ "$status" -eq 1 ]
 	[ "$stderr" = "error: would overwrite an ignored working tree path: $long/output" ]
 	[ "$(git config branch.review/feature/x.reviewstep)" = 1 ]
 	[ "$(git write-tree)" = "$index" ]
 	[ "$(cat "$long/output")" = 'private output' ]
 	[ -z "$(git for-each-ref refs/review-edits/feature/x/)" ]
-	mv -- "$long" "$TMP/private-output"
 	run git review next
 	[ "$status" -eq 0 ]
-	[ "$(cat "$short/output")" = 'PR output' ]
-	[ "$(cat "$TMP/private-output/output")" = 'private output' ]
+	git review workspace checkout "$TMP/step-2"
+	[ "$(cat "$TMP/step-2/$short/output")" = 'PR output' ]
+	[ "$(cat "$long/output")" = 'private output' ]
 }
 
 # bats test_tags=legacy-git
@@ -2401,7 +2399,10 @@ EOF
 
 	git review start feature/two --step
 	printf 'a\nb\nc\nP1\nEDIT\n' >app.txt
-	git review next
+	cstep=$(git rev-parse 'feature/two^')
+	git add app.txt
+	edit=$(git commit-tree "$(git write-tree)" -p "$cstep" -m 'legacy edit')
+	git update-ref refs/review-edits/feature/two/1 "$edit"
 	run git review status
 	[ "$status" -eq 0 ]
 	# The exact line, not a loose grep: it has to name step 1 and only step 1,

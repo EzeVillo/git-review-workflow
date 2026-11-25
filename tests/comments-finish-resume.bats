@@ -14,7 +14,8 @@ teardown() { comments_teardown; }
 	printf 'first review correction\n' >>sample.txt
 	run --separate-stderr git review next
 	[ "$status" -eq 0 ]
-	printf 'second review correction\n' >>'other file.txt'
+	git review workspace checkout "$COMMENTS_TMP/second-step"
+	printf 'second review correction\n' >>"$COMMENTS_TMP/second-step/other file.txt"
 	comments_refresh_paths
 	local context=$COMMENTS_CONTEXT
 	cp "$COMMENTS_SHARED" "$COMMENTS_TMP/prepared"

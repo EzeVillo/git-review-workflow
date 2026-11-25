@@ -125,30 +125,35 @@ teardown() {
 
 # ── step mode ─────────────────────────────────────────────────────────────────
 
-@test "preview (step) shows banked and current-step edits together" {
+@test "preview (step) shows edits from both checkouts" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next                 # bank A, now on B (step 2)
-	printf 'b1\nb2\nFIXB\n' >b.txt  # current step edits, not banked
+	git review next
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	printf 'b1\nb2\nFIXB\n' >"$checkout/b.txt"
 	run git review preview
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"+FIXA"* ]]    # banked edit on step 1
-	[[ "$output" == *"+FIXB"* ]]    # uncommitted edit on the current step
+	[[ "$output" == *"+FIXA"* ]]
+	[[ "$output" == *"+FIXB"* ]]
 }
 
 @test "preview (step) does not bank the current step or move the position" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next                 # bank A, now on B (step 2)
-	printf 'b1\nb2\nFIXB\n' >b.txt
+	git review next
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	printf 'b1\nb2\nFIXB\n' >"$checkout/b.txt"
 	git review preview >/dev/null
-	# still on step 2 with B's edit live in the working tree
-	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
-	run git diff
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewstep)" = "1" ]
+	run git -C "$checkout" diff
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"FIXB"* ]]
-	# only A is banked — preview must not have banked the current step
 	run git for-each-ref refs/review-edits/feature/x/
-	[ "$(printf '%s\n' "$output" | grep -c .)" -eq 1 ]
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
 }
 
 # ── 3-way merge (context the PR shifted) ──────────────────────────────────────
@@ -171,7 +176,7 @@ teardown() {
 
 	git review start feature/merge --step            # step 1 (cg1, g.txt = G1..G7)
 	printf 'G1\nG2\nG3\nG4-MINE\nG5\nG6\nG7\n' >g.txt
-	git review next                               # bank step 1, now on step 2 (tip)
+	git review next
 
 	run git review preview
 	[ "$status" -eq 0 ]
@@ -184,8 +189,8 @@ teardown() {
 
 # Build feature/conflict: a PR where commit cf1 touches x.txt and a later commit
 # cf3 changes the same region, so an edit banked on cf1 cannot replay onto the
-# tip — while an edit on cf2 (a different file) can. Leaves the review on step 3
-# with cf2's edit live and cf1's overlapping edit banked. Steps are:
+# tip — while an edit on cf2 (a different file) can. The two edits live in their
+# separate checkout directories. Steps are:
 #   1 cf-base  2 cf1-touch-x  3 cf2-touch-a  4 cf3-change-x
 setup_conflict_pr() {
 	git switch --quiet develop
@@ -207,10 +212,12 @@ setup_conflict_pr() {
 	git switch --quiet develop
 
 	git review start feature/conflict --step   # step 1 (cf-base)
-	git review next                          # step 2 (cf1, x.txt = X0\nX1)
-	printf 'X0\nX1-EDITED\n' >x.txt          # edit that will overlap the tip
-	git review next                          # bank step 2, now step 3 (cf2)
-	printf 'A0\nA1-EDITED\n' >cfa.txt        # edit that applies cleanly onto the tip
+	git review next
+	git review workspace checkout "$BATS_TEST_TMPDIR/cf1"
+	printf 'X0\nX1-EDITED\n' >"$BATS_TEST_TMPDIR/cf1/x.txt"
+	git review next
+	git review workspace checkout "$BATS_TEST_TMPDIR/cf2"
+	printf 'A0\nA1-EDITED\n' >"$BATS_TEST_TMPDIR/cf2/cfa.txt"
 }
 
 @test "preview (step) notes overlapping edits and still shows the rest" {
@@ -276,8 +283,9 @@ setup_conflict_pr() {
 	git review next >/dev/null
 	git review next >/dev/null
 	git review next >/dev/null
-	[ "$(git config branch.review/feature/x.reviewstep)" = "4" ]
-	printf 'd\nFIXD\n' >d.txt
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = "4" ]
+	git review workspace checkout "$BATS_TEST_TMPDIR/step-4"
+	printf 'd\nFIXD\n' >"$BATS_TEST_TMPDIR/step-4/d.txt"
 	run git review preview
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"+FIXD"* ]]

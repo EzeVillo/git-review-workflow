@@ -40,7 +40,8 @@ type StateRecord struct {
 	CurrentSHA  string
 	CurrentPath PathRef
 	// Essential: only in walk.
-	Essential bool
+	Essential    bool
+	StepCheckout bool
 }
 
 // EntryRecord is an `entry` (or `file`) record: position 1-based within its
@@ -168,6 +169,7 @@ func restAfterTab(line string, skip int) (string, bool) {
 func ParsePorcelain(stdout string) (PorcelainResult, bool) {
 	var comparisonBase, comparisonTarget string
 	var comparisonOids []string
+	stepCheckout := false
 	lines := splitLines(stdout)
 
 	var (
@@ -178,6 +180,10 @@ func ParsePorcelain(stdout string) (PorcelainResult, bool) {
 	for _, line := range lines {
 		fields := strings.Split(line, "\t")
 		switch fields[0] {
+		case "capability":
+			if field(fields, 1) == "step-checkout" {
+				stepCheckout = true
+			}
 		case "state":
 			mode, ok := parseReviewMode(field(fields, 4))
 			if !ok {
@@ -295,6 +301,7 @@ func ParsePorcelain(stdout string) (PorcelainResult, bool) {
 	if !haveState {
 		return PorcelainResult{}, false
 	}
+	result.State.StepCheckout = result.State.Mode == ModeStep && stepCheckout
 	if result.Entries == nil {
 		result.Entries = []EntryRecord{}
 	}

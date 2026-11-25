@@ -67,6 +67,7 @@ const NETWORK_MUTATION_VERBS = new Set(["start"]);
 
 export function isContextMutation(verb: string, args: string[]): boolean {
     if (verb === "comments" || verb === "preview" || args.includes("--check") || args.includes("--stdout")) return false;
+    if (verb === "workspace") return args[0] === "checkout";
     if (verb === "config") return args.includes("--unset") || (args.length >= 2 && !args.includes("--porcelain"));
     return LOCAL_MUTATION_VERBS.has(verb) || NETWORK_MUTATION_VERBS.has(verb);
 }

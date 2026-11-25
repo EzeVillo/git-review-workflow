@@ -508,6 +508,7 @@ panel_layout:
       - {block: entry_head}
       - {block: entry_title}
       - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, icon: diff, confirms: false}]}
+      - {block: row, controls: [{id: openStepCheckout, label: "Open checkout", emphasis: secondary, confirms: false}], when: step_checkout}
       - {block: heading, text: "{n} file(s) in this commit"}
       - {block: file_rows}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, icon: prev, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, icon: next, confirms: false}]}

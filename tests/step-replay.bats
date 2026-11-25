@@ -78,7 +78,9 @@ edit_file() {
 	git review start feature/x --step
 	edit_file 's/^L10$/L10-EDIT/' big.txt    # step 1
 	git review next
-	edit_file 's/^L11$/L11-EDIT/' big.txt    # step 2, the line right after
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	edit_file 's/^L11$/L11-EDIT/' "$checkout/big.txt"
 
 	run git review finish
 	[ "$status" -ne 0 ]
@@ -119,7 +121,9 @@ edit_file() {
 	git review start feature/x --step
 	edit_file 's/^L3$/L3-EDIT/' big.txt      # step 1, near the top
 	git review next
-	edit_file 's/^L17$/L17-EDIT/' big.txt    # step 2, far below — different region
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	edit_file 's/^L17$/L17-EDIT/' "$checkout/big.txt"
 
 	run git review finish
 	[ "$status" -eq 0 ]

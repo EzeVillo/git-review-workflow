@@ -521,7 +521,7 @@ trap 'exit 1' 1 2 15
 # inconsistency instead.
 mode="$(git config "branch.$cur.reviewmode" || true)"
 if [ "$mode" != "step" ]; then
-	for k in reviewstart reviewcount reviewstep; do
+	for k in reviewstart reviewcount reviewstep reviewreadstep reviewstepworkspaces; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
 			echo "error: corrupt review metadata: $cur has step-review keys but reviewmode is not 'step'. Discard the review with 'git review abort'." >&2
 			exit 1
@@ -623,8 +623,14 @@ if [ "$resume" -eq 0 ] && [ "$onto" -eq 1 ]; then
 	finish_check_source "$src" "$tip" "$update_source"
 	if [ "$update_source" -eq 1 ]; then review_guard_checkout_paths "$finish_source_head" || exit 1; fi
 fi
+_finish_loaded_step=0
 if [ "$resume" -eq 0 ]; then
 	review_guard_checkout_paths "$tip" || exit 1
+	if [ "$mode" = step ] && [ -n "$(review_config_get "branch.$cur.reviewstepworkspaces" || true)" ]; then
+		load_step_review_meta "$cur"
+		review_refresh_step_workspaces || die 'could not capture edits from the step workspaces'
+		_finish_loaded_step=1
+	fi
 fi
 
 # Only a fresh finish records an undo point; --resume continues the same finish
@@ -638,11 +644,7 @@ fi
 # whole-PR review. With --resume we skip the replay: the working tree already
 # holds the resolved edits.
 if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
-	# Validate and load step metadata (count, step, start, commits) through the
-	# shared helper, reported the same way other step commands do — instead of
-	# defaulting count to 0 (silently discarding every banked edit) or letting a
-	# missing reviewstart kill us under set -e with no message.
-	load_step_review_meta "$cur"
+	if [ "$_finish_loaded_step" -eq 0 ]; then load_step_review_meta "$cur"; fi
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	review_worktree_files stage
 	tree="$(git write-tree)"

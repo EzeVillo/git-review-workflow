@@ -302,16 +302,24 @@ review_config_cursor() {
 		_rcc_rest=${_rcc_rest#?}
 		_rcc_encoded=$_rcc_encoded$(printf '\\0%03o' "$((48 + _rcc_digit))")
 	done
-	_rcc_records=''
+	_rcc_records='' _rcc_found=0
 	while IFS= read -r _rcc_line; do
 		if [ "${_rcc_line%%"$_review_config_tab"*}" = "$_rcc_key" ]; then
 			_rcc_line=$_rcc_key$_review_config_tab$_rcc_encoded
+			_rcc_found=1
 		fi
 		_rcc_records=$_rcc_records$_rcc_line'
 '
 	done <<EOF
 $_review_config_records
 EOF
+	if [ "$_rcc_found" -eq 0 ]; then
+		# Existing sessions acquire new cursor keys on their first move. Read
+		# back Git's ordering so the reply matches the next status guard.
+		review_config_init
+		[ "$_review_config_ready" -eq 1 ]
+		return
+	fi
 	_review_config_records=${_rcc_records%'
 '}
 	_review_config_ready=1
@@ -490,6 +498,9 @@ comments_state() {
 	case "$cm_mode" in
 		step)
 			review_config_read "branch.$cm_branch.reviewstep"
+			cm_cursor=$_review_config_value
+			_cm_step_checkout=$_review_config_value
+			review_config_read "branch.$cm_branch.reviewreadstep" "$cm_cursor"
 			cm_cursor=$_review_config_value
 			review_config_read "branch.$cm_branch.reviewstart"
 			_cm_start=$_review_config_value
@@ -1781,7 +1792,11 @@ comments_capture_location() {
 		if [ "$cm_loc_side" = base ]; then _ccl_selected=$cm_loc_base_path; fi
 		[ -n "$_ccl_selected" ] || { comments_error 'comment side requires a path on the selected side'; return 1; }
 	fi
-	if [ -z "$base" ] && [ -n "$cm_loc_head_path" ] && [ "$cm_loc_side" != base ]; then
+	_ccl_compare_worktree=1
+	if [ "$cm_mode" = step ] && [ "$cm_cursor" != "${_cm_step_checkout:-}" ] && [ -z "$cm_loc_start" ]; then
+		_ccl_compare_worktree=0
+	fi
+	if [ "$_ccl_compare_worktree" -eq 1 ] && [ -z "$base" ] && [ -n "$cm_loc_head_path" ] && [ "$cm_loc_side" != base ]; then
 		_ccl_root=$(git rev-parse --show-toplevel)
 		_ccl_blob=$(git rev-parse --verify "$cm_loc_head:$cm_loc_head_path" 2>/dev/null || true)
 		_ccl_work=$(git hash-object --no-filters -- "$_ccl_root/$cm_loc_head_path" 2>/dev/null || true)
@@ -3798,10 +3813,8 @@ load_step_review_meta() {
 
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
-	# Guard against a step that maps to no commit (hand-edited metadata): otherwise
-	# goto_step's sed yields an empty commit and git rev-parse '^{tree}' crashes
-	# mid-move. grep -c exits 1 on a count of 0, which under set -e would abort
-	# before the diagnostic below — hence || true (walk does the same).
+	# A corrupt step can point outside the range. grep -c returns 1 for an
+	# empty range, so allow the diagnostics below to report it under set -e.
 	total="$(printf '%s\n' "$commits" | grep -c . || true)"
 	case "$count" in
 	*[!0-9]*)
@@ -3825,6 +3838,14 @@ load_step_review_meta() {
 	fi
 	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
 		echo "error: review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'." >&2
+		exit 1
+	fi
+	readstep=$(review_config_get "branch.$cur.reviewreadstep" || printf '%s' "$step")
+	case "$readstep" in
+	''|*[!0-9]*) echo 'error: invalid step reading cursor' >&2; exit 1 ;;
+	esac
+	if [ "$readstep" -lt 1 ] || [ "$readstep" -gt "$total" ]; then
+		echo 'error: step reading cursor is outside the review range' >&2
 		exit 1
 	fi
 }
@@ -3858,63 +3879,112 @@ load_step_texts() {
 	authors="${authors%x}"
 }
 
-# goto_step <target>
-# Move a --step review to step <target>: bank the current commit's edits, reset
-# clean to the target commit, restore the target's previously banked edits (if
-# any), then soft-reset so its diff is staged. Relies on the globals set by
-# load_step_review_meta (cur, src, count, step, commits). On apply failure the
-# working tree is rolled back to the step we left (cursor unchanged) so the
-# session is not left half-moved on the target with the origin already banked.
+# reviewstep names the checked-out commit, including sessions opened by older
+# versions. The reading cursor can move without banking or resetting files.
 goto_step() {
-	_review_config_ready=0
-	target="$1"
-	prev_step="$step"
-	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
-	ctarget="$(printf '%s\n' "$commits" | sed -n "${target}p")"
-	review_guard_checkout_paths "$ctarget" || exit 1
-	review_worktree_files stage
-	tree="$(git write-tree)"
-	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
-		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
-		git update-ref "refs/review-edits/$src/$step" "$edit"
-	else
-		# Reverting the step back to a clean tree must clear any edits we banked
-		# earlier, or they resurrect on the next visit / at git review finish.
-		git update-ref -d "refs/review-edits/$src/$step" 2>/dev/null || true
-	fi
-	review_checkout_tree "$ctarget" reset -q --hard "$ctarget"
-	ref="refs/review-edits/$src/$target"
-	if git rev-parse --verify --quiet "$ref" >/dev/null; then
-		# No --3way here: it implies --index and would leave banked edits staged,
-		# so git diff (unstaged) goes empty and the step UI/tests lose the edit.
-		# Temp-file apply still keeps binary hunks intact.
-		if ! apply_review_patch "${ref}^" "$ref"; then
-			echo "error: could not restore banked edits for step $target" >&2
-			# Roll back: hard-reset to the origin step and re-apply its bank.
-			review_guard_checkout_paths "$cstep" || exit 1
-			review_checkout_tree "$cstep" reset -q --hard "$cstep"
-			pref="refs/review-edits/$src/$prev_step"
-			if git rev-parse --verify --quiet "$pref" >/dev/null; then
-				apply_review_patch "${pref}^" "$pref" || true
-			fi
-			git reset -q --soft "$cstep^"
-			exit 1
-		fi
-	fi
-	git reset -q --soft "$ctarget^"
+	readstep=$1
 	if [ "${2:-0}" -eq 1 ]; then
-		# Code/index/ref writes above did not change branch metadata. Resume
-		# that snapshot only for this final cursor write and its reply.
-		_review_config_ready=1
-		review_config_cursor "branch.$cur.reviewstep" "$target"
-		step=$target
-		_review_head=$(git rev-parse HEAD)
+		review_config_cursor "branch.$cur.reviewreadstep" "$readstep"
 	else
-		git config "branch.$cur.reviewstep" "$target"
-		show_commit "$ctarget" "$target" "$count"
+		git config "branch.$cur.reviewreadstep" "$readstep"
+		_rgs_commit=$(printf '%s\n' "$commits" | sed -n "${readstep}p")
+		show_commit "$_rgs_commit" "$readstep" "$count" 'Use git review workspace checkout to open this commit in a checkout.'
 	fi
 }
 
+# The registry follows the review through Save/Continue. Each checkout has
+# its own gitdir and proves which session and materialized commit it belongs to.
+review_step_workspace_registry() {
+	_review_step_workspace_id=$(review_config_get "branch.$cur.reviewstepworkspaces" || true)
+	_review_step_workspace_registry=''
+	[ -n "$_review_step_workspace_id" ] || return 0
+	case "$_review_step_workspace_id" in
+	*[!a-zA-Z0-9.]*|.|..) echo 'error: invalid step workspace session' >&2; return 1 ;;
+	step.*) ;;
+	*) echo 'error: invalid step workspace session' >&2; return 1 ;;
+	esac
+	_rsw_common=$(git rev-parse --git-common-dir) || return 1
+	_rsw_common=$(CDPATH='' cd -- "$_rsw_common" && pwd -P) || return 1
+	_review_step_workspace_registry="$_rsw_common/review-step-workspaces/$_review_step_workspace_id"
+}
+
+review_step_workspace_path() {
+	[ -n "$_review_step_workspace_registry" ] || return 0
+	[ -d "$_review_step_workspace_registry" ] || {
+		echo 'error: step workspace records are missing' >&2
+		return 1
+	}
+	if [ -f "$_review_step_workspace_registry/paths" ]; then
+		git config --file "$_review_step_workspace_registry/paths" --get "step.s$1.path" || [ "$?" -eq 1 ]
+	fi
+}
+
+review_enter_step_workspace() {
+	review_enter_nested_worktree "$1" || return 1
+	if [ "$(git rev-parse --show-prefix)" != '' ] ||
+		[ "$(git config --local --get reviewworkspace.session || true)" != "$_review_step_workspace_id" ] ||
+		[ "$(git rev-parse --verify --quiet refs/review-workspace/materialized)" != "$2" ]; then
+		printf 'error: could not verify step workspace at %s\n' "$1" >&2
+		return 1
+	fi
+}
+
+# Snapshot external edits without writing either live index. Only objects
+# absent from the baseline step are packed back into the review repository.
+review_step_workspace_edit() (
+	_rswe_path=$1 _rswe_commit=$2
+	_rswe_gitdir=$(git rev-parse --absolute-git-dir) || exit 1
+	_rswe_pack=$(mktemp "$_rswe_gitdir/step-edit.XXXXXX") || exit 1
+	trap 'rm -f "$_rswe_pack"' 0
+	_rswe_oid=$(
+		review_enter_step_workspace "$_rswe_path" "$_rswe_commit" || exit 1
+		_rswe_tree=$(review_snapshot_worktree) || exit 1
+		_rswe_baseline=$(git rev-parse "$_rswe_commit^{tree}") || exit 1
+		[ "$_rswe_tree" != "$_rswe_baseline" ] || exit 0
+		_rswe_snapshot=$(git -c user.name='git review' -c user.email=workspace@localhost -c commit.gpgSign=false \
+			commit-tree "$_rswe_tree" -p "$_rswe_commit" -m 'step workspace edits') || exit 1
+		printf '%s\n^%s\n' "$_rswe_snapshot" "$_rswe_commit" |
+			git pack-objects --revs --stdout >"$_rswe_pack" || exit 1
+		printf '%s\n' "$_rswe_snapshot"
+	) || exit 1
+	if [ -n "$_rswe_oid" ]; then
+		git index-pack --stdin <"$_rswe_pack" >/dev/null || exit 1
+		printf '%s\n' "$_rswe_oid"
+	fi
+)
+
+review_refresh_step_workspaces() (
+	review_step_workspace_registry || exit 1
+	[ -n "$_review_step_workspace_registry" ] || exit 0
+	[ -d "$_review_step_workspace_registry" ] || {
+		echo 'error: step workspace records are missing' >&2
+		exit 1
+	}
+	_rsrf_registry=$_review_step_workspace_registry/paths
+	[ -f "$_rsrf_registry" ] || exit 0
+	_rsrf_keys=$(git config --file "$_rsrf_registry" --name-only --get-regexp '^step\.s[0-9]+\.path$' || [ "$?" -eq 1 ]) || exit 1
+	[ -n "$_rsrf_keys" ] || exit 0
+	_rsrf_changes=$(
+		while IFS= read -r _rsrf_key; do
+			_rsrf_index=${_rsrf_key#step.s}
+			_rsrf_index=${_rsrf_index%.path}
+			_rsrf_commit=$(printf '%s\n' "$commits" | sed -n "${_rsrf_index}p") || exit 1
+			[ -n "$_rsrf_commit" ] || exit 1
+			_rsrf_path=$(review_step_workspace_path "$_rsrf_index") || exit 1
+			[ -n "$_rsrf_path" ] || continue
+			_rsrf_edit=$(review_step_workspace_edit "$_rsrf_path" "$_rsrf_commit") || exit 1
+			_rsrf_ref=refs/review-edits/$src/$_rsrf_index
+			if [ -n "$_rsrf_edit" ]; then
+				printf 'update %s %s\n' "$_rsrf_ref" "$_rsrf_edit"
+			else
+				printf 'delete %s\n' "$_rsrf_ref"
+			fi
+		done <<EOF
+$_rsrf_keys
+EOF
+	) || exit 1
+	if [ -n "$_rsrf_changes" ]; then printf '%s\n' "$_rsrf_changes" | git update-ref --stdin; fi
+)
 # ── Walkthrough (walk) mode helpers ───────────────────────────────────────────
 #
 # A walkthrough is a guided reading order over a PR, authored as a committed
@@ -7265,8 +7335,9 @@ review_status_porcelain() {
 		# match a whole line: without the trailing newline in the pattern, step 1
 		# would match refs/review-edits/<src>/10 and report edits it does not have.
 		banked_refs="$nl$(git for-each-ref --format='%(refname)' "refs/review-edits/$src/")$nl"
-		pcurrent="$(printf '%s' "$shorts" | sed -n "${step}p")"
-		porcelain_row state "$cur" "$src" "$tip" step none "$step" "$total" "$count" "$pcurrent"
+		pcurrent="$(printf '%s' "$shorts" | sed -n "${readstep}p")"
+		porcelain_row state "$cur" "$src" "$tip" step none "$readstep" "$total" "$count" "$pcurrent"
+		porcelain_row capability step-checkout
 		printf '%s' "$shorts" | { i=1; while IFS= read -r ish; do
 			banked=0
 			case "$banked_refs" in
@@ -7303,7 +7374,7 @@ review_status_porcelain() {
 		# Full SHA from `commits` (load_step_review_meta), not the short pcurrent:
 		# same object, one less rev-parse, and independent of core.abbrev.
 		i=1
-		pfull="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+		pfull="$(printf '%s\n' "$commits" | sed -n "${readstep}p")"
 		commit_files "$pfull" | while IFS= read -r pfile; do
 			[ -n "$pfile" ] || continue
 			porcelain_row file "$i" "$pfile"
@@ -7624,6 +7695,7 @@ describe() {
 	if [ "$mode" = "step" ]; then
 		count="$(review_config_get "branch.$_rl_branch.reviewcount" || echo '?')"
 		step="$(review_config_get "branch.$_rl_branch.reviewstep" || echo '?')"
+		step="$(review_config_get "branch.$_rl_branch.reviewreadstep" || printf '%s' "$step")"
 		printf '%s %s  %sstep%s [%s/%s]  tip %s\n' "$label" "$_rl_branch" "$prefix" "$draft_note" "$step" "$count" "$shorttip"
 	elif [ "$mode" = "walk" ]; then
 		count="$(review_config_get "branch.$_rl_branch.reviewwalkcount" || echo '?')"
@@ -7652,6 +7724,8 @@ describe_porcelain() {
 		case "$pmode" in
 		step)
 			review_config_read "branch.$pb.reviewstep"
+			pposition=$_review_config_value
+			review_config_read "branch.$pb.reviewreadstep" "$pposition"
 			pposition=$_review_config_value
 			review_config_read "branch.$pb.reviewcount"
 			ptotal=$_review_config_value

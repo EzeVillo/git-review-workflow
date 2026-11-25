@@ -52,6 +52,7 @@ data class StateRecord(
     /** Short SHA (step) or [PathRef] (walk). */
     val current: Any? = null,
     val essential: Boolean? = null,
+    val stepCheckout: Boolean = false,
 )
 
 data class EntryRecord(
@@ -198,10 +199,12 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     var isKeysOnly: Boolean? = null
     var isDraft: Boolean? = null
     var draftPath: String? = null
+    var stepCheckout = false
 
     for (line in lines) {
         val fields = line.split("\t")
         when (fields[0]) {
+            "capability" -> if (fields.getOrNull(1) == "step-checkout") stepCheckout = true
             "state" -> {
                 val mode = ReviewMode.parse(fields.getOrNull(4))
                     ?: throw IllegalArgumentException(
@@ -304,7 +307,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
 
     val st = state ?: throw IllegalArgumentException("porcelain output has no state record")
     return PorcelainResult(
-        state = st,
+        state = st.copy(stepCheckout = st.mode == ReviewMode.STEP && stepCheckout),
         entries = entries,
         files = files,
         finish = finish,

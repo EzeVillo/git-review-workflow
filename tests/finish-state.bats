@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+load helpers/legacy-step
 #
 # Tests for the `finish` porcelain record (contracts/finish-state.md): the two
 # states a `git review finish` can leave unresolved once it starts a closure.
@@ -79,9 +80,9 @@ setup_conflict_pr() {
 	git switch --quiet develop
 
 	git review start feature/conflict --step # step 1 (cf-base)
-	git review next                          # step 2 (cf1, x.txt = X0\nX1)
+	legacy_review_step next                          # step 2 (cf1, x.txt = X0\nX1)
 	printf '%bX0\nX1-EDITED\n' "$binary_prefix" >x.txt  # edit that will overlap the tip
-	git review next                          # bank step 2, now step 3 (cf2)
+	legacy_review_step next                          # bank step 2, now step 3 (cf2)
 	printf 'A0\nA1-EDITED\n' >cfa.txt         # edit that applies cleanly onto the tip
 }
 
@@ -289,7 +290,7 @@ setup_conflict_pr() {
 	git switch --quiet develop
 
 	git review start feature/step --step >/dev/null
-	git review next >/dev/null
+	legacy_review_step next >/dev/null
 	printf 'EDIT\n' >>a.txt
 	run git review finish
 	[ "$status" -eq 0 ]
@@ -325,7 +326,7 @@ setup_conflict_pr() {
 	git switch --quiet develop
 
 	git review start feature/step2 --step >/dev/null
-	git review next >/dev/null
+	legacy_review_step next >/dev/null
 	printf 'EDIT\n' >>a.txt
 	run git review finish
 	[ "$status" -eq 0 ]

@@ -102,7 +102,7 @@ teardown() { comments_teardown; }
 	git-review comments add --document local --text 'New body from the old cursor.' >"$COMMENTS_TMP/writer.out" 2>"$COMMENTS_TMP/writer.err" &
 	local writer=$!
 	comments_barrier_arrived "$COMMENTS_TMP/inject"
-	git config branch.review/feature/comments.reviewstep 2
+	git config branch.review/feature/comments.reviewreadstep 2
 	comments_barrier_resume "$COMMENTS_TMP/inject"
 	local writer_status=0
 	wait "$writer" || writer_status=$?

@@ -2,8 +2,7 @@
 #
 # git review prev — step a commit-by-commit review back to the previous commit.
 #
-# Like git review next but backwards: banks the current commit's edits and
-# restores any banked on the previous one, so you can revisit and keep editing.
+# Like git review next but backwards. Editable files stay in their checkout.
 #
 set -eu
 
@@ -13,8 +12,7 @@ usage() {
 	cat <<EOF
 usage: $prog [--porcelain]
 
-Go back to the previous commit of a commit-by-commit review. Your edits are
-remembered in both directions.
+Go back in a commit-by-commit review or walkthrough without changing the checkout.
 EOF
 }
 
@@ -48,8 +46,8 @@ walk)
 	;;
 step)
 	load_step_review_meta "$cur"
-	if [ "$step" -gt 1 ]; then
-		goto_step "$((step - 1))" "$porcelain"
+	if [ "$readstep" -gt 1 ]; then
+		goto_step "$((readstep - 1))" "$porcelain"
 	else
 		if [ "$porcelain" -eq 1 ]; then _navigation_notice="already at the first commit"
 		else echo "already at the first commit"; fi

@@ -11,6 +11,7 @@ import {
     gitReviewOrThrow,
     sharedFixtureRepo,
     startReview,
+    stepCheckout,
     writeFile,
 } from "./helpers/fixture";
 
@@ -167,7 +168,8 @@ describe("US5 (005): dejar la review a un lado", function () {
         // Edicion en el paso 1, avanzar, edicion en el paso 2 — dos pasos con trabajo.
         writeFile(repo, "src/s1.ts", "s1\nFIX-STEP-1\n");
         gitReviewOrThrow(["next"], repo.dir);
-        writeFile(repo, "src/s2.ts", "s2\nFIX-STEP-2\n");
+        const checkout = stepCheckout(repo);
+        writeFile(checkout, "src/s2.ts", "s2\nFIX-STEP-2\n");
 
         state = await api.refresh();
         assert.strictEqual(state.state?.position, 2);
@@ -201,8 +203,8 @@ describe("US5 (005): dejar la review a un lado", function () {
         assert.strictEqual(state.state?.position, 2, "retoma en el mismo paso");
         assert.strictEqual(headBranch(repo), `review/${branch}`);
 
-        // Edicion del paso actual (2) vuelve al working tree.
-        const diff = git(["diff", "HEAD"], repo.dir);
+        assert.deepStrictEqual(stepCheckout(repo), checkout);
+        const diff = git(["diff", "HEAD"], checkout.dir);
         assert.ok(diff.includes("FIX-STEP-2"), "la edicion del paso actual tiene que volver");
 
         // Edicion del paso 1 sigue banqueada (no se perdio al pausar).

@@ -198,6 +198,7 @@ export interface PanelGuide {
  * borra), para que se construya y se pruebe sin un editor.
  */
 export interface PanelModel {
+    stepCheckout?: true;
     commentTarget?: string;
     comments?: CommentsReport;
     situation: Situation;
@@ -749,6 +750,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     // Step: inventario del commit bajo el cursor (registros `file`), no de la
     // secuencia de commits. Misma marca lastOpened que whole, validada acá.
     if (review.mode === "step") {
+        if (review.stepCheckout) base.stepCheckout = true;
         base.files = (state.files ?? []).map((file) => toPanelEntry(file));
         if (inputs.lastOpened !== undefined && base.files.some((file) => file.display === inputs.lastOpened)) {
             base.lastOpened = inputs.lastOpened;

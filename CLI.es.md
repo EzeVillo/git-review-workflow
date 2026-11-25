@@ -408,12 +408,11 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   cuando no hay review registrada para usar `--delta`, o para elegir un punto de
   inicio exacto. Mutuamente excluyente con `--delta`.
 - `--step` — revisar el rango **de a un commit por vez** (combinalo con `--delta`
-  o `--from` para recorrer solo esos commits). Arrancás en el primer commit
-  después del merge-base y el comando imprime el mensaje del autor. Editás y
-  corrés `git review next` para bancar tus cambios y pasar al siguiente commit
-  con el árbol limpio. Cuando se acaban los commits, corrés `git review finish` y
-  todas tus ediciones bancadas se re-aplican sobre el tip del PR — igual que en
-  una review completa.
+  o `--from` para recorrer solo esos commits). El diff del primero queda staged.
+  `git review next` y `prev` mueven el cursor de lectura. Para editar o probar
+  otro commit, corré `git review workspace checkout` o elegí **Open checkout**
+  en el panel. Finish recoge las ediciones de la review original y de los
+  checkouts que abriste.
 - **Modo walk (automático).** Si el PR trae un walkthrough
   (`.review/walkthrough.md`, escrito por el autor con
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` entra
@@ -823,11 +822,15 @@ ahí produce prosa segura sobre el código viejo, sin que nada falle para avisar
 <details>
 <summary><code>git review next</code> / <code>git review prev</code></summary>
 
-Mueven una review `--step` o walkthrough para adelante o para atrás. En modo
-`--step` cada movimiento banca las ediciones del commit actual y restaura las que
-tenías bancadas en el commit al que vas, así podés ir y venir sin perder trabajo.
-En modo walk solo mueven el cursor de lectura — tus ediciones viven en el working
-tree todo el tiempo y nunca se tocan.
+Mueven el cursor de lectura de una review `--step` o walkthrough. El HEAD,
+el índice y los archivos quedan en su lugar. En step, `git review workspace
+checkout [<directorio-nuevo>]` devuelve la carpeta del commit seleccionado.
+Devuelve el checkout original para el commit que ya está staged ahí y vuelve
+a abrir cualquier carpeta creada antes para el commit seleccionado. La
+ubicación por defecto para una carpeta nueva está bajo
+`${XDG_STATE_HOME:-$HOME/.local/state}/git-review/workspaces`. Corré `preview`,
+`save` o `finish` desde el checkout original de la review para incluir las
+ediciones de esas carpetas. Las carpetas quedan disponibles al cerrar la review.
 
 </details>
 
@@ -1029,8 +1032,8 @@ que empezaste, llevándose todo lo necesario para retomar justo donde lo dejaste
 - En modo PR completo, el diff del PR staged y tus ediciones sin commitear.
 - En modo walk, lo mismo, más el cursor de lectura — `git review continue` te deja
   de vuelta en la entrada exacta en la que estabas.
-- En modo `--step`, el commit en el que estás, sus ediciones y todas las
-  ediciones que tengas bancadas en los otros commits. Los refs de ediciones se
+- En modo `--step`, la posición de lectura, las ediciones de la carpeta original
+  y una copia de las ediciones de cada carpeta abierta. Las refs de ediciones se
   mueven de `refs/review-edits/` (que `git review clean` poda) a
   `refs/review-saved-edits/`, así un `git review clean` nunca toca una review
   guardada.
@@ -1200,8 +1203,9 @@ directo a editar donde lo dejaste. Pensalo como "¿qué me daría `finish` ahora
 mismo?".
 
 - `--stat` — muestra un resumen tipo diffstat en lugar del diff completo.
-- En modo `--step` re-aplica las ediciones del commit actual más cada edición
-  bancada sobre el tip, igual que `finish`. Una edición que choca de verdad con el
+- En modo `--step` reaplica las ediciones de la carpeta original, las carpetas de
+  los pasos que abriste y las ediciones bancadas de sesiones anteriores sobre el tip,
+  igual que `finish`. Una edición que choca con el
   tip es el único caso que difiere: un preview de solo lectura no puede dejarte
   marcadores de conflicto, así que omite esa edición e imprime una nota
   apuntándote a `finish`.
@@ -1419,8 +1423,8 @@ git review start feature/login --delta --step  # ...y recorrerlos de a uno
 
 # O recorrer el PR commit por commit desde el principio:
 git review start feature/login --step        # arrancar en el primer commit
-# ...editar, y después...
-git review next                              # bancar cambios, pasar al siguiente
+git review next                              # leer el siguiente commit
+git review workspace checkout                # abrir su carpeta editable cuando haga falta
 git review next                              # ...hasta "no more commits"
 git review finish                            # re-aplicar todos tus cambios sobre el tip
 

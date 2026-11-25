@@ -199,13 +199,8 @@ public class PanelLayoutInvariantsTests
     {
         Assert.Equal(new[] { "primary", "secondary", "link", "icon" },
             Enum.GetValues<Emphasis>().Select(e => e.Id()));
-        // 36 ids: 31 body plus the 5 title-bar ones. The body count grew by the
-        // draft block's four, the guide block's three, the walkthrough row's two
-        // and the fixes section's two (per-row discard plus the section's bulk
-        // discard) — controls of a ROW or of the SECTION, not product actions:
-        // the canonical's actions: matrix is still 26 for this client.
-        Assert.Equal(45, Enum.GetValues<ControlId>().Length);
-        Assert.Equal(45, Enum.GetValues<ControlId>().Select(id => id.Wire()).Distinct().Count());
+        Assert.Equal(46, Enum.GetValues<ControlId>().Length);
+        Assert.Equal(46, Enum.GetValues<ControlId>().Select(id => id.Wire()).Distinct().Count());
     }
 
     /// <summary>

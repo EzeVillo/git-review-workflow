@@ -167,8 +167,9 @@ teardown() {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
 	git review next
-	printf 'b1\nb2\nFIXB\n' >b.txt
-	# save from step 2 (B) with B's edits still in the working tree
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	printf 'b1\nb2\nFIXB\n' >"$checkout/b.txt"
 	run git review save
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
@@ -180,46 +181,53 @@ teardown() {
 	[ "$(printf '%s\n' "$output" | grep -c .)" -eq 2 ]
 }
 
-@test "continue (step) drops back on the same commit with its edits restored" {
+@test "continue (step) restores the cursor and reopens its edited checkout" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
 	git review next
-	printf 'b1\nb2\nFIXB\n' >b.txt
+	checkout="$BATS_TEST_TMPDIR/step-2"
+	git review workspace checkout "$checkout"
+	printf 'b1\nb2\nFIXB\n' >"$checkout/b.txt"
 	git review save
 	run git review continue feature/x
 	[ "$status" -eq 0 ]
-	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = "2" ]
 	[[ "$output" == *"[2/4]"* ]]
 	[[ "$output" == *"c2-touch-b"* ]]
-	# B's edit is back in the working tree
-	run git diff
+	[ "$(git review workspace checkout)" = "$(git -C "$checkout" rev-parse --show-toplevel)" ]
+	run git -C "$checkout" diff
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"FIXB"* ]]
 }
 
 @test "save/continue (step) keep edits banked on a commit ahead of the saved step" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next          # bank A, now on B (step 2)
-	printf 'b1\nb2\nFIXB\n' >b.txt
-	git review next          # bank B, now on C (step 3)
+	git review next
+	git review workspace checkout "$BATS_TEST_TMPDIR/step-2"
+	printf 'b1\nb2\nFIXB\n' >"$BATS_TEST_TMPDIR/step-2/b.txt"
+	git review next
 	git review next          # now on D (step 4)
-	printf 'd\nFIXD\n' >d.txt
-	git review prev          # bank D, now on C (step 3)
-	git review prev          # now on B (step 2) — D already edited and banked ahead
+	git review workspace checkout "$BATS_TEST_TMPDIR/step-4"
+	printf 'd\nFIXD\n' >"$BATS_TEST_TMPDIR/step-4/d.txt"
+	git review prev
+	git review prev
 
-	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = "2" ]
 	git review save
 	# all three banked edits (A, B, D) travelled into the saved namespace
 	run git for-each-ref refs/review-saved-edits/feature/x/
 	[ "$(printf '%s\n' "$output" | grep -c .)" -eq 3 ]
 
 	git review continue feature/x
-	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = "2" ]
 	# step back forward to D; its edit must still be there
 	git review next          # to C
 	run git review next      # to D
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"[4/4]"* ]]
-	run git diff
+	run git -C "$BATS_TEST_TMPDIR/step-4" diff
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"FIXD"* ]]
 	# finish replays A, B and D onto the tip
 	git review finish

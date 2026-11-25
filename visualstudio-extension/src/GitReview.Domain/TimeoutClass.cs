@@ -18,7 +18,7 @@ public static class TimeoutClass
     private static readonly HashSet<string> LocalMutationVerbs = new(StringComparer.Ordinal)
     {
         "finish", "save", "abort", "continue", "next", "prev",
-        "clean", "forget", "compare", "walkthrough", "preview",
+        "clean", "forget", "compare", "walkthrough", "preview", "workspace",
     };
 
     private static readonly HashSet<string> NetworkMutationVerbs = new(StringComparer.Ordinal)

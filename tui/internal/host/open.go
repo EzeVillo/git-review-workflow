@@ -170,3 +170,10 @@ func OpenURLCmd(url string) *exec.Cmd {
 		return exec.Command("xdg-open", url)
 	}
 }
+
+func OpenDirectoryCmd(path string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("explorer.exe", path)
+	}
+	return OpenURLCmd(path)
+}

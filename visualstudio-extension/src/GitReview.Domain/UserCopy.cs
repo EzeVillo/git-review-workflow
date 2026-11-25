@@ -8,6 +8,8 @@ public sealed record UnopenedDraft(string? File);
 /// </summary>
 public static class UserCopy
 {
+    public const string StepCheckoutLabel = "Open checkout";
+    public const string StepCheckoutFailed = "Could not open the checkout for this commit.";
     public const string FinishDestinationsPrompt = "Choose a destination for your review changes";
     public const string FinishDestinationsFailed = "Could not read the available finish destinations.";
     public const string FinishLocationCreate = "Create PR branch and apply changes";

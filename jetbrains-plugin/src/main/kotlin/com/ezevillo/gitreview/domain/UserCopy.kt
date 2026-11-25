@@ -7,6 +7,9 @@ package com.ezevillo.gitreview.domain
  * housekeeping confirm copy so both clients read the same language.
  */
 object UserCopy {
+    const val STEP_CHECKOUT_LABEL = "Open checkout"
+    const val STEP_CHECKOUT_PROGRESS = "Preparing checkout…"
+    const val STEP_CHECKOUT_FAILED = "Could not open the checkout for this commit."
     const val FINISH_DESTINATIONS_PROMPT = "Choose a destination for your review changes"
     const val FINISH_DESTINATIONS_FAILED = "Could not read the available finish destinations."
     const val FINISH_LOCATION_CREATE = "Create PR branch and apply changes"

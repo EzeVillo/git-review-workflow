@@ -119,6 +119,15 @@ export interface FixtureRepo {
     gitReviewPath: string;
 }
 
+export function stepCheckout(repo: FixtureRepo): FixtureRepo {
+    const record = gitReviewOrThrow(["workspace", "checkout", "--porcelain"], repo.dir).stdout.trimEnd();
+    const prefix = "step-checkout\t";
+    if (!record.startsWith(prefix)) {
+        throw new Error(`Expected a step checkout path, received ${record}`);
+    }
+    return {...repo, dir: record.slice(prefix.length)};
+}
+
 /** Un repo git limpio, con `main` como rama base y `reviewworkflow.base` fijado. */
 export function createTempRepo(): FixtureRepo {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "grv-fixture-"));

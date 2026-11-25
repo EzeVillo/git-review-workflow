@@ -31,10 +31,11 @@ teardown() { comments_teardown; }
 	[ "$status" -eq 0 ]
 	[ "$stderr" = '' ]
 	[ "$(printf '%s\n' "$output" | awk -F '\t' '$1=="comment-blob" {print $3 "\t" $4}')" = $'base\tabsent\nhead\tpresent' ]
-	local edit
-	edit=$(git rev-parse refs/review-edits/feature/comments/1)
-	[ "$(git diff --name-only "$edit^" "$edit")" = sample.txt ]
-	run --separate-stderr git grep -F 'Private first step.' "$edit" --
+	run --separate-stderr git review preview
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'+reviewer code edit'* ]]
+	[[ "$output" != *'Private first step.'* ]]
+	run --separate-stderr git grep -F 'Private first step.' --
 	[ "$status" -eq 1 ]
 	[ "$output" = '' ]
 	[ "$stderr" = '' ]

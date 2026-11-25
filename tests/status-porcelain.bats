@@ -542,9 +542,11 @@ setup_finish_conflict() {
 
 	git review start feature/conflict --step
 	git review next
-	printf 'X0\nX1-EDITED\n' >x.txt
+	git review workspace checkout "$BATS_TEST_TMPDIR/cf1"
+	printf 'X0\nX1-EDITED\n' >"$BATS_TEST_TMPDIR/cf1/x.txt"
 	git review next
-	printf 'A0\nA1-EDITED\n' >cfa.txt
+	git review workspace checkout "$BATS_TEST_TMPDIR/cf2"
+	printf 'A0\nA1-EDITED\n' >"$BATS_TEST_TMPDIR/cf2/cfa.txt"
 }
 
 @test "status --porcelain emits a finish conflict record, onto 0, while a stopped finish blocks the review branch" {
@@ -607,8 +609,8 @@ setup_finish_conflict() {
 		[ "$status" -eq 0 ]
 		n=$((n + 1))
 	done
-	# Edit step 11 and step back, which banks it and leaves the cursor on 10.
-	printf 'edit\n' >>m.txt
+	# Add a saved bank from an older session, then read a different step.
+	git update-ref refs/review-edits/feature/many/11 "$(git rev-parse feature/many)"
 	run git review prev
 	[ "$status" -eq 0 ]
 

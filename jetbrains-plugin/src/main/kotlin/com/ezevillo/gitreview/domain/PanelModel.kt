@@ -203,6 +203,7 @@ data class PanelModel(
     val atFirst: Boolean = false,
     val atLast: Boolean = false,
     val navigationLocked: Boolean = false,
+    val stepCheckout: Boolean = false,
     val degraded: Boolean = false,
     val readonly: Boolean = false,
     val keysOnly: Boolean = false,
@@ -522,6 +523,7 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
 
     model = model.copy(
         mode = review.mode,
+        stepCheckout = review.stepCheckout,
         branch = review.branch,
         source = review.source,
         tip = review.tip,

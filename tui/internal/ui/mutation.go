@@ -214,20 +214,21 @@ func flattenStderr(stderr string) string {
 // any stderr at all (FR-024's "los fallbacks de error dicen qué no pasó, no
 // qué comando falló" — with stderr present, nothing here is ever touched).
 var genericFailureText = map[string]string{
-	"compareReview":  domain.CompareFailed,
-	"finishReview":   "Could not finish the review.",
-	"undoFinish":     "Could not undo the finish.",
-	"resumeFinish":   "Could not continue the finish.",
-	"abortReview":    "Could not cancel the review.",
-	"saveReview":     "Could not save the review for later.",
-	"continueReview": "Could not resume the review.",
-	"setBase":        "Could not change the base branch.",
-	"setRemote":      "Could not change the remote.",
-	"next":           "Could not move to the next entry.",
-	"prev":           "Could not move to the previous entry.",
-	"startReview":    "Could not start the review.",
-	"startFromDraft": "Could not start the review.",
-	"draftFlow":      "Could not prepare the reading order.",
+	"compareReview":    domain.CompareFailed,
+	"finishReview":     "Could not finish the review.",
+	"undoFinish":       "Could not undo the finish.",
+	"resumeFinish":     "Could not continue the finish.",
+	"abortReview":      "Could not cancel the review.",
+	"saveReview":       "Could not save the review for later.",
+	"continueReview":   "Could not resume the review.",
+	"setBase":          "Could not change the base branch.",
+	"setRemote":        "Could not change the remote.",
+	"next":             "Could not move to the next entry.",
+	"prev":             "Could not move to the previous entry.",
+	"startReview":      "Could not start the review.",
+	"startFromDraft":   "Could not start the review.",
+	"draftFlow":        "Could not prepare the reading order.",
+	"openStepCheckout": domain.StepCheckoutFailed,
 }
 
 func failureMessage(action string, r host.Result) string {
@@ -343,6 +344,16 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 		m = m.clearActivity(msg.activityGeneration)
 	}
 	gen := m.lock.End()
+	if msg.action == "openStepCheckout" && !mutationFailed(msg.result) {
+		line, _, _ := strings.Cut(msg.result.Stdout, "\n")
+		if path, ok := strings.CutPrefix(strings.TrimSuffix(line, "\r"), "step-checkout\t"); ok && path != "" {
+			m2, read := m.scheduleRead()
+			return m2, tea.Batch(read, execCmdWithCompletion(host.OpenDirectoryCmd(path), path), silenceWindowCmd(gen))
+		}
+		m.statusLine = domain.StepCheckoutFailed
+		m2, read := m.scheduleRead()
+		return m2, tea.Batch(read, silenceWindowCmd(gen))
+	}
 	if msg.action == "deleteCommentEntry" && m.commentsBrowser != nil {
 		m.pendingFinish = nil
 		b := m.commentsBrowser
@@ -493,6 +504,14 @@ func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.
 		return m.beginOpenEntry()
 	case "openChange":
 		return m.beginOpenChange()
+	case "openStepCheckout":
+		if m.Panel.Situation != domain.SituationReview || !m.Panel.StepCheckout {
+			return m, nil
+		}
+		return m.beginMutation(mutationRequest{
+			action: string(id), progressText: domain.StepCheckoutProgress,
+			argv: &domain.Argv{Verb: "workspace", Args: []string{"checkout", "--porcelain"}},
+		}, currentStateToken(m.Panel))
 	case "showWhy":
 		return m.beginShowWhy(variant)
 	case "outOfRangeHelp":

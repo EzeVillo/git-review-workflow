@@ -74,7 +74,8 @@ teardown() {
 @test "review clean drops orphaned edit refs when no review branches remain" {
 	git review start feature/x --step
 	printf 'edited\n' >f.txt
-	git review next
+	git add f.txt
+	git update-ref refs/review-edits/feature/x/1 "$(git commit-tree "$(git write-tree)" -p feature/x^ -m 'legacy banked edit')"
 	# leave and delete the review branch by hand, orphaning the banked edit ref
 	git switch --quiet --discard-changes develop
 	git branch -D review/feature/x >/dev/null
@@ -309,7 +310,8 @@ teardown() {
 @test "review clean skips edit banks when review branch is still checked out" {
 	git review start feature/x --step
 	printf 'edited\n' >f.txt
-	git review next
+	git add f.txt
+	git update-ref refs/review-edits/feature/x/1 "$(git commit-tree "$(git write-tree)" -p feature/x^ -m 'legacy banked edit')"
 	[ -n "$(git for-each-ref refs/review-edits/feature/x/)" ]
 	# HEAD stays on review/* so clean skips deleting the branch; banks are still
 	# live session state and must not be purged alongside the skip.

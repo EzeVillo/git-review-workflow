@@ -10,6 +10,7 @@ import {
     gitReviewOrThrow,
     sharedFixtureRepo,
     startReview,
+    stepCheckout,
     writeFile,
 } from "./helpers/fixture";
 
@@ -61,9 +62,9 @@ function buildConflictFixture(repo: FixtureRepo, branch: string): void {
     // el abort de más abajo "volvería" al lugar equivocado.
     startReview(repo, branch, ["--step"]);
     gitReviewOrThrow(["next"], repo.dir); // paso 2 (cf1, x.txt = X0\nX1)
-    writeFile(repo, "x.txt", "X0\nX1-EDITED\n");
-    gitReviewOrThrow(["next"], repo.dir); // bancea paso 2, ahora paso 3 (cf2)
-    writeFile(repo, "cfa.txt", "A0\nA1-EDITED\n");
+    writeFile(stepCheckout(repo), "x.txt", "X0\nX1-EDITED\n");
+    gitReviewOrThrow(["next"], repo.dir);
+    writeFile(stepCheckout(repo), "cfa.txt", "A0\nA1-EDITED\n");
 
     const finish = gitReview(["finish"], repo.dir);
     assert.notStrictEqual(finish.status, 0, "el fixture de conflicto tiene que dejar finish trabado");

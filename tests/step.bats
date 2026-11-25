@@ -72,22 +72,22 @@ teardown() {
 	[[ "$output" == *"c1-touch-a"* ]]
 }
 
-@test "review next advances with a clean tree and hides prior edits" {
+@test "review next moves the cursor while a requested checkout gets the selected commit" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
+	before=$(git write-tree)
+	head=$(git rev-parse HEAD)
 	run git review next
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/2]"* ]]
 	[[ "$output" == *"c2-touch-b"* ]]
-	# the C1 edit is banked, not lingering in the tree: a.txt is back to C1's content
-	run cat a.txt
-	[[ "$output" == *"a2"* ]]
-	[[ "$output" != *"FIXA"* ]]
-	# the C2 diff is staged; working tree is clean
-	run git diff --cached --name-only
-	[ "$output" = "b.txt" ]
-	run git diff --name-only
-	[ -z "$output" ]
+	[ "$(tail -n 1 a.txt)" = FIXA ]
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	git review workspace checkout "$TMP/step2"
+	[ "$(git -C "$TMP/step2" diff --cached --name-only)" = b.txt ]
+	[ "$(tail -n 1 "$TMP/step2/a.txt")" = a2 ]
+	[ "$(tail -n 1 a.txt)" = FIXA ]
 }
 
 @test "review next prints the diffstat before the header too" {
@@ -114,7 +114,8 @@ teardown() {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
 	git review next
-	printf 'b1\nb2\nFIXB\n' >b.txt
+	git review workspace checkout "$TMP/step2"
+	printf 'b1\nb2\nFIXB\n' >"$TMP/step2/b.txt"
 	git review next
 	run git review finish
 	[ "$status" -eq 0 ]
@@ -124,6 +125,7 @@ teardown() {
 	[[ "$output" == *"+FIXB"* ]]
 	# author lines belong to the tip, not to the extracted fixes
 	[[ "$output" != *"+a2"* ]]
+	[ "$(tail -n 1 "$TMP/step2/b.txt")" = FIXB ]
 }
 
 @test "review finish works even without advancing to the end" {
@@ -150,24 +152,26 @@ teardown() {
 @test "review clean removes banked edit refs" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next
+	git review finish
 	run git for-each-ref refs/review-edits/feature/x/
 	[ -n "$output" ]
+	git commit -qm 'deliver correction'
 	git switch --quiet develop
 	git review clean feature/x
 	run git for-each-ref refs/review-edits/feature/x/
 	[ -z "$output" ]
 }
 
-@test "review next with no edits leaves no banked ref and stages the next diff" {
+@test "review next with no edits leaves the original step staged and creates no bank" {
 	git review start feature/x --step
 	# advance without editing — the tree matches the commit so no ref should be created
 	git review next
 	run git for-each-ref refs/review-edits/feature/x/1
 	[ -z "$output" ]
-	# step 2 diff is staged; working tree is clean
+	# The reading cursor is on step 2 and the index still holds step 1.
+	[ "$(git config branch.review/feature/x.reviewreadstep)" = 2 ]
 	run git diff --cached --name-only
-	[ "$output" = "b.txt" ]
+	[ "$output" = "a.txt" ]
 	run git diff --name-only
 	[ -z "$output" ]
 }
@@ -204,35 +208,27 @@ teardown() {
 	[[ "$output" == *"no more commits"* ]]
 }
 
-# A banked edit reverted back to the clean commit content must not resurrect: the
-# stale edit ref has to be cleared, not left to reappear on the next visit.
-@test "reverting a banked edit to clean does not resurrect it on prev/next" {
+@test "revisiting a step workspace preserves its edits and allows reverting them" {
 	git review start feature/x --step
-	# edit step 1, then bank it by advancing
-	printf 'a1\na2\nEDIT\n' >a.txt
 	git review next
-	# back on step 1: the edit is restored
+	folder=$(git review workspace checkout "$TMP/step2")
+	printf 'b1\nb2\nEDIT\n' >"$folder/b.txt"
 	git review prev
-	run git diff --name-only
-	[ "$output" = "a.txt" ]
-	# revert it to the clean commit content
-	git checkout -- a.txt
-	run git diff --name-only
-	[ -z "$output" ]
-	# moving away and back must not bring the reverted edit back
 	git review next
-	git review prev
-	run git diff --name-only
-	[ -z "$output" ]
+	[ "$(git review workspace checkout)" = "$folder" ]
+	[ "$(tail -n 1 "$folder/b.txt")" = EDIT ]
+	git -C "$folder" checkout -- b.txt
+	git review finish
+	[ -z "$(git diff --cached --name-only)" ]
 }
 
 @test "reverting a banked edit to clean does not resurrect it at finish" {
 	git review start feature/x --step
 	printf 'a1\na2\nEDIT\n' >a.txt
-	git review next          # bank step 1
-	git review prev          # back to step 1
-	git checkout -- a.txt    # revert to clean
-	git review next          # move on (should clear the banked edit)
+	git review next
+	git review prev
+	git checkout -- a.txt
+	git review next
 	git review finish
 	run git diff --cached
 	[[ "$output" != *"EDIT"* ]]
@@ -280,6 +276,7 @@ add_nonascii_commit() {
 	[[ "$output" == *"$NONASCII"* ]]
 	[[ "$output" != *'\346'* ]]
 	# and the step really is the non-ASCII commit
-	run git -c core.quotePath=false diff --cached --name-only
+	git review workspace checkout "$TMP/step3"
+	run git -C "$TMP/step3" -c core.quotePath=false diff --cached --name-only
 	[ "$output" = "$NONASCII" ]
 }

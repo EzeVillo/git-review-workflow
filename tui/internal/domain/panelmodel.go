@@ -80,6 +80,7 @@ type PanelModel struct {
 	AtLast     bool
 
 	NavigationLocked bool
+	StepCheckout     bool
 	Degraded         bool
 	Readonly         bool
 	KeysOnly         bool

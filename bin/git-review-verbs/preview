@@ -115,6 +115,7 @@ if [ "$mode" = "step" ]; then
 		die "review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'."
 	fi
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+	review_step_workspace_registry || exit 1
 
 	# The current step's edits are not banked yet (they live in the working tree),
 	# so derive them from the working tree against the commit being reviewed.
@@ -133,11 +134,20 @@ if [ "$mode" = "step" ]; then
 			pf="$curpatch"
 		else
 			ref="refs/review-edits/$src/$i"
-			if git rev-parse --verify --quiet "$ref" >/dev/null; then
-				git diff --binary "${ref}^" "$ref" >"$ppatch"
-				pf="$ppatch"
+			path=$(review_step_workspace_path "$i") || exit 1
+			pf=$ppatch
+			if [ -n "$path" ]; then
+				selected_commit=$(printf '%s\n' "$commits" | sed -n "${i}p")
+				(
+					review_enter_step_workspace "$path" "$selected_commit" || exit 1
+					selected_tree=$(review_snapshot_worktree) || exit 1
+					git -c diff.relative=false diff --binary --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ \
+						"$selected_commit" "$selected_tree" --
+				) >"$ppatch" || exit 1
+			elif git rev-parse --verify --quiet "$ref" >/dev/null; then
+				git diff --binary "$ref^" "$ref" >"$ppatch"
 			else
-				pf=""
+				pf=''
 			fi
 		fi
 		if [ -n "$pf" ] && [ -s "$pf" ]; then

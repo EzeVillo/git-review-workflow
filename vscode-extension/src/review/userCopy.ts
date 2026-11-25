@@ -266,3 +266,6 @@ export function compareConfirmTitle(base: string, target: string, layout: string
 export function comparingProgress(base: string, target: string): string {
     return `Comparing ${revisionLabel(base)} → ${revisionLabel(target)}…`;
 }
+export const STEP_CHECKOUT_LABEL = "Open checkout";
+export const STEP_CHECKOUT_PROGRESS = "Preparing checkout…";
+export const STEP_CHECKOUT_FAILED = "Could not open the checkout for this commit.";

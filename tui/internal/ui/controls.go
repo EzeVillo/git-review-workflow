@@ -86,11 +86,11 @@ func coreControlsFor(m domain.PanelModel) (controls []Control) {
 		return cs
 
 	case domain.LayoutReviewStep:
-		return []Control{
-			{ID: "openChange", Enabled: true},
-			{ID: "prev", Enabled: !m.AtFirst},
-			{ID: "next", Enabled: !m.AtLast},
+		cs := []Control{{ID: "openChange", Enabled: true}}
+		if m.StepCheckout {
+			cs = append(cs, Control{ID: "openStepCheckout", Enabled: true})
 		}
+		return append(cs, Control{ID: "prev", Enabled: !m.AtFirst}, Control{ID: "next", Enabled: !m.AtLast})
 
 	case domain.LayoutFinishPending:
 		return []Control{

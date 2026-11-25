@@ -388,6 +388,11 @@ teardown() {
 	[[ "$output" == *"[2/2]"* ]]
 	[[ "$output" == *"c2-add-more"* ]]
 	run git diff --cached --name-only
+	[ "$output" = "app.txt" ]
+	checkout="$BATS_TEST_TMPDIR/compare-step"
+	git review workspace checkout "$checkout"
+	run git -C "$checkout" diff --cached --name-only
+	[ "$status" -eq 0 ]
 	[ "$output" = "more.txt" ]
 
 	# Past the last commit, next reports the end (no writeback hint differs, but the
@@ -577,7 +582,8 @@ check_comparison_context() {
     check_comparison_context v2.0 --step
     run --separate-stderr git review next
     [ "$status" -eq 0 ]
-    [ "$(git config branch.review/v2.0.reviewstep)" = 2 ]
+    [ "$(git config branch.review/v2.0.reviewreadstep)" = 2 ]
+    [ "$(git config branch.review/v2.0.reviewstep)" = 1 ]
     run --separate-stderr git review status --porcelain
     [ "$status" -eq 0 ]
     [ "$(printf '%s\n' "$output" | awk -F'\t' '$1 ~ /^comparison/')" = "$expected" ]

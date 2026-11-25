@@ -37,7 +37,7 @@ func (c InvocationClass) TimeoutMillis() int {
 var localMutationVerbs = map[string]bool{
 	"finish": true, "save": true, "abort": true, "continue": true,
 	"next": true, "prev": true, "clean": true, "forget": true,
-	"compare": true, "walkthrough": true, "preview": true,
+	"compare": true, "walkthrough": true, "preview": true, "workspace": true,
 }
 
 // ClassForVerb classifies a `git review <verb> <args>` invocation. An

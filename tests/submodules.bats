@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+load helpers/legacy-step
 
 setup() {
 	TMP=$(mktemp -d)
@@ -220,30 +221,32 @@ start_without_gitlink() {
 	start_without_gitlink file
 	index=$(git write-tree)
 	head=$(git rev-parse HEAD)
-	for verb in next finish; do
-		run --separate-stderr git review "$verb"
-		[ "$status" -eq 1 ]
-		[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
-		[ "$(git symbolic-ref --short HEAD)" = review/topic ]
-		[ "$(git rev-parse HEAD)" = "$head" ]
-		[ "$(git write-tree)" = "$index" ]
-		[ "$(git config branch.review/topic.reviewstep)" = 1 ]
-		[ -z "$(git for-each-ref refs/review-edits/topic/ refs/review-undo/topic/)" ]
-		[ "$(cat "$MODULE/build-output")" = 'private child data' ]
-	done
+	run --separate-stderr git review next
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	[ "$(git config branch.review/topic.reviewreadstep)" = 2 ]
+	run --separate-stderr git review finish
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
+	[ -z "$(git for-each-ref refs/review-edits/topic/ refs/review-undo/topic/)" ]
+	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
 	mv "$MODULE" "${MODULE}-held"
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE")" = 'ordinary file' ]
 	[ "$(cat "${MODULE}-held/build-output")" = 'private child data' ]
 }
 
 # bats test_tags=legacy-git
-@test "step navigation protects a nested checkout across case aliases" {
+@test "checkout guards protect a nested repository across case aliases" {
 	bats_require_minimum_version 1.5.0
 	start_without_gitlink case
 	index=$(git write-tree)
-	run --separate-stderr git review next
+	run --separate-stderr legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
 	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
@@ -278,7 +281,7 @@ start_without_gitlink() {
 	[ "$(git diff-tree --no-commit-id --name-only -r 'refs/review-saved-edits/topic/1^' 'refs/review-saved-edits/topic/1')" = correction ]
 	run git review continue topic
 	[ "$status" -eq 0 ]
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ -z "$(git ls-files -- "$MODULE")" ]
 	[ "$(cat "$MODULE/build-output")" = 'private child data' ]
@@ -290,7 +293,7 @@ start_without_gitlink() {
 }
 
 # bats test_tags=legacy-git
-@test "a forced recursive step cannot discard changes in a removed submodule" {
+@test "forced recursive checkout preserves changes in a removed submodule" {
 	bats_require_minimum_version 1.5.0
 	git -C "$SERVER" switch -qc topic
 	printf 'first step\n' >"$SERVER/other"
@@ -303,7 +306,7 @@ start_without_gitlink() {
 	printf 'private tracked edit\n' >"$MODULE/version"
 	git -C "$MODULE" add version
 
-	run --separate-stderr git review next
+	run --separate-stderr legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *"would discard local changes in a nested Git working tree: $MODULE"* ]]
 	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
@@ -316,7 +319,7 @@ start_without_gitlink() {
 # bats test_tags=legacy-git
 @test "capture updates parent paths beside files owned by a retained checkout" {
 	start_without_gitlink directory
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ -f "$MODULE/.git" ]
 	printf 'reviewer correction\n' >"$MODULE/owned"
@@ -351,7 +354,7 @@ start_vendored_module() {
 	git -C "$SERVER" add -- "$MODULE"
 	git -C "$SERVER" commit -qm 'update vendored files'
 	git review start --step topic
-	git review next
+	legacy_review_step next
 	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
 	[ -f "$MODULE/.git" ]
 	[ "$(git show ":$MODULE/version")" = 'vendored version' ]
@@ -359,15 +362,15 @@ start_vendored_module() {
 }
 
 # bats test_tags=legacy-git
-@test "navigation keeps parent edits to files also tracked by a retained checkout" {
+@test "in-place checkout keeps parent edits to files also tracked by a retained checkout" {
 	start_vendored_module
 	printf 'reviewer version\n' >"$MODULE/version"
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
 	[ "$(cat "$MODULE/version")" = 'updated version' ]
 	[ "$(git show "refs/review-edits/topic/2:$MODULE/version")" = 'reviewer version' ]
-	run git review prev
+	run legacy_review_step prev
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
 	[ "$(cat "$MODULE/version")" = 'reviewer version' ]
@@ -413,7 +416,7 @@ start_vendored_module() {
 	printf 'child staged version\n' >"$MODULE/version"
 	git -C "$MODULE" add version
 	printf 'vendored version\n' >"$MODULE/version"
-	run --separate-stderr git review next
+	run --separate-stderr legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *"would overwrite a local path in a nested Git working tree: $MODULE/version"* ]]
 	[ "$(git -C "$MODULE" show :version)" = 'child staged version' ]
@@ -441,7 +444,7 @@ start_vendored_module() {
 	printf 'keep child cache\n' >"$MODULE/cache"
 	index=$(git write-tree)
 
-	run --separate-stderr git review next
+	run --separate-stderr legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *"would replace a submodule containing ignored working tree files: $MODULE"* ]]
 	[ "$(git write-tree)" = "$index" ]
@@ -449,7 +452,7 @@ start_vendored_module() {
 	[ "$(cat "$MODULE/cache")" = 'keep child cache' ]
 
 	mv "$MODULE/cache" "$TMP/saved-cache"
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
 	[ "$(cat "$MODULE")" = 'ordinary replacement' ]
@@ -585,7 +588,7 @@ start_deep_file_handoff() {
 # bats test_tags=legacy-git
 @test "save and cancel restore a child file whose parent directories Git prunes" {
 	start_deep_file_handoff
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
 	run git review save
@@ -605,19 +608,19 @@ start_deep_file_handoff() {
 }
 
 # bats test_tags=legacy-git
-@test "steps transfer file ownership even when neither tree has a gitlink" {
+@test "in-place checkout transfers file ownership when neither tree has a gitlink" {
 	start_deep_file_handoff
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(git show ":$MODULE/lib/deep/version")" = 'parent file' ]
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
 	[ -z "$(git ls-files -- "$MODULE")" ]
-	run git review prev
+	run legacy_review_step prev
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
-	run git review prev
+	run legacy_review_step prev
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/lib/deep/version")" = 'original child file' ]
 	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
@@ -627,7 +630,7 @@ start_deep_file_handoff() {
 # bats test_tags=legacy-git
 @test "finish and undo hand off the file when the PR drops it at its tip" {
 	start_deep_file_handoff
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	before=$(git write-tree)
 	run git review finish
@@ -645,14 +648,14 @@ start_deep_file_handoff() {
 }
 
 # bats test_tags=legacy-git
-@test "a forced step protects child edits hidden by assume unchanged" {
+@test "forced checkout protects child edits hidden by assume unchanged" {
 	bats_require_minimum_version 1.5.0
 	start_deep_file_handoff
 	git -C "$MODULE" update-index --assume-unchanged lib/deep/version
 	printf 'private child edit\n' >"$MODULE/lib/deep/version"
 	git -C "$MODULE" diff --quiet
 	before=$(git write-tree)
-	run --separate-stderr git review next
+	run --separate-stderr legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *'would overwrite a local path in a nested Git working tree:'*'/lib/deep/version'* ]]
 	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
@@ -678,7 +681,7 @@ start_deep_file_handoff() {
 	git -C "$MODULE" diff --quiet
 	index=$(git write-tree)
 	for locale in C C.UTF-8; do
-		run --separate-stderr env LC_ALL="$locale" git review next
+		LC_ALL="$locale" run --separate-stderr legacy_review_step next
 		[ "$status" -eq 1 ]
 		[[ "$stderr" == *'would overwrite a local path in a nested Git working tree:'*"/$path" ]]
 		[ "$(git config branch.review/topic.reviewstep)" = 1 ]
@@ -689,10 +692,10 @@ start_deep_file_handoff() {
 	done
 	git -C "$MODULE" update-index --no-assume-unchanged "$path"
 	git -C "$MODULE" checkout -- "$path"
-	run env LC_ALL=C git review next
+	LC_ALL=C run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/$path")" = 'parent file' ]
-	run env LC_ALL=C git review next
+	LC_ALL=C run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/$path")" = 'original child file' ]
 	[ "$(git -C "$MODULE" write-tree)" = "$child_tree" ]
@@ -715,7 +718,7 @@ start_deep_file_handoff() {
 	printf 'private child edit\n' >"$MODULE/$path"
 	git -C "$MODULE" diff --quiet
 	index=$(git write-tree)
-	run --separate-stderr git review next
+	run --separate-stderr legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *'would overwrite a local path in a nested Git working tree:'*"/$path" ]]
 	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
@@ -730,10 +733,10 @@ start_deep_file_handoff() {
 	start_deep_file_handoff
 	git -C "$MODULE" update-index --skip-worktree lib/deep/version
 	rm "$MODULE/lib/deep/version"
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(cat "$MODULE/lib/deep/version")" = 'parent file' ]
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ ! -e "$MODULE/lib/deep/version" ]
 	[ "$(git -C "$MODULE" ls-files -t lib/deep/version)" = 'S lib/deep/version' ]
@@ -744,7 +747,7 @@ start_deep_file_handoff() {
 @test "a failing switch hook still returns the files released by the parent" {
 	bats_require_minimum_version 1.5.0
 	start_deep_file_handoff
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	hook=$(git rev-parse --git-path hooks/post-checkout)
 	mkdir -p "$(dirname "$hook")"
@@ -764,7 +767,7 @@ start_deep_file_handoff() {
 @test "a checkout hook can occupy a released path without being overwritten" {
 	if command -v cygpath >/dev/null 2>&1; then skip 'needs a symlink enabled checkout'; fi
 	start_deep_file_handoff
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	hook=$(git rev-parse --git-path hooks/post-checkout)
 	mkdir -p "$(dirname "$hook")" "$TMP/outside"
@@ -787,7 +790,7 @@ EOF
 # bats test_tags=legacy-git
 @test "a hook staging one child path does not suppress restoration of a sibling" {
 	start_deep_file_handoff
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	hook=$(git rev-parse --git-path hooks/post-checkout)
 	mkdir -p "$(dirname "$hook")"
@@ -831,17 +834,17 @@ EOF
 	git -C "$MODULE" check-ignore -q inner/cache
 
 	printf 'inner private version\n' >"$MODULE/inner/version"
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"would overwrite a local path in a nested Git working tree: $MODULE/inner/version"* ]]
 	[ "$(git config branch.review/topic.reviewstep)" = 1 ]
 	[ "$(cat "$MODULE/inner/version")" = 'inner private version' ]
 	git -C "$MODULE/inner" checkout -- version
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/topic.reviewstep)" = 2 ]
 	[ "$(cat "$MODULE/inner/version")" = 'vendored inner version' ]
-	run git review next
+	run legacy_review_step next
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/topic.reviewstep)" = 3 ]
 	[ "$(cat "$MODULE/inner/version")" = 'updated inner version' ]

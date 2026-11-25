@@ -290,6 +290,10 @@ public sealed partial class ActionDispatcher
                 await OpenChangeAsync(index).ConfigureAwait(true);
                 return;
 
+            case "openStepCheckout":
+                await OpenStepCheckoutAsync().ConfigureAwait(true);
+                return;
+
             case "showWhy":
             {
                 if (_host.OpenText is null) return;
@@ -304,6 +308,21 @@ public sealed partial class ActionDispatcher
     }
 
     // -- reading ------------------------------------------------------------
+
+    private async Task OpenStepCheckoutAsync()
+    {
+        if (State.Situation != Situation.Review || State.State?.StepCheckout != true) return;
+        var result = await _panel.Mutations.RunArgvAsync("workspace", new[] { "checkout", "--porcelain" }).ConfigureAwait(true);
+        const string prefix = "step-checkout\t";
+        var line = result?.Stdout.Split('\n')
+            .FirstOrDefault(l => l.StartsWith(prefix, StringComparison.Ordinal));
+        if (result?.ExitCode == 0 && line is not null)
+        {
+            Process.Start(new ProcessStartInfo(line.Substring(prefix.Length).TrimEnd('\r')) { UseShellExecute = true });
+            return;
+        }
+        GitReviewDialogs.Error(string.IsNullOrWhiteSpace(result?.Stderr) ? UserCopy.StepCheckoutFailed : result.Stderr);
+    }
 
     /// <summary>
     /// Next / prev. A navigation that lands on the same position is not a failure: the

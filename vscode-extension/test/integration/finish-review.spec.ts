@@ -10,6 +10,7 @@ import {
     gitReviewOrThrow,
     sharedFixtureRepo,
     startReview,
+    stepCheckout,
     writeFile,
 } from "./helpers/fixture";
 
@@ -194,9 +195,9 @@ function buildConflictFixture(repo: FixtureRepo, branch: string, finishArgs: str
     ]);
     startReview(repo, branch, ["--step"]);
     gitReviewOrThrow(["next"], repo.dir);
-    writeFile(repo, "x.txt", "X0\nX1-EDITED\n");
+    writeFile(stepCheckout(repo), "x.txt", "X0\nX1-EDITED\n");
     gitReviewOrThrow(["next"], repo.dir);
-    writeFile(repo, "cfa.txt", "A0\nA1-EDITED\n");
+    writeFile(stepCheckout(repo), "cfa.txt", "A0\nA1-EDITED\n");
 
     const finish = gitReview(["finish", ...finishArgs], repo.dir);
     assert.notStrictEqual(finish.status, 0, "el fixture de conflicto tiene que dejar finish trabado");

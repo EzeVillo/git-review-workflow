@@ -110,7 +110,8 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 |---|---|---|
 | `reviewmode`, `reviewsource`, `reviewtip` | todos | Modo y origen de la review |
 | `reviewrangefrom` | `--from` | Corte de la review que hereda el borrador |
-| `reviewstart`, `reviewcount`, `reviewstep` | `step` | Posición del cursor de commits |
+| `reviewstart`, `reviewcount`, `reviewstep` | `step` | Rango, cantidad y posición del commit materializado en el checkout original |
+| `reviewreadstep`, `reviewstepworkspaces` | `step` | Cursor de lectura y registro de checkouts adicionales. Las sesiones anteriores toman el cursor inicial de `reviewstep` |
 | `reviewwalkstep`, `reviewwalkcount`, `reviewwalkbase` | `walk` | Cursor de lectura (1-based), guard y lower bound |
 | `reviewwalkfromdraft` | `walk` | El orden caminado salió del borrador del revisor |
 | `reviewdraft` | **todos** | Bajo qué nombre vive el borrador de esta review |

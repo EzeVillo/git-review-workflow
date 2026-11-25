@@ -107,7 +107,7 @@ que sí pasan por `unquote`.
 
 ## Invocaciones mutantes
 
-Las únicas tres. Serializadas y con `gitReview.busy` activo mientras corren
+Serializadas y con `gitReview.busy` activo mientras corren
 (FR-020, Decisión 9).
 
 ### `git review next` / `git review prev`
@@ -129,6 +129,14 @@ extensión detecta ese caso comparando la `position` de antes con la del
 `status --porcelain` de después —nunca leyendo el texto del verbo (FR-015)— y
 muestra ese mismo aviso, el de la CLI y no uno redactado acá. Sin eso el
 comando sería mudo, que es lo contrario de propagar.
+
+### `git review workspace checkout --porcelain`
+
+Se invoca desde el control de la revisión por commits cuando la CLI declara
+`capability<TAB>step-checkout` en su estado. El registro
+`step-checkout<TAB><ruta absoluta>` devuelve la carpeta del paso seleccionado.
+La extensión abre esa carpeta en una ventana nueva. La CLI reutiliza la carpeta
+registrada si el paso ya tiene una.
 
 ### `git review continue <src>`
 

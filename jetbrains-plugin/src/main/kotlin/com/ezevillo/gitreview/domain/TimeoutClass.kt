@@ -14,7 +14,7 @@ const val SUPPORT_GIT_TIMEOUT_MS: Long = 30_000
 
 private val LOCAL_MUTATION_VERBS = setOf(
     "finish", "save", "abort", "continue", "next", "prev",
-    "clean", "forget", "compare", "walkthrough", "preview",
+    "clean", "forget", "compare", "walkthrough", "preview", "workspace",
 )
 
 private val NETWORK_MUTATION_VERBS = setOf("start")

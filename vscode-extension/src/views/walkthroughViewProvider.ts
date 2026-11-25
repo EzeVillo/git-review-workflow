@@ -11,6 +11,7 @@ export const PANEL_MESSAGES = [
     "deleteComments", "addComment", "initComments", "openComments", "copyCommentPath", "renumberComments", "openCommentDiff", "prepareSharedComments",
     "openEntry",
     "openChange",
+    "openStepCheckout",
     "openAllChanges",
     "showWhy",
     "next",

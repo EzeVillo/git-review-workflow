@@ -45,7 +45,7 @@ public class PanelLayoutContractTests
     [Fact]
     public void Step_control_sequence_matches_canonical()
     {
-        AssertLayoutAgainstCanonical("review-step", PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewStep()), mode: "step");
+        AssertLayoutAgainstCanonical("review-step", PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewStep() with { StepCheckout = true }), mode: "step");
     }
 
     [Fact]

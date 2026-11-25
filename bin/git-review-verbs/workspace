@@ -8,7 +8,7 @@ usage() {
 	cat <<'EOF'
 usage: git review workspace open [--step] [--read-only] <new-directory> -- <base> <target>
        git review workspace (status | next | prev | diff)
-       git review workspace checkout <new-directory>
+       git review workspace checkout [--porcelain] [<new-directory>]
        git review workspace finish <new-directory> [<other-workspace>...]
        git review workspace resume <new-directory>
 
@@ -149,8 +149,12 @@ create_workspace() (
 			if [ -n "$cursor" ]; then printf 'create refs/review-workspace/cursor %s\n' "$cursor"; fi
 			if [ "$read_only" -eq 1 ]; then printf 'create refs/review-workspace/readonly %s\n' "$range_tip"; fi
 		} | git -c core.hooksPath=/dev/null update-ref --stdin
+		if [ -n "${_review_step_workspace_id:-}" ]; then
+			git config --local reviewworkspace.session "$_review_step_workspace_id"
+			if [ -s "$step_patch" ]; then git apply --binary "$step_patch"; fi
+		fi
 	fi
-	printf '%s\n' "$destination"
+	git rev-parse --show-toplevel
 )
 
 read_range() {
@@ -207,6 +211,57 @@ set_position() {
 	total=$(printf '%s\n' "$commits" | wc -l | tr -d ' ')
 	position=$(printf '%s\n' "$commits" | awk -v commit="$cursor" '$0 == commit { print NR }')
 	[ -n "$position" ] || die 'workspace cursor is outside the pinned range'
+}
+
+checkout_review_step() {
+	requested_path=$1
+	load_step_review_meta ''
+	require_not_finish_conflict "$cur"
+	require_not_pending_finish "$cur"
+	if [ "$readstep" -eq "$step" ]; then
+		git rev-parse --show-toplevel
+		return
+	fi
+	comments_lock_branch "$cur" || exit 1
+	trap 'if [ -n "${step_patch:-}" ]; then rm -f "$step_patch"; fi; comments_unlock' 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	selected_commit=$(printf '%s\n' "$commits" | sed -n "${readstep}p")
+	review_step_workspace_registry || exit 1
+	if [ -z "$_review_step_workspace_registry" ]; then
+		common=$(git rev-parse --git-common-dir)
+		common=$(CDPATH='' cd -- "$common" && pwd -P)
+		mkdir -p "$common/review-step-workspaces"
+		_review_step_workspace_registry=$(mktemp -d "$common/review-step-workspaces/step.XXXXXX")
+		_review_step_workspace_id=${_review_step_workspace_registry##*/}
+		git config "branch.$cur.reviewstepworkspaces" "$_review_step_workspace_id"
+	fi
+	registered=$(review_step_workspace_path "$readstep") || exit 1
+	if [ -n "$registered" ]; then
+		( review_enter_step_workspace "$registered" "$selected_commit" ) || exit 1
+		printf '%s\n' "$registered"
+		return
+	fi
+	if [ -z "$requested_path" ]; then
+		# shellcheck disable=SC2031 # Inherit HOME from the invoking shell.
+		root=${XDG_STATE_HOME:-${HOME:?}/.local/state}/git-review/workspaces
+		mkdir -p "$root/$_review_step_workspace_id"
+		requested_path=$root/$_review_step_workspace_id/$readstep
+	fi
+	range_base=$(git rev-parse --verify "$selected_commit^")
+	range_tip=$selected_commit
+	cursor=''
+	read_only=0
+	if [ "$(git config "branch.$cur.reviewreadonly" || true)" = 1 ]; then read_only=1; fi
+	step_patch=$(mktemp "$_review_step_workspace_registry/banked.XXXXXX")
+	banked=$(git rev-parse --verify --quiet "refs/review-edits/$src/$readstep" || true)
+	if [ -n "$banked" ]; then
+		git -c diff.relative=false diff --binary --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ \
+			"$selected_commit" "$banked" -- >"$step_patch"
+	fi
+	directory=$(create_workspace "$requested_path" "$range_base" "$range_tip" review-workspace) || exit 1
+	git config --file "$_review_step_workspace_registry/paths" "step.s$readstep.path" "$directory"
+	printf '%s\n' "$directory"
 }
 
 command=${1:--h}
@@ -274,16 +329,24 @@ status|next|prev|diff)
 	esac
 	;;
 checkout)
-	[ "$#" -eq 1 ] || die "$command expects a new directory"
-	read_range
-	if [ -n "$cursor" ]; then
-		checkout_base=$(git rev-parse --verify "$cursor^")
-		checkout_tip=$cursor
+	porcelain=0
+	if [ "${1:-}" = --porcelain ]; then porcelain=1; shift; fi
+	[ "$#" -le 1 ] || die 'checkout expects at most one new directory'
+	if ! git show-ref --verify --quiet refs/review-workspace/base; then
+		result=$(checkout_review_step "${1:-}") || exit $?
 	else
-		checkout_base=$range_base
-		checkout_tip=$range_tip
+		[ "$#" -eq 1 ] || die 'checkout expects a new directory in an isolated workspace'
+		read_range
+		if [ -n "$cursor" ]; then
+			checkout_base=$(git rev-parse --verify "$cursor^")
+			checkout_tip=$cursor
+		else
+			checkout_base=$range_base
+			checkout_tip=$range_tip
+		fi
+		result=$(create_workspace "$1" "$checkout_base" "$checkout_tip" review-workspace) || exit $?
 	fi
-	create_workspace "$1" "$checkout_base" "$checkout_tip" review-workspace
+	if [ "$porcelain" -eq 1 ]; then porcelain_row step-checkout "$result"; else printf '%s\n' "$result"; fi
 	;;
 finish)
 	[ "$#" -ge 1 ] || die 'finish expects a new directory'

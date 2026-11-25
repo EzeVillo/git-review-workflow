@@ -747,3 +747,6 @@ const (
 	CompareStepLabel         = "Commit by commit"
 	CompareWholeLabel        = "Whole diff"
 )
+const StepCheckoutLabel = "Open checkout"
+const StepCheckoutProgress = "Preparing checkout…"
+const StepCheckoutFailed = "Could not open the checkout for this commit."

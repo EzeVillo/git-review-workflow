@@ -26,7 +26,7 @@ describe("US6: revisar commit por commit", function () {
         await closeAllEditors();
     });
 
-    it("lista los commits en orden, marca el actual, distingue el que tiene ediciones guardadas (AC1)", async () => {
+    it("lista los commits en orden y mueve el cursor sin tocar la copia editable (AC1)", async () => {
         const branch = "us6-step";
         const commits = Array.from({length: 9}, (_, i) => ({
             file: `src/file${i + 1}.ts`,
@@ -45,14 +45,16 @@ describe("US6: revisar commit por commit", function () {
         assert.strictEqual(state.state?.position, 1);
         assert.ok(state.entries.every((e) => e.banked === false));
 
-        // Editar el commit actual (1) y avanzar: la CLI banquea la edición.
-        fs.writeFileSync(path.join(repo.dir, "src", "file1.ts"), "export const n = 999;\n");
+        const originalFile = path.join(repo.dir, "src", "file1.ts");
+        fs.writeFileSync(originalFile, "export const n = 999;\n");
         const next = gitReview(["next"], repo.dir);
         assert.strictEqual(next.status, 0);
 
         state = await api.refresh();
         assert.strictEqual(state.state?.position, 2);
-        assert.strictEqual(state.entries[0].banked, true, "el commit 1 tendría que quedar marcado con ediciones guardadas");
+        assert.strictEqual(state.entries[0].banked, false);
+        assert.strictEqual(fs.readFileSync(originalFile, "utf8"), "export const n = 999;\n");
+        assert.strictEqual(fs.existsSync(path.join(repo.dir, "src", "file2.ts")), false);
         assert.strictEqual(state.entries[1].banked, false);
 
         // El orden de las entradas es el de la CLI (rev-list), no alfabético
@@ -73,11 +75,10 @@ describe("US6: revisar commit por commit", function () {
         assert.strictEqual(model.entryCount, 9);
         assert.strictEqual(model.current?.display, state.entries[1].id as string);
         assert.strictEqual(model.current?.banked, false);
+        assert.strictEqual(model.stepCheckout, true);
         assert.strictEqual(model.why, undefined);
 
-        // Y en el selector, el commit con ediciones guardadas se distingue con texto.
         const picks = state.entries.map((entry) => entryPickLabel(entry, state.state?.position));
-        assert.strictEqual(picks[0].description, "saved edits");
         assert.strictEqual(picks[1].description, "current");
         assert.strictEqual(picks[0].label, `01  ${state.entries[0].id as string}`);
     });

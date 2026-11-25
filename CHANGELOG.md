@@ -29,6 +29,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Changed
 
+- Next and Previous move the reading cursor in commit-by-commit reviews.
+  Open a checkout to edit or test another commit and finish from the original
+  review to collect the edits from all its open checkouts.
 - Start runs the configured fetch in a temporary Git view and leaves the
   repository's refs, reflogs and `FETCH_HEAD` in place. Git resolves bases and
   lower bounds in that view, including symbolic refs, tags, upstreams, private

@@ -28,14 +28,21 @@ reply_equals_status() {
 	reply_equals_status
 }
 
-@test "step reply includes the new HEAD banked edits subjects authors and files" {
+@test "step reply includes the reading cursor and leaves HEAD and edits intact" {
 	comments_start step >/dev/null
+	# A session created before the reading cursor existed acquires it lazily.
+	git config --unset branch.review/feature/comments.reviewreadstep
 	printf 'private edit\n' >>sample.txt
+	head=$(git rev-parse HEAD)
+	index=$(git write-tree)
 	run --separate-stderr git review next --porcelain
 	[ "$status" -eq 0 ]
 	[ "$stderr" = '' ]
-	[ "$(git config branch.review/feature/comments.reviewstep)" = 2 ]
-	git show-ref --verify --quiet refs/review-edits/feature/comments/1
+	[ "$(git config branch.review/feature/comments.reviewreadstep)" = 2 ]
+	[ "$(git config branch.review/feature/comments.reviewstep)" = 1 ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ -z "$(git for-each-ref refs/review-edits/feature/comments/)" ]
 	reply_equals_status
 	run --separate-stderr git review prev --porcelain
 	[ "$status" -eq 0 ]
@@ -59,9 +66,9 @@ reply_equals_status() {
 	for layout in walk step; do
 		comments_start "$layout" >/dev/null
 		if [ "$layout" = walk ]; then key=reviewwalkstep; count=reviewwalkcount; noun=entries
-		else key=reviewstep; count=reviewcount; noun=commits; fi
+		else key=reviewreadstep; count=reviewcount; noun=commits; fi
 		total=$(git config "branch.review/feature/comments.$count")
-		while [ "$(git config "branch.review/feature/comments.$key")" -lt "$total" ]; do git review next >/dev/null; done
+		for ((i=1; i<total; i++)); do git review next >/dev/null; done
 		run --separate-stderr git review next --porcelain
 		[ "$status" -eq 0 ]
 		[ "$stderr" = '' ]

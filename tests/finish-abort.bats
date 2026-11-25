@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+load helpers/legacy-step
 #
 # Tests for git review finish --abort — undo the last finish and drop back onto
 # review/<branch> exactly where editing left off, the way git merge --abort backs
@@ -145,7 +146,7 @@ teardown() {
 @test "abort (step) returns to the step with edits live and banked edits intact" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next                 # bank A (step 1), now on B (step 2)
+	legacy_review_step next                 # bank A (step 1), now on B (step 2)
 	printf 'b1\nb2\nFIXB\n' >b.txt  # current step edits, not banked
 	git review finish
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
@@ -169,7 +170,7 @@ teardown() {
 	# under review staged, your edit on top unstaged — not collapsed together.
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next                 # now on B (step 2): b.txt gains "b2"
+	legacy_review_step next                 # now on B (step 2): b.txt gains "b2"
 	printf 'b1\nb2\nFIXB\n' >b.txt
 	git review finish
 	git review finish --abort
@@ -187,14 +188,14 @@ teardown() {
 @test "abort (step) preserves navigation: review prev still shows the earlier edit" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next                 # bank A (step 1), now on step 2
+	legacy_review_step next                 # bank A (step 1), now on step 2
 	printf 'b1\nb2\nFIXB\n' >b.txt
 	git review finish
 	git review finish --abort
 	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
 
 	# walking back must restore step 1 with its edit, exactly as before finishing
-	run git review prev
+	run legacy_review_step prev
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewstep)" = "1" ]
 	run git diff
@@ -206,11 +207,11 @@ teardown() {
 	# Every step's edit must survive, forward and backward.
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next                 # bank 1, step 2
+	legacy_review_step next                 # bank 1, step 2
 	printf 'b1\nb2\nFIXB\n' >b.txt
-	git review next                 # bank 2, step 3
+	legacy_review_step next                 # bank 2, step 3
 	printf 'c\nFIXC\n' >c.txt
-	git review prev                 # bank 3, back to step 2 (FIXB restored)
+	legacy_review_step prev                 # bank 3, back to step 2 (FIXB restored)
 	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
 
 	git review finish               # finish from step 2
@@ -225,13 +226,13 @@ teardown() {
 		[ "$status" -eq 0 ]
 	done
 	# walking forward to the step edited-then-left still shows that edit
-	git review next                 # step 3
+	legacy_review_step next                 # step 3
 	[ "$(git config branch.review/feature/x.reviewstep)" = "3" ]
 	run git diff
 	[[ "$output" == *"FIXC"* ]]
 	# and walking back twice shows step 1's edit
-	git review prev                 # step 2
-	run git review prev             # step 1
+	legacy_review_step prev                 # step 2
+	run legacy_review_step prev             # step 1
 	[ "$status" -eq 0 ]
 	run git diff
 	[[ "$output" == *"FIXA"* ]]
@@ -240,7 +241,7 @@ teardown() {
 @test "abort (step) lets you keep navigating and finish for real afterwards" {
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next
+	legacy_review_step next
 	printf 'b1\nb2\nFIXB\n' >b.txt
 	git review finish
 	git review finish --abort
@@ -281,9 +282,9 @@ setup_conflict_pr() {
 	git switch --quiet develop
 
 	git review start feature/conflict --step   # step 1 (cf-base)
-	git review next                          # step 2 (cf1, x.txt = X0\nX1)
+	legacy_review_step next                          # step 2 (cf1, x.txt = X0\nX1)
 	printf 'X0\nX1-EDITED\n' >x.txt          # edit that will overlap the tip
-	git review next                          # bank step 2, now step 3 (cf2)
+	legacy_review_step next                          # bank step 2, now step 3 (cf2)
 	printf 'A0\nA1-EDITED\n' >cfa.txt        # edit that applies cleanly onto the tip
 }
 
@@ -434,7 +435,7 @@ setup_conflict_pr() {
 	# The guard is mode-agnostic — a step-mode finish produces review-fixes too.
 	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review next
+	legacy_review_step next
 	printf 'b1\nb2\nFIXB\n' >b.txt
 	git review finish
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]

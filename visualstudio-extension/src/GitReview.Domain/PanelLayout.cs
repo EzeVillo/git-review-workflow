@@ -33,6 +33,7 @@ public enum ControlId
     DeleteCommentEntry, DeleteComments, AddComment, InitComments, OpenComments, CopyCommentPath, RenumberComments, OpenCommentDiff, PrepareSharedComments,
     OpenEntry,
     OpenChange,
+    OpenStepCheckout,
     ShowWhy,
     Next,
     Prev,
@@ -90,6 +91,7 @@ public static class ControlIdExt
         ControlId.PrepareSharedComments => "prepareSharedComments",
         ControlId.OpenEntry => "openEntry",
         ControlId.OpenChange => "openChange",
+        ControlId.OpenStepCheckout => "openStepCheckout",
         ControlId.ShowWhy => "showWhy",
         ControlId.Next => "next",
         ControlId.Prev => "prev",
@@ -587,14 +589,19 @@ public static class PanelLayoutBuilder
             IsSkeleton: skeleton);
     }
 
-    private static Block.Row OpenRow(PanelModel model, bool enabled) =>
-        model.Mode == ReviewMode.Step
-            ? new Block.Row(new[] { Ctrl(ControlId.OpenChange, "Diff", Emphasis.Secondary, enabled) })
-            : new Block.Row(new[]
+    private static Block.Row OpenRow(PanelModel model, bool enabled)
+    {
+        if (model.Mode != ReviewMode.Step)
+            return new Block.Row(new[]
             {
                 Ctrl(ControlId.OpenEntry, "File", Emphasis.Secondary, enabled),
                 Ctrl(ControlId.OpenChange, "Diff", Emphasis.Secondary, enabled),
             });
+        var controls = new List<Control> { Ctrl(ControlId.OpenChange, "Diff", Emphasis.Secondary, enabled) };
+        if (model.StepCheckout && !model.NavigationLocked)
+            controls.Add(Ctrl(ControlId.OpenStepCheckout, UserCopy.StepCheckoutLabel, Emphasis.Secondary, enabled && !model.Busy));
+        return new Block.Row(controls);
+    }
 
     private static Block.Row NavRow(PanelModel model, bool enabled)
     {

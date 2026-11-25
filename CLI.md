@@ -399,11 +399,11 @@ Has two independent axes — **range** (where the review starts) and **layout**
   there is no recorded review to delta from, or to pick an exact starting point.
   Mutually exclusive with `--delta`.
 - `--step` — review the range **one commit at a time** (combine with `--delta`
-  or `--from` to walk just those commits). You start on the first commit after
-  the merge-base; the command prints its author message. Edit files, then run
-  `git review next` to bank your edits and move to the next commit with a clean
-  tree. When the commits run out, run `git review finish` and all your banked
-  edits are replayed onto the PR tip — exactly as in a whole-PR review.
+  or `--from` to read just those commits). The first commit's diff is staged.
+  `git review next` and `prev` move the reading cursor. To edit or test a
+  different commit, run `git review workspace checkout` or choose **Open checkout**
+  in the panel. Finish collects edits from the original review and the
+  checkouts you opened.
 - **Walk mode (automatic).** If the PR carries a walkthrough
   (`.review/walkthrough.md`, written by the author with
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` enters
@@ -804,11 +804,14 @@ confident prose about the old code, with nothing failing to say so.
 <details>
 <summary><code>git review next</code> / <code>git review prev</code></summary>
 
-Move a `--step` or walkthrough review forward or backward. In `--step` mode each
-move banks the current commit's edits and restores any edits banked on the commit
-you move to, so you can walk back and forth without losing work. In walk mode they
-just move the reading cursor — your edits live in the working tree the whole time
-and are never touched.
+Move the reading cursor of a `--step` or walkthrough review. The branch HEAD,
+index and files stay in place. In a step review, `git review workspace checkout
+[<new-directory>]` returns the folder for the selected commit. It returns the
+original checkout for the commit already staged there and reopens any
+previously created folder for the selected commit. The default location for a
+new folder is under `${XDG_STATE_HOME:-$HOME/.local/state}/git-review/workspaces`.
+Run `preview`, `save` or `finish` from the original review checkout to include
+edits made in those folders. The folders stay available after closing a review.
 
 </details>
 
@@ -1005,8 +1008,8 @@ left off:
 - In whole-PR mode, the staged PR diff and your uncommitted edits.
 - In walk mode, the same, plus the reading cursor — `git review continue` drops
   you back on the exact entry you were on.
-- In `--step` mode, the commit you are on, its edits, and every edit you have
-  banked on the other commits. The banked-edit refs are moved out of
+- In `--step` mode, the reading position, the edits from the original checkout,
+  and snapshots of edits from each opened checkout. The edit refs are moved out of
   `refs/review-edits/` (which `git review clean` prunes) into
   `refs/review-saved-edits/`, so a `git review clean` never touches a saved review.
 
@@ -1166,8 +1169,8 @@ back to editing where you left off. Think of it as "what would `finish` give me
 right now?".
 
 - `--stat` — show a diffstat summary instead of the full diff.
-- In `--step` mode it replays the current commit's edits plus every banked edit
-  onto the tip, exactly like `finish`. An edit that genuinely conflicts with the
+- In `--step` mode it replays edits from the original checkout, the opened step
+  checkouts and any older banked edits onto the tip, like `finish`. An edit that conflicts with the
   tip is the one case that differs: a read-only preview cannot leave you conflict
   markers, so it omits that edit and prints a note pointing you at `finish`.
 
@@ -1386,8 +1389,8 @@ git review start feature/login --delta --step  # ...and walk them one by one
 
 # Or walk the PR commit by commit from the start:
 git review start feature/login --step        # start on the first commit
-# ...edit, then...
-git review next                              # bank edits, move to the next commit
+git review next                              # read the next commit
+git review workspace checkout                # open its editable checkout when needed
 git review next                              # ...until "no more commits"
 git review finish                            # replay all your edits onto the tip
 

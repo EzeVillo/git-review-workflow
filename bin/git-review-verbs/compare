@@ -211,6 +211,7 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
+	git config "branch.$rb.reviewreadstep" "1"
 	# The draft's name, from the single derivation above — see the whole-mode write
 	# below. A step review reads no walkthrough but still holds custody of one.
 	git config "branch.$rb.reviewdraft" "$draftsrc"

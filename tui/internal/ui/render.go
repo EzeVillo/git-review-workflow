@@ -1047,6 +1047,9 @@ func renderReviewStep(b *builder, m domain.PanelModel) {
 	b.text(fmt.Sprintf("Entry %d/%d: %s", m.Position, m.Total, m.CurrentSHA))
 	b.blank()
 	b.button("openChange", "", domain.DiffLabel, b.st.secondary, true)
+	if m.StepCheckout {
+		b.button("openStepCheckout", "", domain.StepCheckoutLabel, b.st.secondary, !m.Busy)
+	}
 	b.blank()
 	b.heading(interpolate(domain.FilesInCommitHeading, "{n}", strconv.Itoa(m.EntryCount)))
 	for _, f := range nonEmptyLines(m.Files) {

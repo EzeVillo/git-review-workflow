@@ -42,7 +42,7 @@ class PanelLayoutContractTest {
     fun `step control sequence matches canonical`() {
         assertLayoutAgainstCanonical(
             key = "review-step",
-            layout = panelLayout(PanelFixtures.reviewStep()),
+            layout = panelLayout(PanelFixtures.reviewStep().copy(stepCheckout = true)),
             mode = "step",
         )
     }

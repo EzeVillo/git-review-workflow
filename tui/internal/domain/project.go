@@ -158,6 +158,7 @@ func Project(in ProjectInput) PanelModel {
 		st := in.Status.State
 		m.RepoLabel = st.Branch
 		m.Mode = st.Mode
+		m.StepCheckout = st.StepCheckout
 		m.Branch = st.Branch
 		m.Source = st.Source
 		m.Tip = st.Tip

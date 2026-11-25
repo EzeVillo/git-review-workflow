@@ -29,7 +29,8 @@ teardown() { comments_teardown; }
 	printf 'first-review\nchanged\nthird\n' >sample.txt
 	run --separate-stderr git review next
 	[ "$status" -eq 0 ]
-	printf 'first\nchanged-review\nthird\n' >sample.txt
+	git review workspace checkout "$COMMENTS_TMP/second-step"
+	printf 'first\nchanged-review\nthird\n' >"$COMMENTS_TMP/second-step/sample.txt"
 	run --separate-stderr git review finish
 	[ "$status" -eq 1 ]
 	[ "$(git config branch.review/feature/comments.reviewresume)" = conflict ]

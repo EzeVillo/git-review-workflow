@@ -16,6 +16,7 @@ import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.SupportLinks
 import com.ezevillo.gitreview.domain.UserCopy
+import com.ezevillo.gitreview.domain.captureToken
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
 import com.ezevillo.gitreview.domain.draftAt
@@ -28,6 +29,8 @@ import com.ezevillo.gitreview.domain.sourceFromReviewName
 import com.ezevillo.gitreview.domain.WalkthroughState
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
+import com.ezevillo.gitreview.host.Bg
+import com.ezevillo.gitreview.host.invokeWithStateGuard
 import com.ezevillo.gitreview.host.openInEditor
 import com.ezevillo.gitreview.ui.actions.runUndoFinish
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
@@ -41,6 +44,7 @@ import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import java.awt.datatransfer.StringSelection
+import java.nio.file.Path
 import com.ezevillo.gitreview.host.revealPanel
 
 /**
@@ -87,6 +91,10 @@ class PanelActionDispatcher(
             }
             ControlId.OPEN_CHANGE -> {
                 openChange(index)
+                false
+            }
+            ControlId.OPEN_STEP_CHECKOUT -> {
+                openStepCheckout()
                 false
             }
             ControlId.OPEN_ALL_CHANGES -> {
@@ -255,6 +263,27 @@ class PanelActionDispatcher(
     }
 
     private fun modelWhy(): String? = service.currentModel().why?.text
+
+    private fun openStepCheckout() {
+        val state = service.currentState()
+        if (state.situation != Situation.REVIEW || state.state?.stepCheckout != true) return
+        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        val token = captureToken(state)
+        Bg.async(project, UserCopy.STEP_CHECKOUT_PROGRESS, work = {
+            service.mutationLock.run {
+                service.cliInvoker.invokeWithStateGuard("workspace", listOf("checkout", "--porcelain"), cwd, token.guard)
+                    .also { service.refreshNow() }
+            }
+        }, then = { result ->
+            val folder = result?.stdout?.lineSequence()?.firstOrNull { it.startsWith("step-checkout\t") }
+                ?.substringAfter('\t')
+            if (result?.exitCode == 0 && !folder.isNullOrEmpty()) {
+                BrowserUtil.browse(Path.of(folder).toUri())
+            } else {
+                UiMessages.error(project, result?.stderr?.trim().orEmpty().ifEmpty { UserCopy.STEP_CHECKOUT_FAILED })
+            }
+        })
+    }
 
     private fun openEntry() {
         val state = service.currentState()

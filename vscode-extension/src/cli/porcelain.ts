@@ -19,6 +19,7 @@ export interface StateRecord {
     current?: string | PathRef;
     /** Sólo en walk. */
     essential?: boolean;
+    stepCheckout?: true;
 }
 
 export interface EntryRecord {
@@ -266,12 +267,16 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let isKeysOnly: true | undefined;
     let isDraft: true | undefined;
     let draftPath: string | undefined;
+    let stepCheckout = false;
 
     for (const line of lines) {
         const fields = line.split("\t");
         const tag = fields[0];
 
         switch (tag) {
+            case "capability":
+                if (fields[1] === "step-checkout") stepCheckout = true;
+                break;
             case "state": {
                 const mode = parseReviewMode(fields[4]);
                 if (mode === undefined) {
@@ -408,6 +413,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     if (!state) {
         throw new Error("porcelain output has no state record");
     }
+    if (state.mode === "step" && stepCheckout) state.stepCheckout = true;
 
     const result: PorcelainResult = {state, entries, files};
     if (comparisonOids && comparisonBase && comparisonTarget) {

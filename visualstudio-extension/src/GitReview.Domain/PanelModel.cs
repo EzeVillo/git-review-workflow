@@ -177,6 +177,7 @@ public sealed record PanelModel(
     bool AtFirst = false,
     bool AtLast = false,
     bool NavigationLocked = false,
+    bool StepCheckout = false,
     bool Degraded = false,
     bool Readonly = false,
     bool KeysOnly = false,
@@ -504,6 +505,7 @@ public static class PanelModelBuilder
         model = model with
         {
             Mode = review.Mode,
+            StepCheckout = review.StepCheckout,
             Branch = review.Branch,
             Source = review.Source,
             Tip = review.Tip,

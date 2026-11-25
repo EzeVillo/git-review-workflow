@@ -63,7 +63,8 @@ public sealed record StateRecord(
     int? Recorded = null,
     /// <summary>Short SHA (step) or PathRef (walk).</summary>
     object? Current = null,
-    bool? Essential = null);
+    bool? Essential = null,
+    bool StepCheckout = false);
 
 public sealed record EntryRecord(
     int Position,
@@ -191,12 +192,16 @@ public static class Porcelain
         bool? isKeysOnly = null;
         bool? isDraft = null;
         string? draftPath = null;
+        var stepCheckout = false;
 
         foreach (var line in lines)
         {
             var fields = line.Split('\t');
             switch (fields[0])
             {
+                case "capability":
+                    if (Get(fields, 1) == "step-checkout") stepCheckout = true;
+                    break;
                 case "state":
                 {
                     var mode = ReviewModeExt.Parse(Get(fields, 4))
@@ -317,7 +322,7 @@ public static class Porcelain
 
         var stFinal = state ?? throw new ArgumentException("porcelain output has no state record");
         return new PorcelainResult(
-            State: stFinal,
+            State: stFinal with { StepCheckout = stFinal.Mode == ReviewMode.Step && stepCheckout },
             Entries: entries,
             Files: files,
             Finish: finish,

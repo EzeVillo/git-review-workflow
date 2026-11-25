@@ -130,11 +130,11 @@ write_bin() {
 
 # ── step mode ─────────────────────────────────────────────────────────────────
 
-@test "finish (step) replays a binary edit banked on an earlier commit" {
+@test "finish (step) replays a binary edit from the original checkout" {
 	git review start feature/x --step
 	write_bin img.bin step1
 	orig="$(git hash-object img.bin)"
-	git review next                 # bank step 1 (the binary), move to step 2
+	git review next
 
 	run git review finish
 	[ "$status" -eq 0 ]
@@ -142,22 +142,23 @@ write_bin() {
 	[ "$(git rev-parse ':img.bin')" = "$orig" ]
 }
 
-@test "step navigation banks and restores a binary edit unchanged" {
+@test "step navigation leaves a binary edit unchanged" {
 	git review start feature/x --step
 	write_bin img.bin nav
 	orig="$(git hash-object img.bin)"
-	git review next                 # bank step 1
-	run git review prev             # back to step 1 — the binary must come back
+	git review next
+	[ "$(git hash-object img.bin)" = "$orig" ]
+	run git review prev
 	[ "$status" -eq 0 ]
 	[ -f img.bin ]
 	[ "$(git hash-object img.bin)" = "$orig" ]
 }
 
-@test "preview (step) shows a banked binary edit instead of dropping it" {
+@test "preview (step) shows a binary edit from the original checkout" {
 	git review start feature/x --step
 	write_bin img.bin prev
 	size="$(wc -c <img.bin | tr -d ' ')"
-	git review next                 # bank step 1, now on step 2
+	git review next
 
 	run git review preview --stat
 	[ "$status" -eq 0 ]

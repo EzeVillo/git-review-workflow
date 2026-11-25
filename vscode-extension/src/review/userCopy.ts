@@ -206,6 +206,7 @@ export const COMPARISON_COPY = {
 } as const;
 
 export const FINISH_DESTINATIONS = {
+    workspace: {label: "A new checkout", description: "Stage changes in a separate folder."},
     separate: {label: "A separate branch", description: "Stage changes on a new branch at the reviewed commit."},
     source: {label: "Onto the PR branch itself", description: "Stage changes on the local PR branch."},
     missing: {label: "Create PR branch and apply changes", description: "Create the local PR branch at the reviewed commit."},
@@ -213,6 +214,8 @@ export const FINISH_DESTINATIONS = {
     prompt: "Choose a destination for your review changes",
     failed: "Could not read the available finish destinations.",
 } as const;
+export const FINISH_WORKSPACE_READY = "The finish output is in ";
+export const FINISH_WORKSPACE_CONFLICT = "Resolve and stage the conflicts in ";
 
 export const FETCHING_REVIEW_REVISIONS = "Fetching review revisions…";
 export const START_LOCAL_DETAIL = "Review the local branch and fetch the remote base.";

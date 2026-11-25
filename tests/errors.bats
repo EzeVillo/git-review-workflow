@@ -719,7 +719,7 @@ step_review_two_with_edits() {
 	printf 'a\nB\nc\nd\ne\nfix\n' >app.txt
 	run git review finish --destinations --porcelain
 	[ "$status" -eq 0 ]
-	[ "$output" = "$(printf 'finish-destination\tseparate\nfinish-destination\tupdate-source')" ]
+	[ "$output" = "$(printf 'finish-destination\tworkspace\nfinish-destination\tseparate\nfinish-destination\tupdate-source')" ]
 	run git review finish --update-source
 	[ "$status" -eq 0 ]
 	[ "$(git branch --show-current)" = feature/x ]
@@ -739,7 +739,7 @@ step_review_two_with_edits() {
 	git update-ref refs/heads/feature/x "$ahead"
 	run git review finish --destinations --porcelain
 	[ "$status" -eq 0 ]
-	[ "$output" = "$(printf 'finish-destination\tseparate')" ]
+	[ "$output" = "$(printf 'finish-destination\tworkspace\nfinish-destination\tseparate')" ]
 	run git review finish --update-source
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"not at the reviewed tip"* ]]
@@ -1973,7 +1973,7 @@ assert_start_matches_git() {
 	git review start feature/x
 	run git review finish --destinations --porcelain
 	[ "$status" -eq 0 ]
-	[ "$output" = "$(printf 'finish-destination\tseparate')" ]
+	[ "$output" = "$(printf 'finish-destination\tworkspace\nfinish-destination\tseparate')" ]
 	run git review finish --update-source
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"checked out in another worktree"* ]]

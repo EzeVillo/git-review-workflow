@@ -53,6 +53,7 @@ public sealed class VsHostActions
                 OpenDiffs = OpenDiffsAsync,
                 OpenText = OpenTextAsync,
                 OpenPath = OpenPathAsync,
+                OpenReviewCheckout = OpenReviewCheckout,
                 SavePath = SavePathAsync,
                 SaveCommentPath = SaveCommentPathAsync,
                 HasUnsavedDocuments = HasUnsavedDocumentsAsync,
@@ -64,6 +65,16 @@ public sealed class VsHostActions
                 Progress = ShowProgress,
                 RevealPanel = _revealPanel,
             });
+
+    private static void OpenReviewCheckout(string folder)
+    {
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        if (process.MainModule?.FileName is not { Length: > 0 } devenv) return;
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(devenv, "\"" + folder + "\"")
+        {
+            UseShellExecute = true,
+        });
+    }
 
     /// <summary>
     /// A running mutation, in the shell's own status bar: the text plus the general

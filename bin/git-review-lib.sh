@@ -243,7 +243,7 @@ review_continue_guard_capture() {
 		_rcg_cur=$(git symbolic-ref --quiet --short HEAD || true)
 		_rcg_refs=$(git for-each-ref --format='%(objectname) %(refname:short)' refs/heads/review-saved/) || return 1
 	fi
-	_rcg_gitdir=${_review_guard_gitdir:-${_walk_gitdir_abs:-}}
+	_rcg_gitdir=${_review_guard_gitdir:-}
 	if [ -z "$_rcg_gitdir" ]; then _rcg_gitdir=$(git rev-parse --absolute-git-dir) || return 1; fi
 	_rcg_head=$(git rev-parse --verify HEAD 2>/dev/null || printf unborn)
 	if [ "${_review_config_ready:-0}" -ne 1 ]; then review_config_init; fi
@@ -449,7 +449,7 @@ EOF
 # Whole/walk use the real lower, step uses the selected commit and its parent.
 # Identity always has its OWN full merge-base, independent of delta/--from.
 comments_state() {
-	cm_gitdir=$(git rev-parse --absolute-git-dir 2>/dev/null) || { comments_error 'not a git repository'; return 1; }
+	cm_gitdir=$(review_persistence_gitdir 2>/dev/null) || { comments_error 'could not resolve the review storage'; return 1; }
 	cm_root=$cm_gitdir/review-comments
 	comments_safe_path "$cm_root" || return 1
 	cm_branch=$(git symbolic-ref --quiet --short HEAD || true)
@@ -2007,7 +2007,7 @@ EOF
 
 comments_preflight_branch() {
 	_cc_branch=$1
-	cm_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	cm_gitdir=$(review_persistence_gitdir) || return 1
 	cm_root=$cm_gitdir/review-comments
 	if [ "${_review_close_snapshot:-0}" -eq 1 ]; then
 		# Recheck after acquiring the custody lock and before transfer/delete.
@@ -2737,12 +2737,45 @@ finish_destinations() {
 	_fd_tip=$(review_config_get "branch.$1.reviewtip" || true)
 	if [ -z "$_fd_source" ] || [ -z "$_fd_tip" ]; then die 'missing review metadata'; fi
 	[ "$(review_config_get "branch.$1.reviewreadonly" || true)" != 1 ] || die 'comparison is read-only'
-	porcelain_row finish-destination separate
+	porcelain_row finish-destination workspace
+	if [ -z "$(review_config_get "branch.$1.reviewworkspacepath" || true)" ]; then
+		porcelain_row finish-destination separate
+	fi
 	finish_source_state "$_fd_source" "$_fd_tip"
 	case "$finish_source_state" in
 	equal|missing) porcelain_row finish-destination source "$finish_source_state" ;;
 	behind) porcelain_row finish-destination update-source ;;
 	esac
+}
+
+# Leave the current ref without rewriting the index or any checkout files.
+review_detach_checkout() (
+	head=$(git rev-parse --verify HEAD) || exit 1
+	git -c core.hooksPath=/dev/null update-ref --no-deref HEAD "$head" "$head"
+)
+
+review_should_launch() {
+	[ "${GIT_REVIEW_MANAGED_CHECKOUT:-0}" != 1 ] || return 1
+	_review_checkout_mode=${1:-${GIT_REVIEW_CHECKOUT:-$(git config --get reviewworkflow.checkout || true)}}
+	# Published clients already suppress advice, but only clients that can
+	# open a returned checkout advertise the new response record.
+	if [ -z "$_review_checkout_mode" ] && [ "${GIT_REVIEW_ADVICE:-}" = 0 ] && [ "${GIT_REVIEW_CHECKOUT_RECORD:-}" != 1 ]; then
+		return 1
+	fi
+	case "$_review_checkout_mode" in
+	''|isolated) return 0 ;;
+	current) return 1 ;;
+	*) die 'reviewworkflow.checkout must be isolated or current' ;;
+	esac
+}
+
+review_launch_seed() {
+	if [ "$1" = 0 ]; then
+		printf '%s\n' "$3"
+	else
+		_review_seed_commits=$(git rev-list --reverse --first-parent --no-merges "$2..$3") || return 1
+		printf '%s\n' "$_review_seed_commits" | sed -n "${1}p"
+	fi
 }
 
 # ── Advice: lo que quien tiene el porcelain no necesita ──────────────────────
@@ -2914,6 +2947,11 @@ show_commit() {
 require_not_finish_conflict() {
 	_rnfc_cur=${1:-}
 	if [ -z "$_rnfc_cur" ]; then _rnfc_cur=$(git symbolic-ref --quiet --short HEAD || true); fi
+	review_config_read "branch.$_rnfc_cur.reviewworkspacepending"
+	if [ -n "$_review_config_value" ]; then
+		echo "error: resolve and stage the finish output, then run git review finish --resume (or git review finish --abort)" >&2
+		exit 1
+	fi
 	if [ "$(review_config_get "branch.$_rnfc_cur.reviewresume" || true)" = "conflict" ]; then
 		echo "error: git review finish is mid-conflict; resolve the markers and run git review finish --resume first (or git review finish --abort)" >&2
 		exit 1
@@ -4133,8 +4171,29 @@ walk_normalize() {
 # forget) call it themselves. Caching is safe because no verb ever changes
 # directory: the value may be relative (".git"), which a chdir would silently
 # invalidate.
+review_persistence_gitdir() (
+	case "${1:-}" in
+	relative) actual=$(git rev-parse --git-dir) || exit 1 ;;
+	*) actual=$(git rev-parse --absolute-git-dir) || exit 1 ;;
+	esac
+	marker=$actual/review-checkout-origin
+	if [ ! -e "$marker" ]; then
+		printf '%s\n' "$actual"
+		exit
+	fi
+	[ -f "$marker" ] && [ ! -L "$marker" ] || exit 1
+	origin=$(cat "$marker") || exit 1
+	[ -d "$origin" ] || exit 1
+	common=$(git rev-parse --git-common-dir) || exit 1
+	origin_common=$(git --git-dir="$origin" rev-parse --git-common-dir) || exit 1
+	common=$(CDPATH='' cd -P -- "$common" && pwd -P) || exit 1
+	origin_common=$(CDPATH='' cd -P -- "$origin_common" && pwd -P) || exit 1
+	[ "$origin_common" = "$common" ] || exit 1
+	printf '%s\n' "$origin"
+)
+
 walk_gitdir_init() {
-	[ -n "${_walk_gitdir:-}" ] || _walk_gitdir="$(git rev-parse --git-dir)"
+	[ -n "${_walk_gitdir:-}" ] || _walk_gitdir="$(review_persistence_gitdir relative)"
 }
 
 # walk_gitdir_abs_init
@@ -4148,7 +4207,7 @@ walk_gitdir_init() {
 # the one job that needs more — handing a path to a client that will open it from
 # somewhere else — so it is only resolved when there is a draft to report.
 walk_gitdir_abs_init() {
-	[ -n "${_walk_gitdir_abs:-}" ] || _walk_gitdir_abs="$(git rev-parse --absolute-git-dir)"
+	[ -n "${_walk_gitdir_abs:-}" ] || _walk_gitdir_abs="$(review_persistence_gitdir)"
 }
 
 # walk_draft_progress <path>...
@@ -7454,7 +7513,15 @@ review_status_porcelain() {
 	fi
 	# An isolated finish keeps the checkout intact, including its branch.
 	review_config_read "branch.$cur.reviewworkspacefinish"
-	if [ -n "$_review_config_value" ]; then porcelain_row finish-workspace "$_review_config_value"; fi
+	if [ -n "$_review_config_value" ]; then
+		porcelain_row finish-workspace "$_review_config_value"
+	else
+		review_config_read "branch.$cur.reviewworkspacepending"
+		if [ -n "$_review_config_value" ]; then
+			porcelain_row finish-workspace-conflict "$_review_config_value"
+			porcelain_row finish conflict 0
+		fi
+	fi
 	# compare (git review compare): reviewreadonly=1 means finish will refuse.
 	# Separate record, omitted when not set — additive, same pattern as base/finish.
 	if [ "$is_readonly" = "1" ]; then
@@ -8009,7 +8076,7 @@ comments_paths() {
 	review_config_init
 	if [ "${_review_config_ready:-0}" -ne 1 ]; then comments_error 'could not read review metadata'; return 1; fi
 	comments_preflight_branch "$_cp_branch" || return 1
-	_review_guard_gitdir=$cm_gitdir
+	_review_guard_gitdir=$(git rev-parse --absolute-git-dir) || return 1
 	review_guard_capture "$_cp_branch" || return 1
 	# No owned session means legacy metadata. Say so explicitly: absence of
 	# paths must not masquerade as proof that there are no editor documents.

@@ -210,6 +210,44 @@ check_finish_delivery() {
 	[ "$(git -C "$output_dir" write-tree)" = "$index" ]
 }
 
+@test "automatic isolated finish resumes from the review and accepts without replacing the checkout" {
+	export XDG_STATE_HOME="$COMMENTS_TMP/state"
+	git switch -q feature/comments
+	printf 'first\nauthor final\nthird\n' >sample.txt
+	git commit -qam 'change the same line again'
+	git switch -q main
+	comments_start step
+	printf 'first\nreviewer correction\nthird\n' >sample.txt
+	git review comments add --document shared --text 'Share after resolving.'
+	before_index=$(git write-tree)
+	before_head=$(git rev-parse HEAD)
+
+	run --separate-stderr git review finish --workspace
+	[ "$status" -eq 1 ]
+	conflicted=$(git config branch.review/feature/comments.reviewworkspacepending)
+	[ -n "$(git -C "$conflicted" ls-files --unmerged -- sample.txt)" ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'finish-workspace-conflict\t'"$conflicted"*$'finish\tconflict\t0'* ]]
+	printf 'first\nresolved correction\nthird\n' >"$conflicted/sample.txt"
+	git -C "$conflicted" add sample.txt
+	run git review finish --resume
+	[ "$status" -eq 0 ]
+	finished=$(git config branch.review/feature/comments.reviewworkspacefinish)
+	[ "$finished" != "$conflicted" ]
+	[ -z "$(git config branch.review/feature/comments.reviewworkspacepending || true)" ]
+	grep -Fx 'resolved correction' "$finished/sample.txt"
+	grep -Fx 'Share after resolving.' "$finished/.review/comments.md"
+	run git review clean --keep-fixes feature/comments
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$before_head" ]
+	[ "$(git write-tree)" = "$before_index" ]
+	! git symbolic-ref --quiet HEAD
+	! git show-ref --verify --quiet refs/heads/review/feature/comments
+	grep -Fx 'reviewer correction' sample.txt
+	grep -Fx 'resolved correction' "$finished/sample.txt"
+}
+
 @test "managed isolated finish preserves an empty Shared document" {
 	comments_start whole
 	git review comments init --document shared

@@ -177,3 +177,13 @@ func OpenDirectoryCmd(path string) *exec.Cmd {
 	}
 	return OpenURLCmd(path)
 }
+
+func OpenReviewUICmd(path string) *exec.Cmd {
+	executable, err := os.Executable()
+	if err != nil {
+		return OpenDirectoryCmd(path)
+	}
+	cmd := exec.Command(executable)
+	cmd.Dir = path
+	return cmd
+}

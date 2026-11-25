@@ -63,7 +63,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review save [--porcelain]`                                                                                                                            | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                                                                                                                               |
 | `git review continue [--porcelain] [branch]`                                                                                                               | Resume a review saved with `git review save`.                                                                                                                                                                                                                                                                                                                      |
 | `git review finish [--onto-source \| --update-source] [--resume \| --abort [--force]]`                                                                          | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                                                                                                                                    |
-| `git review finish --workspace <directory> [--resume]` | Close an active review with corrections staged in an independent checkout. |
+| `git review finish --workspace [<directory>] [--resume]` | Close an active review with corrections staged in an independent checkout. |
 | `git review preview [--stat]`                                                                                                                | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                                                                                                                                                                                                                    |
 | `git review abort`                                                                                                                           | Cancel the current review and return to where you started.                                                                                                                                                                                                                                                                                                         |
 | `git review clean [--keep-fixes \| --fixes-only] [branch]`                                                                                   | Delete the `review/*` (and by default `review-fixes/*`) branches for `<branch>`, or all of them; `--keep-fixes` leaves `review-fixes/*` alone, `--fixes-only` takes only those.                                                                                                                                                                                    |
@@ -74,13 +74,30 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 
 ## Isolated review workspaces
 
+`git review start` and `git review compare` open a linked checkout by default.
+Run the rest of the review from the printed path. You can start from a dirty
+checkout. `save` and `abort` leave the review files and index on disk, and
+`continue` restores the saved review in a fresh linked checkout. A plain
+`git review finish` from a linked review stages the result in a new folder.
+`next` and `prev` move the reading cursor without checking out a commit.
+`finish --onto-source` checks out the PR branch in a fresh linked directory.
+`--update-source` additionally fast-forwards the local branch after staging
+the corrections. Both refuse if the PR branch is already checked out elsewhere.
+
+Use `--in-place` or `git config reviewworkflow.checkout current` for scripts
+that expect Start or Compare to change the current checkout. `--isolated`
+overrides that setting for a single invocation. The `review-checkout` output
+record from Start, Compare or Continue carries the absolute directory path.
+Clients that already suppress CLI advice can advertise support for this record
+with `GIT_REVIEW_CHECKOUT_RECORD=1`. Older clients keep the in-place default.
+
 Use `--workspace <new-directory>` with `start` or `compare` from any checkout,
 including one with local changes. The new directory must be outside existing
 Git repositories. It contains an independent repository with the selected
 diff staged. `--step` starts on the first commit. Without `--step`, the full
 range is staged. These are CLI sessions for whole diffs or commit-by-commit
-review. The walkthrough, review comments and IDE review panels use the regular
-review flow.
+review. Use the linked checkout for walkthroughs, review comments and IDE
+panels.
 
 ```sh
 git review start feature/login --step --workspace ../login-first
@@ -115,14 +132,14 @@ step mode, this collects edits from the original checkout and every registered
 step checkout. Add `--with-shared` to include a copy of prepared Shared in the
 output. The comment preparations stay with the active review.
 
-To close the session as well, use `git review finish --workspace <new-directory>`
-from the active review. It stages corrections and prepared Shared in the new
+To close the session as well, use `git review finish --workspace` from the
+active review. The command chooses a new folder, or uses the directory you
+provide. It stages corrections and prepared Shared in the new
 checkout, retains Local privately and marks the original session closed. The
 original checkout and index stay intact. If the output hits a conflict, resolve
-and stage it there, run `git review workspace resume <next-directory>` there,
-then run `git review finish --workspace <next-directory> --resume` from the
-original review. Run `git review finish --abort` from the original review to
-reopen it and keep the output folder and its edits.
+and stage it there, then run `git review finish --resume` from the original
+review. Run `git review finish --abort` from the original review to reopen it
+and keep the output folder and its edits.
 
 The source remote URL, if configured, is stored as `origin` in the isolated
 repositories so you can initialize submodules with Git when needed. All

@@ -136,6 +136,7 @@ type ActionParams struct {
 	// finishReview / resumeFinish
 	OntoSource   bool
 	UpdateSource bool
+	Workspace    bool
 	// undoFinish
 	Force bool
 	// compareReview
@@ -195,6 +196,9 @@ func BuildArgv(action string, p ActionParams) (Argv, bool) {
 	case "saveReview":
 		return Argv{Verb: "save"}, true
 	case "finishReview":
+		if p.Workspace {
+			return Argv{Verb: "finish", Args: []string{"--workspace"}}, true
+		}
 		if p.UpdateSource {
 			return Argv{Verb: "finish", Args: []string{"--update-source"}}, true
 		}

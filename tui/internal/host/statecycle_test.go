@@ -26,6 +26,7 @@ func sandboxWithOrigin(t *testing.T) (work string) {
 	}
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("GIT_REVIEW_CHECKOUT", "current")
 
 	runGit(t, tmp, "config", "--global", "user.email", "t@example.com")
 	runGit(t, tmp, "config", "--global", "user.name", "tester")

@@ -17,6 +17,7 @@ usage: $prog [--porcelain] [<branch>]
 
 Resume a review saved with git review save. With no argument, resume the only
 saved review (or list them if there is more than one).
+An isolated review resumes in a new checkout and prints its path.
   --porcelain  return the resulting panel state instead of human output
 EOF
 }
@@ -35,6 +36,12 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--porcelain) porcelain=1 ;;
+	--)
+		shift
+		[ "$#" -eq 1 ] && [ -z "$arg" ] || die 'expected a single saved review name'
+		arg=$1
+		break
+		;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -87,6 +94,20 @@ rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb is already active; finish or abort it before resuming the saved one"
 review_require_branch_slot "$rb"
+
+managed=$(review_config_get "branch.$saved.reviewworkspacepath" || true)
+if [ -n "$managed" ] && [ "${GIT_REVIEW_MANAGED_CHECKOUT:-0}" != 1 ]; then
+	saved_tip=$(review_config_get "branch.$saved.reviewtip") || die 'missing saved review tip'
+	seed_step=0 seed_start=''
+	if [ "$(review_config_get "branch.$saved.reviewmode" || true)" = step ]; then
+		seed_start=$(review_config_get "branch.$saved.reviewstart") || die 'missing saved step range'
+		seed_step=$(review_config_get "branch.$saved.reviewstep") || die 'missing saved step'
+		case "$seed_step" in ''|0|*[!0-9]*) die 'invalid saved step' ;; esac
+	fi
+	GIT_REVIEW_LAUNCH_SEED=$(review_launch_seed "$seed_step" "$seed_start" "$saved_tip") || exit 1
+	export GIT_REVIEW_LAUNCH_SEED
+	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch continue -- "$src"
+fi
 
 # Resuming materialises a working tree, so refuse to clobber local changes
 # (tracked or untracked — same rule as start/compare).
@@ -240,6 +261,9 @@ restore_meta reviewcomparebase
 restore_meta reviewcomparetarget
 restore_meta reviewreturn
 restore_meta reviewdraft
+if [ "${GIT_REVIEW_MANAGED_CHECKOUT:-0}" = 1 ]; then
+	git config "branch.$rb.reviewworkspacepath" "$(git rev-parse --show-toplevel)"
+fi
 if [ "$mode" = step ]; then review_copy_edit_refs saved-edits edits "$src"; fi
 if [ -n "${_live_draft:-}" ]; then
 	mkdir -p "$(dirname "$_live_draft")"

@@ -104,6 +104,7 @@ public class CliInvoker
             // que se movio). Ver advice_enabled en bin/git-review-lib.sh; una
             // CLI vieja la ignora y solo imprime de mas.
             psi.Environment["GIT_REVIEW_ADVICE"] = "0";
+            psi.Environment["GIT_REVIEW_CHECKOUT_RECORD"] = "1";
             if (resolved.Args.Contains("cat-file")) psi.Environment["GIT_NO_LAZY_FETCH"] = "1";
 
             if (network)

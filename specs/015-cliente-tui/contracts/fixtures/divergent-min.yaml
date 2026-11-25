@@ -444,7 +444,7 @@ panel_layout:
           - {block: row, controls: [{id: openSupport, label: "Sponsor", emphasis: secondary, raw_button: true, confirms: false}]}
           - {block: row, controls: [{id: openSupport, label: "Contact", emphasis: secondary, raw_button: true, confirms: false}]}
   finish-pending:
-    source_fns: [renderEmptyState]
+    source_fns: [renderEmptyState, renderFinishCheckoutRow]
     blocks:
       # EL PROXIMO PASO SE DICE SOLO SI ESTA FUERA DEL PANEL.
       #
@@ -470,6 +470,7 @@ panel_layout:
           controls:
             - {id: cleanReview, label: "Keep edits & remove Undo", emphasis: primary, confirms: true}
             - {id: undoFinish, label: "Undo Finish", emphasis: secondary, confirms: true}
+      - {block: row, when: finish_workspace, controls: [{id: openStepCheckout, label: "Open checkout", emphasis: secondary, confirms: false}]}
   out-of-range:
     source_fns: [render]
     blocks:
@@ -522,7 +523,7 @@ panel_layout:
       - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, icon: diff, confirms: false, tooltip: "Open every change in this review at once"}], not_in: [visualstudio]}
       - {block: file_rows}
   finish-conflict:
-    source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow, renderFiles]
+    source_fns: [renderFinishConflictBanner, renderFinishCheckoutRow, renderEntry, renderOpenRow, renderFiles]
     blocks:
       - {block: identity_bar}
       - block: banner
@@ -532,6 +533,7 @@ panel_layout:
           controls:
             - {id: undoFinish, label: "Undo", emphasis: secondary, confirms: true}
             - {id: resumeFinish, label: "Continue", emphasis: secondary, confirms: false}
+      - {block: row, when: finish_workspace, controls: [{id: openStepCheckout, label: "Open checkout", emphasis: secondary, confirms: false}]}
       - {block: notes}
       - {block: entry_head}
       - {block: entry_title}

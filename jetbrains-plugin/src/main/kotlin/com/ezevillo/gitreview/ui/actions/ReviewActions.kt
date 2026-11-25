@@ -160,6 +160,7 @@ class FinishReviewAction : AnAction(), DumbAware {
         } else if (reply.exitCode == 0 && !reply.timedOut) {
             reply.stdout.lineSequence().mapNotNull { row ->
                 when (row) {
+                    "finish-destination\tworkspace" -> "workspace"
                     "finish-destination\tseparate" -> "separate"
                     "finish-destination\tsource\tequal" -> "source"
                     "finish-destination\tsource\tmissing" -> "missing"
@@ -174,6 +175,7 @@ class FinishReviewAction : AnAction(), DumbAware {
         }
         val options = destinations.map {
             when (it) {
+                "workspace" -> UserCopy.FINISH_LOCATION_WORKSPACE
                 "source" -> UserCopy.FINISH_LOCATION_ONTO
                 "missing" -> UserCopy.FINISH_LOCATION_CREATE
                 "update-source" -> UserCopy.FINISH_LOCATION_UPDATE
@@ -188,7 +190,8 @@ class FinishReviewAction : AnAction(), DumbAware {
         )
         if (idx < 0) return
         val destination = destinations[idx]
-        mutations(e)?.runFinish(destination != "separate", expected = captureToken(state), updateSource = destination == "update-source") { msg ->
+        mutations(e)?.runFinish(destination != "separate" && destination != "workspace", expected = captureToken(state),
+            updateSource = destination == "update-source", workspace = destination == "workspace") { msg ->
             // El acuse del caso normal es el banner de finish-pending, asi que
             // el panel tiene que estar a la vista: Finish esta en su titulo pero
             // tambien en el menu Tools, donde puede no estarlo.

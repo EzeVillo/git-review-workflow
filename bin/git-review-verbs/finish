@@ -21,7 +21,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 usage() {
 	cat <<EOF
 usage: $prog [--onto-source | --update-source] [--resume | --abort [--force]]
-       $prog --workspace <directory> [--resume]
+       $prog --workspace [<directory>] [--resume]
        $prog --destinations --porcelain
 
 Extract your review edits from the current review/* branch.
@@ -44,6 +44,7 @@ resume=0
 abort=0
 force=0
 workspace=''
+workspace_requested=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -58,9 +59,12 @@ while [ $# -gt 0 ]; do
 	--abort) abort=1 ;;
 	--force) force=1 ;;
 	--workspace)
-		shift
-		[ -n "${1:-}" ] && [ -z "$workspace" ] || die '--workspace expects one directory'
-		workspace=$1
+		[ "$workspace_requested" -eq 0 ] || die '--workspace given more than once'
+		workspace_requested=1
+		case "${2:-}" in
+		''|-*) ;;
+		*) shift; workspace=$1 ;;
+		esac
 		;;
 	*)
 		echo "error: unknown option $1" >&2
@@ -80,9 +84,13 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-if [ -n "$workspace" ]; then
+if [ "$workspace_requested" -eq 1 ]; then
 	[ "$onto$destinations$porcelain$abort$force" = 00000 ] || die 'combine --workspace only with --resume'
-	if [ "$resume" -eq 1 ]; then close=--close-resolved; else close=--close; fi
+	if [ "$resume" -eq 1 ]; then
+		if [ -z "$workspace" ]; then close=--resume-close; else close=--close-resolved; fi
+	else
+		close=--close
+	fi
 	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" finish "$close" "$workspace"
 fi
 
@@ -93,6 +101,15 @@ if [ "$destinations" -eq 1 ]; then
 fi
 if [ "$porcelain" -eq 1 ] || { [ "$resume" -eq 1 ] && [ "$update_source" -eq 1 ]; }; then
 	die 'invalid finish options'
+fi
+
+if [ "$resume$abort$force" = 000 ] && [ -n "$(review_config_get "branch.$cur.reviewworkspacepath" || true)" ]; then
+	case "$onto$update_source" in
+	11) close=--close-update-source ;;
+	10) close=--close-onto-source ;;
+	*) close=--close ;;
+	esac
+	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" finish "$close" ''
 fi
 
 # Stage the same bytes as the ordinary finish, but keep the real index (and
@@ -462,12 +479,13 @@ if [ "$abort" -eq 1 ]; then
 		echo "error: --abort takes no other options" >&2
 		exit 1
 	fi
-	if [ -n "$(review_config_get "branch.$cur.reviewworkspacefinish" || true)" ]; then
+	if [ -n "$(review_config_get "branch.$cur.reviewworkspacefinish" || true)$(review_config_get "branch.$cur.reviewworkspacepending" || true)" ]; then
 		trap 'comments_unlock' 0
 		trap 'exit 1' 1 2 15
 		comments_lock_branch "$cur" || exit 1
 		comments_finish_undo "$cur" || exit 1
-		git config --unset "branch.$cur.reviewworkspacefinish"
+		git config --unset "branch.$cur.reviewworkspacepending" || true
+		git config --unset "branch.$cur.reviewworkspacefinish" || true
 		printf 'aborted workspace finish; review reopened on %s\n' "$cur"
 		exit 0
 	fi
@@ -483,8 +501,14 @@ fi
 if [ -n "$(review_config_get "branch.$cur.reviewworkspacefinish" || true)" ]; then
 	require_not_pending_finish "$cur"
 fi
+if [ "$resume" -eq 0 ] && [ -n "$(review_config_get "branch.$cur.reviewworkspacepending" || true)" ]; then
+	require_not_finish_conflict "$cur"
+fi
 
 if [ "$resume" -eq 1 ]; then
+	if [ -n "$(review_config_get "branch.$cur.reviewworkspacepending" || true)" ]; then
+		exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" finish --resume-close ''
+	fi
 	_resume_comments_context=''
 	for _resume_review in $(git for-each-ref --format='%(refname:short)' refs/heads/review/); do
 		comments_preflight_branch "$_resume_review" || exit 1

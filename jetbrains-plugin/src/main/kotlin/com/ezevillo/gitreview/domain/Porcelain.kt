@@ -98,6 +98,7 @@ data class PorcelainResult(
     val authors: Map<Int, String>? = null,
     val base: String? = null,
     val comparison: ComparisonRecord? = null,
+    val finishWorkspace: String? = null,
 )
 
 data class BranchFinish(
@@ -179,6 +180,10 @@ private fun restAfterTab(line: String, skip: Int): String? {
  * Tokenizes `git review status --porcelain`. Mode on the state record is read
  * first and decides arity of following lines.
  */
+fun reviewCheckoutPath(stdout: String): String? = stdout.lineSequence()
+    .firstOrNull { it.startsWith("review-checkout\t") }
+    ?.substringAfter('\t')?.takeIf(String::isNotEmpty)
+
 fun parsePorcelain(stdout: String): PorcelainResult {
     val lines = stdout.split(Regex("\r?\n")).filter { it.isNotEmpty() }
     if (lines.isEmpty()) {
@@ -195,6 +200,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     var comparisonBase: String? = null
     var comparisonTarget: String? = null
     var finish: StatusFinishRecord? = null
+    var finishWorkspace: String? = null
     var isReadonly: Boolean? = null
     var isKeysOnly: Boolean? = null
     var isDraft: Boolean? = null
@@ -295,6 +301,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
                     finish = StatusFinishRecord(onto = toBool(fields.getOrNull(2)))
                 }
             }
+            "finish-workspace", "finish-workspace-conflict" -> finishWorkspace = restAfterTab(line, 1)?.takeIf { it.isNotEmpty() }
             "readonly" -> isReadonly = true
             "keys" -> isKeysOnly = true
             "draft" -> {
@@ -311,6 +318,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
         entries = entries,
         files = files,
         finish = finish,
+        finishWorkspace = finishWorkspace,
         readonly = isReadonly,
         keysOnly = isKeysOnly,
         draft = isDraft,

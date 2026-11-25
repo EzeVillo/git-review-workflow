@@ -66,8 +66,8 @@ var Layout = map[LayoutSituation][]ControlID{
 	LayoutReviewWhole:    {},
 	LayoutReviewWalk:     {"showWhy", "openEntry", "openChange", "prev", "next"},
 	LayoutReviewStep:     {"openChange", "openStepCheckout", "prev", "next"},
-	LayoutFinishPending:  {"cleanReview", "undoFinish"},
-	LayoutFinishConflict: {"undoFinish", "resumeFinish", "showWhy", "openEntry", "openChange", "openChange"},
+	LayoutFinishPending:  {"cleanReview", "undoFinish", "openStepCheckout"},
+	LayoutFinishConflict: {"undoFinish", "resumeFinish", "openStepCheckout", "showWhy", "openEntry", "openChange", "openChange"},
 	LayoutOutOfRange:     {"outOfRangeHelp"},
 	LayoutError:          {"outOfRangeHelp"},
 }

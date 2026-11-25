@@ -14,8 +14,9 @@ usage() {
 	cat <<EOF
 usage: $prog
 
-Cancel the current review: return to the starting branch, then delete the
-review/<branch> branch and any banked commit-by-commit edits.
+Cancel the current review and delete its review/<branch> branch and banked edits.
+An isolated review keeps its checkout files and index. An in-place review
+returns to the starting branch.
 EOF
 }
 
@@ -46,6 +47,9 @@ esac
 if [ -n "$(review_config_get "branch.$cur.reviewworkspacefinish" || true)" ]; then
 	require_not_pending_finish "$cur"
 fi
+if [ -n "$(review_config_get "branch.$cur.reviewworkspacepending" || true)" ]; then
+	require_not_finish_conflict "$cur"
+fi
 
 src="$(review_config_get "branch.$cur.reviewsource" || true)"
 [ -n "$src" ] || {
@@ -65,22 +69,29 @@ else
 fi
 
 target=""
-if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
-	target="$ret"
-elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/null; then
-	target="$base"
+managed=$(review_config_get "branch.$cur.reviewworkspacepath" || true)
+if [ -z "$managed" ]; then
+	if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
+		target="$ret"
+	elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/null; then
+		target="$base"
+	fi
+	[ -n "$target" ] || {
+		echo "error: could not determine a branch to return to; switch away manually, then run git review clean $src" >&2
+		exit 1
+	}
+	review_guard_checkout_paths "refs/heads/$target" || exit 1
 fi
-[ -n "$target" ] || {
-	echo "error: could not determine a branch to return to; switch away manually, then run git review clean $src" >&2
-	exit 1
-}
-review_guard_checkout_paths "refs/heads/$target" || exit 1
 
 comments_lock_branch "$cur" || exit 1
 trap 'comments_unlock' 0
 trap 'exit 1' 1 2 15
 comments_retain_compare || exit 1
-review_checkout_tree "refs/heads/$target" switch -q --discard-changes --no-overwrite-ignore "$target"
+if [ -n "$managed" ]; then
+	review_detach_checkout || exit 1
+else
+	review_checkout_tree "refs/heads/$target" switch -q --discard-changes --no-overwrite-ignore "$target"
+fi
 comments_discard_branch "$cur" || exit 1
 _abort_compare=$(review_config_get "branch.$cur.reviewreadonly" || true)
 git branch -D "$cur" >/dev/null
@@ -111,4 +122,8 @@ review_branch_refs undo "$src" | while read -r ref; do
 	git update-ref -d "$ref"
 done
 
-echo "aborted review of $src; returned to $target"
+if [ -n "$managed" ]; then
+	echo "aborted review of $src; retained $managed"
+else
+	echo "aborted review of $src; returned to $target"
+fi

@@ -24,7 +24,8 @@ public class CommentsTeamIT
         var actions = new CommentsActions(cli, new MutationLock(), _ => Task.FromResult(CommentBufferSave.Unchanged), () => { refreshes++; return Task.CompletedTask; });
         async Task Review(string verb, params string[] args)
         {
-            var result = await cli.InvokeAsync(verb, args, cwd);
+            var argv = verb == "start" ? new[] { "--in-place" }.Concat(args).ToArray() : args;
+            var result = await cli.InvokeAsync(verb, argv, cwd);
             Assert.True(result.ExitCode == 0, result.Stderr);
         }
         async Task Add(string kind, string text)

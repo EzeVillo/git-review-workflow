@@ -208,10 +208,18 @@ func Project(in ProjectInput) PanelModel {
 
 		if in.Situation == SituationFinishConflict && in.Status.Finish != nil {
 			m.FinishConflict = true
+			m.FinishWorkspace = in.Status.FinishWorkspace
 		}
 		return m
 
 	case SituationNoReview, SituationFinishPending:
+		if in.HasStatus && in.Status.FinishWorkspace != "" {
+			m.PendingFinish = true
+			m.Source = in.Status.State.Source
+			m.FinishWorkspace = in.Status.FinishWorkspace
+			m.FinishDestination = in.Status.FinishWorkspace
+			return m
+		}
 		if in.HasConfig {
 			m.NoBaseConfigured = !in.Config.Config.HasBase
 			m.ConfiguredBase = in.Config.Config.Base

@@ -17,9 +17,11 @@ import com.ezevillo.gitreview.domain.firstCliLine
 import com.ezevillo.gitreview.domain.flattenCliMessage
 import com.ezevillo.gitreview.domain.isReviewReadable
 import com.ezevillo.gitreview.domain.resolveCommand
+import com.ezevillo.gitreview.domain.reviewCheckoutPath
 import com.ezevillo.gitreview.domain.tokenStillValid
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.ui.UiMessages
+import com.ezevillo.gitreview.ui.openReviewCheckout
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
 import com.ezevillo.gitreview.vcs.refreshIdeRepository
 import com.intellij.openapi.project.Project
@@ -72,7 +74,7 @@ class MutationActions(
                     if (result.exitCode == 4) return@run StartRunResult.Stale
                     if (result.exitCode == 0 && !result.timedOut) {
                         val note = flattenCliMessage(result.stderr)
-                        StartRunResult.Ok(note.takeIf { it.isNotEmpty() })
+                        StartRunResult.Ok(note.takeIf { it.isNotEmpty() }, reviewCheckoutPath(result.stdout))
                     } else if (classifyStartFailure(result.stderr) == StartFailureCategory.NETWORK) {
                         val resolved = resolveCommand(argv.verb, argv.args, path)
                         StartRunResult.Network(resolved.command, resolved.args, result.stderr)
@@ -165,6 +167,9 @@ class MutationActions(
                             )
                         }
                         onDone?.invoke(outcome.done)
+                        if (outcome.done.ok && (action == "compareReview" || action == "continueReview")) {
+                            reviewCheckoutPath(outcome.done.stdout)?.let { openReviewCheckout(project, it) }
+                        }
                     }
                 }
             },
@@ -203,7 +208,7 @@ class MutationActions(
      * Finish with VS Code success toasts derived from refreshed state only
      * (never from finish human stdout).
      */
-    fun runFinish(ontoSource: Boolean, expected: StateToken? = null, updateSource: Boolean = false, onDone: (String?) -> Unit) {
+    fun runFinish(ontoSource: Boolean, expected: StateToken? = null, updateSource: Boolean = false, workspace: Boolean = false, onDone: (String?) -> Unit) {
         val stateRec = service.currentState().state
         if (stateRec == null) {
             onDone(null)
@@ -218,7 +223,7 @@ class MutationActions(
         val source = stateRec.source
         runSimple(
             "finishReview",
-            ActionParams.FinishOnto(ontoSource, updateSource),
+            ActionParams.FinishOnto(ontoSource, updateSource, workspace),
             progressTitle = UserCopy.finishingProgress(source),
             expected = expected,
         ) { done ->
@@ -256,7 +261,7 @@ private sealed class SimpleOutcome {
 }
 
 sealed class StartRunResult {
-    data class Ok(val note: String? = null) : StartRunResult()
+    data class Ok(val note: String? = null, val checkout: String? = null) : StartRunResult()
     data object Busy : StartRunResult()
     data object Stale : StartRunResult()
     data object NoCwd : StartRunResult()

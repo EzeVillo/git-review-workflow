@@ -59,6 +59,7 @@ export interface ComparisonRecord {
 }
 
 export interface PorcelainResult {
+    finishWorkspace?: string;
     comparison?: ComparisonRecord;
     state: StateRecord;
     entries: EntryRecord[];
@@ -263,6 +264,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let comparisonBase: string | undefined;
     let comparisonTarget: string | undefined;
     let finish: StatusFinishRecord | undefined;
+    let finishWorkspace: string | undefined;
     let isReadonly: true | undefined;
     let isKeysOnly: true | undefined;
     let isDraft: true | undefined;
@@ -384,6 +386,10 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 }
                 break;
             }
+            case "finish-workspace":
+            case "finish-workspace-conflict":
+                if (fields[1]) finishWorkspace = fields[1];
+                break;
             // Compare read-only: tag alone, no fields. Presence = true.
             case "readonly": {
                 isReadonly = true;
@@ -431,6 +437,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     if (finish !== undefined) {
         result.finish = finish;
     }
+    if (finishWorkspace) result.finishWorkspace = finishWorkspace;
     if (isReadonly) {
         result.readonly = true;
     }

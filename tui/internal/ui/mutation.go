@@ -84,6 +84,10 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 		}
 		releasePreparedComparison(req.comparePrepared)
 		releaseStart(req.startPrepared)
+		var checkout string
+		if !mutationFailed(result) && (argv.Verb == "start" || argv.Verb == "compare" || argv.Verb == "continue") {
+			checkout = domain.ReviewCheckoutPath(result.Stdout)
+		}
 		var reply *host.ReadResult
 		if req.navigationState && !mutationFailed(result) {
 			if primary, notice, ok := host.ReadNavigationReply(result.Stdout); ok {
@@ -109,7 +113,7 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 				commentsReply = &parsed
 			}
 		}
-		return mutationDoneMsg{navigation: reply, commentsReply: commentsReply, commentsReadGen: req.commentsReadGen, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
+		return mutationDoneMsg{navigation: reply, commentsReply: commentsReply, commentsReadGen: req.commentsReadGen, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow, checkout: checkout}
 	}
 }
 
@@ -297,6 +301,7 @@ type mutationDoneMsg struct {
 	result             host.Result
 	activityGeneration int
 	successOpenPath    string
+	checkout           string
 	draftStart         *domain.ReviewIntent
 	draftFlow          *draftFlowContinuation
 }
@@ -344,6 +349,9 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 		m = m.clearActivity(msg.activityGeneration)
 	}
 	gen := m.lock.End()
+	if msg.checkout != "" {
+		return m, tea.Batch(execCmdWithCompletion(host.OpenReviewUICmd(msg.checkout), msg.checkout), silenceWindowCmd(gen))
+	}
 	if msg.action == "openStepCheckout" && !mutationFailed(msg.result) {
 		line, _, _ := strings.Cut(msg.result.Stdout, "\n")
 		if path, ok := strings.CutPrefix(strings.TrimSuffix(line, "\r"), "step-checkout\t"); ok && path != "" {
@@ -505,6 +513,9 @@ func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.
 	case "openChange":
 		return m.beginOpenChange()
 	case "openStepCheckout":
+		if m.Panel.FinishWorkspace != "" {
+			return m, execCmdWithCompletion(host.OpenDirectoryCmd(m.Panel.FinishWorkspace), m.Panel.FinishWorkspace)
+		}
 		if m.Panel.Situation != domain.SituationReview || !m.Panel.StepCheckout {
 			return m, nil
 		}
@@ -673,6 +684,8 @@ func (m Model) finishDestinationPicker(msg finishDestinationsMsg) (Model, tea.Cm
 	items := []SelectItem{}
 	for _, line := range strings.Split(stdout, "\n") {
 		switch strings.TrimSuffix(line, "\r") {
+		case "finish-destination\tworkspace":
+			items = append(items, SelectItem{Label: domain.FinishDestinationWorkspaceLabel, Detail: domain.FinishDestinationWorkspaceDetail, Value: "workspace"})
 		case "finish-destination\tseparate":
 			items = append(items, SelectItem{Label: domain.FinishDestinationBranchLabel, Detail: domain.FinishDestinationBranchDetail, Value: "fixes"})
 		case "finish-destination\tsource\tequal":
@@ -691,7 +704,7 @@ func (m Model) finishDestinationPicker(msg finishDestinationsMsg) (Model, tea.Cm
 		Title: domain.FinishDestinationTitle,
 		Items: items,
 		OnPick: func(v string) selectResult {
-			req := mutationRequest{action: "finishReview", params: domain.ActionParams{OntoSource: v != "fixes", UpdateSource: v == "update", Source: msg.source}}
+			req := mutationRequest{action: "finishReview", params: domain.ActionParams{OntoSource: v == "onto" || v == "update", UpdateSource: v == "update", Workspace: v == "workspace", Source: msg.source}}
 			return selectResult{done: &req, expected: &msg.token}
 		},
 	}

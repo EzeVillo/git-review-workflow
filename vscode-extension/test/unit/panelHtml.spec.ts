@@ -526,16 +526,18 @@ describe("panelHtml", () => {
             "finish-conflict tiene que seguir mostrando mode/branch/current, no un estado vacio"
         );
         assert.ok(
-            /if \(model\.situation === "finish-conflict"\) \{ body\.appendChild\(renderFinishConflictBanner\(\)\); \}/.test(html),
+            /if \(model\.situation === "finish-conflict"\) \{ body\.appendChild\(renderFinishConflictBanner\(model\)\); \}/.test(html),
             "falta insertar el banner cuando el situation es finish-conflict"
         );
     });
 
     it("el banner de finish-conflict ofrece deshacer y continuar, sin controles de navegacion", () => {
-        const bannerBody = /function renderFinishConflictBanner\(\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
+        const bannerBody = /function renderFinishConflictBanner\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
         assert.ok(bannerBody.length > 0, "no se encontro renderFinishConflictBanner para afirmar sobre el");
         assert.ok(bannerBody.includes('"Undo", "undoFinish"'));
         assert.ok(bannerBody.includes('"Continue", "resumeFinish"'));
+        assert.ok(bannerBody.includes("renderFinishCheckoutRow(model)"));
+        assert.ok(html.includes('button("Open checkout", "openStepCheckout"'));
         // Los controles de navegacion se retiran, no solo se deshabilitan: un
         // boton disabled sigue dejando ver una secuencia que ya no corresponde
         // recorrer.

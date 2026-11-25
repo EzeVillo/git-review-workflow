@@ -188,7 +188,8 @@ public sealed record PanelModel(
     string? LastOpened = null,
     PanelWhy? Why = null,
     string? Stderr = null,
-    CommentsReport? Comments = null)
+    CommentsReport? Comments = null,
+    string? FinishWorkspace = null)
 {
     public IReadOnlyList<PanelReview> ReviewsList => Reviews ?? Array.Empty<PanelReview>();
     public IReadOnlyList<PanelDraft> DraftsList => Drafts ?? Array.Empty<PanelDraft>();
@@ -446,6 +447,7 @@ public static class PanelModelBuilder
     public static PanelModel BuildPanelModel(ReviewState state, PanelInputs inputs)
     {
         var model = new PanelModel(
+            FinishWorkspace: state.FinishWorkspace,
             Comments: state.Comments,
             Situation: state.Situation,
             Busy: inputs.Busy,

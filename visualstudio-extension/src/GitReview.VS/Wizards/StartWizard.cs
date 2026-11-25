@@ -521,6 +521,8 @@ public static class StartWizard
         if (result is null) return false;
         if (result.ExitCode == 0 && !result.TimedOut)
         {
+            if (Porcelain.ReviewCheckoutPath(result.Stdout) is { } checkout)
+                ctx.Host.OpenReviewCheckout?.Invoke(checkout);
             // A successful start still emits notes on stderr.
             var note = CliMessage.FlattenCliMessage(result.Stderr);
             if (note.Length > 0) GitReviewDialogs.Info(note);

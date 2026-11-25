@@ -9,6 +9,7 @@ import {PanelRevealer, revealPanel} from "../views/reveal";
 import {parseMergedRecord} from "../review/draftFlow";
 import {draftUpdated} from "../review/userCopy";
 import {COMPARE_COPY, comparisonSummary, compareBasePrompt, compareConfirmTitle, comparingProgress} from "../review/userCopy";
+import {openReviewCheckout, reviewCheckoutPath} from "./reviewCheckout";
 
 /**
  * `gitReview.compareReview`: monta `git review compare <a> <b> [--step|--no-walk|--keys]`
@@ -139,6 +140,9 @@ async function readComparison(lower: string, upper: string, token: string | unde
         if (result && result.exitCode !== 0) {
             const text = result.stderr.trim() || COMPARE_COPY.failed;
             void vscode.window.showErrorMessage(text);
+        } else if (result) {
+            const checkout = reviewCheckoutPath(result.stdout);
+            if (checkout) await openReviewCheckout(checkout);
         }
     });
 }

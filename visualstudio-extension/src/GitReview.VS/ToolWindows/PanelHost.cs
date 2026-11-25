@@ -48,6 +48,7 @@ public sealed class PanelHost
     /// still learns where the file is.
     /// </summary>
     public Func<string, Task<bool>>? OpenPath { get; init; }
+    public Action<string>? OpenReviewCheckout { get; init; }
 
     /// <summary>
     /// Flushes the editor's unsaved buffer for an absolute path. The draft is validated

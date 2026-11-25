@@ -8,6 +8,7 @@ async function main() {
     // resuelve la CLI del checkout en vez de la que esté instalada en el
     // sistema (ver putBinOnPath). Sin esto la suite necesita `./install.sh`.
     putBinOnPath();
+    process.env.GIT_REVIEW_CHECKOUT = "current";
 
     const extensionDevelopmentPath = path.resolve(__dirname, "../../..");
     const extensionTestsPath = path.resolve(__dirname, "./index");

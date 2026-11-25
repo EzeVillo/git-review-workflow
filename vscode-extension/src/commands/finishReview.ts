@@ -15,7 +15,7 @@ function message(stderr: string): string {
 }
 
 interface LocationItem extends vscode.QuickPickItem {
-    destination: "separate" | "source" | "missing" | "update-source";
+    destination: "workspace" | "separate" | "source" | "missing" | "update-source";
 }
 
 function finishLocations(stdout: string): LocationItem[] {
@@ -24,7 +24,7 @@ function finishLocations(stdout: string): LocationItem[] {
         const [record, kind, state] = line.split("\t");
         if (record !== "finish-destination") continue;
         const destination = kind === "source" && state === "missing" ? "missing" : kind;
-        if (destination === "separate" || destination === "source" || destination === "missing" || destination === "update-source") {
+        if (destination === "workspace" || destination === "separate" || destination === "source" || destination === "missing" || destination === "update-source") {
             items.push({...FINISH_DESTINATIONS[destination], destination});
         }
     }
@@ -104,8 +104,9 @@ export async function finishReview(
 
     await lock.run(async () => {
         let stale = false;
-        const ontoSource = picked.destination !== "separate";
-        const args = picked.destination === "update-source" ? ["--update-source"] : ontoSource ? ["--onto-source"] : [];
+        const isolated = picked.destination === "workspace";
+        const ontoSource = !isolated && picked.destination !== "separate";
+        const args = isolated ? ["--workspace"] : picked.destination === "update-source" ? ["--update-source"] : ontoSource ? ["--onto-source"] : [];
         const invocation = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
@@ -117,7 +118,8 @@ export async function finishReview(
                     return undefined;
                 }
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all", true))) return undefined;
-                const result = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: token.guard});
+                const result = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: token.guard,
+                    ...(isolated ? {timeoutMs: 300_000} : {})});
                 // Refrescar pase lo que pase: el panel necesita el estado real.
                 await stateManager.refreshPrimary();
                 return result;
@@ -131,6 +133,10 @@ export async function finishReview(
             return;
         }
 
+        if (isolated && stateManager.state.finishWorkspace) {
+            revealPanel("finishReview", reveal);
+            return;
+        }
         if (!invocation || invocation.exitCode !== 0) {
             // stderr de la CLI tal cual; si viene vacío (CLI matada / rota), un
             // toast genérico evita el fallo silencioso.
@@ -325,7 +331,8 @@ export async function resumeFinish(
             {location: vscode.ProgressLocation.Notification, title: "Resuming the finish…"},
             async () => {
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all", true))) return undefined;
-                const invocation = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: state.guard});
+                const invocation = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: state.guard,
+                    ...(state.finishWorkspace ? {timeoutMs: 300_000} : {})});
                 await stateManager.refreshPrimary();
                 return invocation;
             }

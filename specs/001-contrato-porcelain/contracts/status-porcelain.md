@@ -283,6 +283,8 @@ base	main
 `finish-workspace<TAB><directorio-absoluto>` informa la salida de un cierre
 aislado completado. La línea `state` identifica la review original, que conserva
 su checkout e índice. Undo reabre esa sesión sin cambiar la salida.
+`finish-workspace-conflict<TAB><directorio-absoluto>` acompaña al registro
+`finish` cuando la resolución debe hacerse en la carpeta de salida.
 
 ## Registro `readonly` (cero o una línea)
 

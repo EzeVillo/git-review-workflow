@@ -118,6 +118,7 @@ function baseEnv(): NodeJS.ProcessEnv {
     return {
         ...process.env,
         GIT_REVIEW_ADVICE: "0",
+        GIT_REVIEW_CHECKOUT_RECORD: "1",
     };
 }
 

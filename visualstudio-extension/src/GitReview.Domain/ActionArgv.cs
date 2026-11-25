@@ -10,7 +10,7 @@ public abstract record ActionParams
     {
         public static readonly Empty Instance = new();
     }
-    public sealed record FinishOnto(bool OntoSource, bool UpdateSource = false) : ActionParams;
+    public sealed record FinishOnto(bool OntoSource, bool UpdateSource = false, bool Workspace = false) : ActionParams;
     public sealed record UndoFinish(bool Force) : ActionParams;
     public sealed record ResumeFinish(bool OntoSource) : ActionParams;
     public sealed record Preview(bool Stat) : ActionParams;
@@ -80,6 +80,7 @@ public static class ActionArgvMap
                 "finish",
                 params_ switch
                 {
+                    ActionParams.FinishOnto { Workspace: true } => new[] { "--workspace" },
                     ActionParams.FinishOnto { UpdateSource: true } => new[] { "--update-source" },
                     ActionParams.FinishOnto { OntoSource: true } => new[] { "--onto-source" },
                     _ => Array.Empty<string>(),

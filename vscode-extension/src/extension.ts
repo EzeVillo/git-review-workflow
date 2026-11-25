@@ -318,6 +318,10 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     async function handlePanelMessage(message: PanelMessage, extra?: unknown): Promise<void> {
         if (message === "openStepCheckout") {
             const state = stateManager.state;
+            if (target && state.finishWorkspace) {
+                await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(state.finishWorkspace), {forceNewWindow: true});
+                return;
+            }
             if (!target || state.situation !== "review" || !state.state?.stepCheckout) return;
             const options = getInvokeOptions();
             let folder: string | undefined;

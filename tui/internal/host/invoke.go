@@ -120,6 +120,7 @@ func resultFromProcessError(res Result, err error) Result {
 // unconditional is what makes "one file, one export" a single line to
 // verify instead of two call sites that both need to remember it.
 const gitReviewAdviceEnv = "GIT_REVIEW_ADVICE=0"
+const gitReviewCheckoutRecordEnv = "GIT_REVIEW_CHECKOUT_RECORD=1"
 
 // InteractiveReviewInvocation is a terminal-owned `git review` command. Cmd
 // goes to tea.ExecProcess so the child gets the real TTY; Complete must be
@@ -141,7 +142,7 @@ func InteractiveReviewCmd(verb string, args []string, dir string) InteractiveRev
 	argv = append(argv, args...)
 	cmd := exec.Command("git", argv...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), gitReviewAdviceEnv)
+	cmd.Env = append(os.Environ(), gitReviewAdviceEnv, gitReviewCheckoutRecordEnv)
 	return InteractiveReviewInvocation{Cmd: cmd, startedAt: time.Now()}
 }
 
@@ -194,7 +195,7 @@ func invokeReview(ctx context.Context, verb string, args []string, guard string,
 	argv = append(argv, verb)
 	argv = append(argv, args...)
 
-	extraEnv := []string{gitReviewAdviceEnv}
+	extraEnv := []string{gitReviewAdviceEnv, gitReviewCheckoutRecordEnv}
 	if class == domain.Network {
 		extraEnv = append(extraEnv, networkEnv()...)
 	}

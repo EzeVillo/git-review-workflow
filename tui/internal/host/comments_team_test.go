@@ -17,6 +17,7 @@ func TestRealInvokerTeamCommentsAcrossMergeStrategies(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", filepath.Join(source, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GIT_REVIEW_CHECKOUT", "current")
 	for _, strategy := range []string{"ff", "merge", "squash"} {
 		t.Run(strategy, func(t *testing.T) {
 			root := t.TempDir()

@@ -201,12 +201,16 @@ public sealed class ReviewStateManager
             {
                 var parsed = Porcelain.ParsePorcelain(status.Stdout);
                 var hasConflict = parsed.Finish is not null;
-                var situation = SituationIds.For(exit, hasConflict, hasFinishPending: false);
+                var isolatedClosed = !string.IsNullOrEmpty(parsed.FinishWorkspace) && !hasConflict;
+                var situation = isolatedClosed ? Situation.FinishPending : SituationIds.For(exit, hasConflict, hasFinishPending: false);
                 next = new ReviewState(
                     Situation: situation,
                     State: parsed.State,
                     Entries: parsed.Entries,
                     Files: parsed.FilesList,
+                    Branches: isolatedClosed ? new[] { new BranchRecord(parsed.State.Branch, Saved: false, Current: true,
+                        Orphan: false, Mode: parsed.State.Mode, Finish: new BranchFinish("pending", false)) } : null,
+                    FinishWorkspace: parsed.FinishWorkspace,
                     Subjects: parsed.Subjects,
                     Authors: parsed.Authors,
                     Base: parsed.Base,

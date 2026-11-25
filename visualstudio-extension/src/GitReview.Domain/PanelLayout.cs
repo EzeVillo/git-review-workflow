@@ -706,17 +706,20 @@ public static class PanelLayoutBuilder
         return outList;
     }
 
-    private static Block.Banner FinishConflictBanner(bool enabled) =>
-        new(
-            new[]
-            {
-                "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing.",
-            },
-            new Block.Row(new[]
-            {
-                Ctrl(ControlId.UndoFinish, "Undo", Emphasis.Secondary, enabled),
-                Ctrl(ControlId.ResumeFinish, "Continue", Emphasis.Secondary, enabled),
-            }));
+    private static Block.Banner FinishConflictBanner(bool enabled, string? workspace)
+    {
+        var message = workspace is null
+            ? "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."
+            : UserCopy.FinishWorkspaceConflict(workspace);
+        return new Block.Banner(new[] { message }, new Block.Row(new[]
+        {
+            Ctrl(ControlId.UndoFinish, "Undo", Emphasis.Secondary, enabled),
+            Ctrl(ControlId.ResumeFinish, "Continue", Emphasis.Secondary, enabled),
+        }));
+    }
+
+    private static Block.Row FinishCheckoutRow(bool enabled) =>
+        new(new[] { Ctrl(ControlId.OpenStepCheckout, UserCopy.StepCheckoutLabel, Emphasis.Secondary, enabled) });
 
     private static List<Block> FinishPendingBlocks(PanelModel model)
     {
@@ -731,10 +734,10 @@ public static class PanelLayoutBuilder
             destination = pending.Onto ? source : $"review-fixes/{source}";
         }
         var enabled = !model.Busy;
-        return new List<Block>
+        var blocks = new List<Block>
         {
             new Block.Banner(
-                new[]
+                model.FinishWorkspace is { } output ? new[] { UserCopy.FinishWorkspaceReady(output) } : new[]
                 {
                     $"Your edits are staged and ready to commit to {destination}. Commit them before switching branches.",
                     "Commit and push them from Source Control. You can still undo this finish.",
@@ -745,6 +748,8 @@ public static class PanelLayoutBuilder
                     Ctrl(ControlId.UndoFinish, "Undo Finish", Emphasis.Secondary, enabled),
                 })),
         };
+        if (model.FinishWorkspace is not null) blocks.Add(FinishCheckoutRow(enabled));
+        return blocks;
     }
 
     private static List<Block> CliBlocks(PanelModel model, bool missing)
@@ -1278,7 +1283,10 @@ public static class PanelLayoutBuilder
                 var enabled = !model.Busy;
                 var outList = new List<Block> { IdentityBar(model) };
                 if (model.Situation == Situation.FinishConflict)
-                    outList.Add(FinishConflictBanner(enabled));
+                {
+                    outList.Add(FinishConflictBanner(enabled, model.FinishWorkspace));
+                    if (model.FinishWorkspace is not null) outList.Add(FinishCheckoutRow(enabled));
+                }
                 outList.AddRange(Notes(model));
                 if (model.Mode == ReviewMode.Whole)
                     outList.AddRange(WholeBlocks(model, enabled));

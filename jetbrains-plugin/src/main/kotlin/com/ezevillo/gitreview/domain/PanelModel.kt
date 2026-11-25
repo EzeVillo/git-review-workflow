@@ -188,6 +188,7 @@ data class PanelModel(
      */
     val walkthrough: PanelWalkthrough? = null,
     val pendingFinish: PendingFinish? = null,
+    val finishWorkspace: String? = null,
     val noBaseConfigured: Boolean = false,
     val configuredBase: String? = null,
     val configuredRemote: String? = null,
@@ -462,6 +463,7 @@ fun resumableSourceAt(branches: List<BranchRecord>, index: Any?): String? {
 
 fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
     var model = PanelModel(
+        finishWorkspace = state.finishWorkspace,
         situation = state.situation,
         busy = inputs.busy,
         comments = state.comments,

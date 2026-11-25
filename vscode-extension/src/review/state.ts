@@ -38,6 +38,7 @@ import {Situation, situationFor, situationForExitCode} from "./situation";
 export type {Situation} from "./situation";
 
 export interface ReviewState {
+    finishWorkspace?: string;
     continueGuard?: string;
     guard?: string;
     navigationState?: boolean;
@@ -562,15 +563,18 @@ export class ReviewStateManager {
                 stderr: result.stderr.trim().length > 0 ? result.stderr : message,
             });
         }
-        const situation = situationFor(result.exitCode, parsed.finish !== undefined, false);
+        const isolatedClosed = parsed.finishWorkspace !== undefined && parsed.finish === undefined;
+        const situation = isolatedClosed ? "finish-pending" : situationFor(result.exitCode, parsed.finish !== undefined, false);
         const next: ReviewState = {
             situation,
             comments,
             state: parsed.state,
             entries: parsed.entries,
             files: parsed.files,
-            branches: [],
+            branches: isolatedClosed ? [{name: parsed.state.branch, current: true, orphan: false, saved: false,
+                mode: parsed.state.mode, finish: {state: "pending", onto: false}}] : [],
         };
+        if (parsed.finishWorkspace) next.finishWorkspace = parsed.finishWorkspace;
         // Se copian sólo si llegaron: asignar `undefined` explícito daría lo
         // mismo hoy, pero la ausencia es un dato y conviene que se lea como tal.
         if (parsed.subjects) {

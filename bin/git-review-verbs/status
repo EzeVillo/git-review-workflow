@@ -131,6 +131,12 @@ if [ -n "$finish_workspace" ]; then
 	printf '          git review finish --abort reopens the review\n'
 	exit 0
 fi
+finish_workspace=$(review_config_get "branch.$cur.reviewworkspacepending" || true)
+if [ -n "$finish_workspace" ]; then
+	printf '  pending %s\n' "$finish_workspace"
+	printf '          resolve and stage the output, then run git review finish --resume\n'
+	exit 0
+fi
 if [ "$is_readonly" = "1" ]; then
 	if [ -n "$cmpbase" ] && [ -n "$cmpfrom" ] && [ -n "$cmpto" ]; then
 		printf '  from    %s (%s)\n  to      %s (%s)\n' "$cmpfrom" "$cmpbase" "$cmpto" "$tip"

@@ -60,6 +60,7 @@ type PanelModel struct {
 
 	PendingFinish     bool
 	FinishDestination string // where the edits landed (finish-pending banner)
+	FinishWorkspace   string
 	FinishConflict    bool
 
 	NoBaseConfigured bool

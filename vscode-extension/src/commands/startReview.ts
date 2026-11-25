@@ -37,6 +37,7 @@ import {ReviewStateManager} from "../review/state";
 import {setBase} from "./setBase";
 import {FETCHING_REVIEW_REVISIONS, STALE, START_LOCAL_DETAIL, START_REMOTE_DETAIL, draftUpdated, startLayoutTitle} from "../review/userCopy";
 import {PanelRevealer, revealPanel} from "../views/reveal";
+import {openReviewCheckout, reviewCheckoutPath} from "./reviewCheckout";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que continueReview.ts). */
 function flatten(stderr: string): string {
@@ -602,7 +603,9 @@ export async function startReview(
             // El acuse es el panel: se revela sólo en verde y después del refresco
             // (panel ya redibujado), nunca antes — mismo motivo que el reveal del
             // borrador más arriba.
-            revealPanel("startReview", reveal);
+            const checkout = reviewCheckoutPath(result.stdout);
+            if (checkout) await openReviewCheckout(checkout);
+            else revealPanel("startReview", reveal);
 
             // start emite notas a stderr en invocaciones EXITOSAS (rama local
             // desactualizada, review previa con commits nuevos): se muestran aunque

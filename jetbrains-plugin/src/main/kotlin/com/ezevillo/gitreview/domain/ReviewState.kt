@@ -59,4 +59,5 @@ data class ReviewState(
     val commentsPaths: Boolean = false,
     /** Exact --why stdout from the same snapshot; null keeps the separate query. */
     val inlineWhy: String? = null,
+    val finishWorkspace: String? = null,
 )

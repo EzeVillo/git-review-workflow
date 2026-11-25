@@ -14,7 +14,7 @@ sealed class ActionParams {
     data class Start(val intent: ReviewIntent, val currentBranch: String) : ActionParams()
     data class Continue(val source: String) : ActionParams()
     data object Empty : ActionParams()
-    data class FinishOnto(val ontoSource: Boolean, val updateSource: Boolean = false) : ActionParams()
+    data class FinishOnto(val ontoSource: Boolean, val updateSource: Boolean = false, val workspace: Boolean = false) : ActionParams()
     data class UndoFinish(val force: Boolean) : ActionParams()
     data class ResumeFinish(val ontoSource: Boolean) : ActionParams()
     data class Preview(val stat: Boolean) : ActionParams()
@@ -67,6 +67,7 @@ fun actionToArgv(action: String, params: ActionParams = ActionParams.Empty): Act
         "finishReview" -> {
             val finish = params as? ActionParams.FinishOnto
             ActionArgv("finish", when {
+                finish?.workspace == true -> listOf("--workspace")
                 finish?.updateSource == true -> listOf("--update-source")
                 finish?.ontoSource == true -> listOf("--onto-source")
                 else -> emptyList()

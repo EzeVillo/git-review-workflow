@@ -83,6 +83,14 @@ func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 	}
 
 	result := ReadResult{Stderr: statusRes.Stderr, Guard: domain.ParseStateGuard(statusRes.Stdout), SaveState: domain.HasSaveState(statusRes.Stdout), NavigationState: domain.HasNavigationState(statusRes.Stdout)}
+	if statusRes.ExitCode == 0 && parseOK && parsed.FinishWorkspace != "" && parsed.Finish == nil {
+		result.Situation = domain.SituationFinishPending
+		result.Status = parsed
+		result.HasStatus = true
+		result.HasList = true
+		result.Branches = []domain.BranchRecord{{Name: parsed.State.Branch, Current: true, Finish: &domain.ListFinish{State: "pending"}}}
+		return result
+	}
 
 	switch statusOutcome.ExitCode {
 	case 2:

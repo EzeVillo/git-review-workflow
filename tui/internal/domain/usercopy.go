@@ -573,17 +573,21 @@ const (
 
 	CompareReviewConfirmDetail = CompareConfirmDetail
 
-	FinishDestinationTitle        = "Where should your edits go?"
-	FinishDestinationBranchLabel  = "A separate branch"
-	FinishDestinationBranchDetail = "review-fixes/<branch>, staged on top of the PR tip"
-	FinishDestinationOntoLabel    = "Onto the PR branch itself"
-	FinishDestinationOntoDetail   = "stage the edits directly on the PR branch"
-	FinishDestinationCreate       = "Create PR branch and apply changes"
-	FinishDestinationUpdate       = "Update PR branch and apply changes"
-	FinishDestinationsFailed      = "Could not read the available finish destinations."
-	FinishDestinationsPrompt      = "Choose a destination for your review changes"
-	FetchingReviewRevisions       = "Fetching review revisions…"
-	CouldNotReadStartOptions      = "Could not read reading options for this branch."
+	FinishDestinationTitle           = "Where should your edits go?"
+	FinishDestinationWorkspaceLabel  = "A new checkout"
+	FinishDestinationWorkspaceDetail = "Stage changes in a separate folder."
+	FinishWorkspaceReady             = "The finish output is in {destination}."
+	FinishWorkspaceConflict          = "Resolve and stage the conflicts in {destination}."
+	FinishDestinationBranchLabel     = "A separate branch"
+	FinishDestinationBranchDetail    = "review-fixes/<branch>, staged on top of the PR tip"
+	FinishDestinationOntoLabel       = "Onto the PR branch itself"
+	FinishDestinationOntoDetail      = "stage the edits directly on the PR branch"
+	FinishDestinationCreate          = "Create PR branch and apply changes"
+	FinishDestinationUpdate          = "Update PR branch and apply changes"
+	FinishDestinationsFailed         = "Could not read the available finish destinations."
+	FinishDestinationsPrompt         = "Choose a destination for your review changes"
+	FetchingReviewRevisions          = "Fetching review revisions…"
+	CouldNotReadStartOptions         = "Could not read reading options for this branch."
 )
 
 const (

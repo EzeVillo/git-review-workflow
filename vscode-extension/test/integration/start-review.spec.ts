@@ -111,6 +111,53 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         withBaseConfigured(repo, "main");
     });
 
+    it("opens a managed review in a new window and keeps development edits", async () => {
+        const branch = "us1-managed-checkout";
+        createBranchWithChanges(repo, branch, {"src/managed.ts": "reviewed\n"});
+        git(["checkout", branch], repo.dir);
+        const local = join(repo.dir, "development.tmp");
+        writeFileSync(local, "keep this file\n");
+        const stateRoot = mkdtempSync(join(tmpdir(), "grv-start-state-"));
+        const legacyMode = process.env.GIT_REVIEW_CHECKOUT;
+        const previousStateRoot = process.env.XDG_STATE_HOME;
+        const commands = vscode.commands as {executeCommand: typeof vscode.commands.executeCommand};
+        const execute = commands.executeCommand;
+        let checkout: string | undefined;
+        delete process.env.GIT_REVIEW_CHECKOUT;
+        process.env.XDG_STATE_HOME = stateRoot;
+        commands.executeCommand = <T>(command: string, ...args: unknown[]): Thenable<T> => {
+            if (command === "vscode.openFolder") {
+                checkout = (args[0] as vscode.Uri).fsPath;
+                assert.deepStrictEqual(args[1], {forceNewWindow: true});
+                return Promise.resolve(undefined as T);
+            }
+            return execute<T>(command, ...args);
+        };
+        try {
+            const api = await getTestApi();
+            assert.strictEqual((await api.refresh()).situation, "no-review");
+            await withScriptedWizard(pickCurrent, "Whole diff", () =>
+                vscode.commands.executeCommand("gitReview.startReview"));
+            assert.ok(checkout, "Start should open a new folder");
+            assert.strictEqual(git(["symbolic-ref", "--short", "HEAD"], checkout).trim(), `review/${branch}`);
+            assert.strictEqual(git(["symbolic-ref", "--short", "HEAD"], repo.dir).trim(), branch);
+            assert.strictEqual(git(["diff", "--cached", "--name-only"], checkout).trim(), "src/managed.ts");
+            assert.ok(existsSync(local));
+        } finally {
+            commands.executeCommand = execute;
+            if (legacyMode === undefined) delete process.env.GIT_REVIEW_CHECKOUT;
+            else process.env.GIT_REVIEW_CHECKOUT = legacyMode;
+            if (previousStateRoot === undefined) delete process.env.XDG_STATE_HOME;
+            else process.env.XDG_STATE_HOME = previousStateRoot;
+            if (checkout) {
+                gitReview(["abort"], checkout);
+                git(["worktree", "remove", "--force", checkout], repo.dir);
+            }
+            rmSync(local, {force: true});
+            rmSync(stateRoot, {recursive: true, force: true});
+        }
+    });
+
     it("whole diff: deja whole cuando no hay walkthrough", async () => {
         const branch = "us1-whole";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});

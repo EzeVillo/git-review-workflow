@@ -60,7 +60,7 @@ class PanelLayoutContractTest {
     fun `finish-conflict control sequence matches canonical`() {
         assertLayoutAgainstCanonical(
             key = "finish-conflict",
-            layout = panelLayout(PanelFixtures.finishConflict()),
+            layout = panelLayout(PanelFixtures.finishConflict().copy(finishWorkspace = "/tmp/edits")),
             mode = "walk",
         )
     }
@@ -87,7 +87,7 @@ class PanelLayoutContractTest {
     fun `finish-pending controls match canonical`() {
         assertLayoutAgainstCanonical(
             key = "finish-pending",
-            layout = panelLayout(PanelFixtures.finishPending()),
+            layout = panelLayout(PanelFixtures.finishPending().copy(finishWorkspace = "/tmp/edits")),
         )
     }
 

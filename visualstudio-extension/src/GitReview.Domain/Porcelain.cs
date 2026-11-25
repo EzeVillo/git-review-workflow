@@ -97,7 +97,8 @@ public sealed record PorcelainResult(
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null,
-    ComparisonRecord? Comparison = null)
+    ComparisonRecord? Comparison = null,
+    string? FinishWorkspace = null)
 {
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();
 }
@@ -141,6 +142,14 @@ public sealed record FixesRecord(
 
 public static class Porcelain
 {
+    public static string? ReviewCheckoutPath(string stdout)
+    {
+        const string prefix = "review-checkout\t";
+        var line = stdout.Split('\n').FirstOrDefault(s => s.StartsWith(prefix, StringComparison.Ordinal));
+        var path = line?.Substring(prefix.Length).TrimEnd('\r');
+        return string.IsNullOrEmpty(path) ? null : path;
+    }
+
     private static bool ToBool(string? field) => field == "1";
 
     private static int ToInt(string? field) =>
@@ -188,6 +197,7 @@ public static class Porcelain
         string? comparisonBase = null;
         string? comparisonTarget = null;
         StatusFinishRecord? finish = null;
+        string? finishWorkspace = null;
         bool? isReadonly = null;
         bool? isKeysOnly = null;
         bool? isDraft = null;
@@ -306,6 +316,10 @@ public static class Porcelain
                         finish = new StatusFinishRecord(Onto: ToBool(Get(fields, 2)));
                     break;
                 }
+                case "finish-workspace":
+                case "finish-workspace-conflict":
+                    finishWorkspace = RestAfterTab(line, 1);
+                    break;
                 case "readonly":
                     isReadonly = true;
                     break;
@@ -333,6 +347,7 @@ public static class Porcelain
             Subjects: subjects,
             Authors: authors,
             Base: bas,
+            FinishWorkspace: finishWorkspace,
             Comparison: comparisonOids is not null && !string.IsNullOrEmpty(comparisonBase) && !string.IsNullOrEmpty(comparisonTarget)
                 ? new ComparisonRecord(comparisonOids[0], comparisonOids[1], comparisonBase!, comparisonTarget!) : null);
     }

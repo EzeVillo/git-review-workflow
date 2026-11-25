@@ -311,6 +311,11 @@ public sealed partial class ActionDispatcher
 
     private async Task OpenStepCheckoutAsync()
     {
+        if (State.FinishWorkspace is { Length: > 0 } finishWorkspace)
+        {
+            Process.Start(new ProcessStartInfo(finishWorkspace) { UseShellExecute = true });
+            return;
+        }
         if (State.Situation != Situation.Review || State.State?.StepCheckout != true) return;
         var result = await _panel.Mutations.RunArgvAsync("workspace", new[] { "checkout", "--porcelain" }).ConfigureAwait(true);
         const string prefix = "step-checkout\t";
@@ -588,6 +593,7 @@ public sealed partial class ActionDispatcher
         var destinations = (legacy ? "finish-destination\tseparate\nfinish-destination\tsource\tequal" : probe.Stdout)
             .Split('\n').Select(line => line.TrimEnd('\r') switch
             {
+                "finish-destination\tworkspace" => "workspace",
                 "finish-destination\tseparate" => "separate",
                 "finish-destination\tsource\tequal" => "source",
                 "finish-destination\tsource\tmissing" => "missing",
@@ -604,17 +610,19 @@ public sealed partial class ActionDispatcher
             UserCopy.FinishDestinationsPrompt,
             destinations.Select(value => value switch
             {
+                "workspace" => UserCopy.FinishLocationWorkspace,
                 "source" => UserCopy.FinishLocationOnto,
                 "missing" => UserCopy.FinishLocationCreate,
                 "update-source" => UserCopy.FinishLocationUpdate,
                 _ => UserCopy.FinishLocationSeparate,
             }).ToArray());
         if (idx < 0) return;
-        var ontoSource = destinations[idx] != "separate";
+        var workspace = destinations[idx] == "workspace";
+        var ontoSource = !workspace && destinations[idx] != "separate";
 
         var result = await RunAsync(
             "finishReview",
-            new ActionParams.FinishOnto(ontoSource, destinations[idx] == "update-source"),
+            new ActionParams.FinishOnto(ontoSource, destinations[idx] == "update-source", workspace),
             progress: UserCopy.FinishingProgress(source), expected: finishToken).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
 
@@ -712,7 +720,8 @@ public sealed partial class ActionDispatcher
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
         // La situación entera cambia —no-review pasa a review— y esto se dispara
         // también desde el menú, con el panel cerrado.
-        PanelReveal.Reveal(ControlId.ContinueReview, _host);
+        if (Porcelain.ReviewCheckoutPath(result.Stdout) is { } checkout) _host.OpenReviewCheckout?.Invoke(checkout);
+        else PanelReveal.Reveal(ControlId.ContinueReview, _host);
     }
 
     // -- housekeeping -------------------------------------------------------
@@ -1233,10 +1242,12 @@ public sealed partial class ActionDispatcher
             ReviewLayout.Keys => new[] { "--keys" },
             _ => Array.Empty<string>(),
         };
-        await RunAsync(
+        var comparison = await RunAsync(
             "compareReview",
             new ActionParams.Compare(flags.Concat(prepared).ToArray(), lowerRef, upperRef),
             progress: UserCopy.ComparingProgress(lowerRef, upperRef)).ConfigureAwait(true);
+        if (comparison is { ExitCode: 0, TimedOut: false } && Porcelain.ReviewCheckoutPath(comparison.Stdout) is { } checkout)
+            _host.OpenReviewCheckout?.Invoke(checkout);
     }
 
     /// <summary>

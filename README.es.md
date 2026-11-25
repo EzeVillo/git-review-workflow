@@ -126,9 +126,11 @@ Después elegí la interfaz desde la que querés trabajar:
 | **Interfaz de terminal** | [Instalá y abrí la interfaz de terminal](tui/README.md) |
 
 En un panel o en la interfaz de terminal, configurá una vez la rama base y elegí
-**Start a review**. La interfaz te pregunta qué rama revisar y cómo recorrerla.
-Editá y corré el cambio staged con tus herramientas habituales; después elegí
-**Finish** para extraer tus correcciones a una rama aparte.
+**Start a review**. La interfaz te pregunta qué rama revisar y abre un checkout
+separado con el diff seleccionado staged. Editá y probá ahí. Después elegí
+**Finish** y **A new checkout** para dejar tus correcciones staged en otra carpeta.
+Save conserva la carpeta actual. Continue restaura la review guardada en una
+nueva.
 
 Las comparaciones ofrecen sólo comentarios Local y los conservan automáticamente al cerrarlas. Los formularios omiten el selector de destino cuando la CLI permite una sola opción.
 

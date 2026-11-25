@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+func ReviewCheckoutPath(stdout string) string {
+	for _, line := range strings.Split(stdout, "\n") {
+		if path, ok := strings.CutPrefix(line, "review-checkout\t"); ok {
+			return strings.TrimSuffix(path, "\r")
+		}
+	}
+	return ""
+}
+
 // ReviewMode is the mode a review runs in.
 type ReviewMode string
 
@@ -80,10 +89,11 @@ type PorcelainResult struct {
 	// empty when there are no `file` lines.
 	Files []EntryRecord
 
-	Finish   *StatusFinishRecord
-	Readonly bool
-	KeysOnly bool
-	Draft    bool
+	Finish          *StatusFinishRecord
+	FinishWorkspace string
+	Readonly        bool
+	KeysOnly        bool
+	Draft           bool
 	// DraftPath: the absolute path of the draft in force, from the `draft`
 	// record's field. Kept apart from Draft on purpose: presence is
 	// presence, and a missing field (an older CLI, a truncated record)
@@ -280,6 +290,8 @@ func ParsePorcelain(stdout string) (PorcelainResult, bool) {
 			if field(fields, 1) == "conflict" {
 				result.Finish = &StatusFinishRecord{State: "conflict", Onto: toBool(field(fields, 2))}
 			}
+		case "finish-workspace", "finish-workspace-conflict":
+			result.FinishWorkspace, _ = restAfterTab(line, 1)
 
 		case "readonly":
 			result.Readonly = true

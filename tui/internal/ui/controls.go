@@ -93,15 +93,16 @@ func coreControlsFor(m domain.PanelModel) (controls []Control) {
 		return append(cs, Control{ID: "prev", Enabled: !m.AtFirst}, Control{ID: "next", Enabled: !m.AtLast})
 
 	case domain.LayoutFinishPending:
-		return []Control{
-			{ID: "cleanReview", Enabled: true},
-			{ID: "undoFinish", Enabled: true},
+		cs := []Control{{ID: "cleanReview", Enabled: true}, {ID: "undoFinish", Enabled: true}}
+		if m.FinishWorkspace != "" {
+			cs = append(cs, Control{ID: "openStepCheckout", Enabled: true})
 		}
+		return cs
 
 	case domain.LayoutFinishConflict:
-		cs := []Control{
-			{ID: "undoFinish", Enabled: true},
-			{ID: "resumeFinish", Enabled: true},
+		cs := []Control{{ID: "undoFinish", Enabled: true}, {ID: "resumeFinish", Enabled: true}}
+		if m.FinishWorkspace != "" {
+			cs = append(cs, Control{ID: "openStepCheckout", Enabled: true})
 		}
 		if m.Mode == domain.ModeWalk {
 			if m.WhyState == domain.WhyPresent {

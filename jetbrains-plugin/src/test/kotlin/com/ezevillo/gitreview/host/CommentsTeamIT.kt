@@ -24,7 +24,8 @@ class CommentsTeamIT {
                 assertEquals(0, process.exitValue(), log.readText())
             }
             fun review(verb: String, vararg args: String): String {
-                val result = cli.invoke(verb, args.toList(), cwd)
+                val argv = if (verb == "start") listOf("--in-place") + args else args.toList()
+                val result = cli.invoke(verb, argv, cwd)
                 assertEquals(0, result.exitCode, result.stderr)
                 return result.stdout
             }

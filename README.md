@@ -124,9 +124,11 @@ Then choose the interface you want to work from:
 | **Terminal UI** | [Install and open the terminal interface](tui/README.md#getting-started) |
 
 In a panel or the terminal UI, set the base branch once, then choose **Start a
-review**. The interface asks which branch to review and how to read it. Edit and
-run the staged change in your usual tools, then choose **Finish** to extract your
-corrections onto a separate branch.
+review**. The interface asks which branch to review and opens a separate
+checkout with the selected diff staged. Edit and test there, then choose
+**Finish** and **A new checkout** to stage your corrections in another folder.
+Save preserves the current folder. Continue restores the saved review in a new
+one.
 
 Prefer Homebrew, a native Windows (PowerShell) installer, or an install that
 does not need Node? See [Installation](#installation). If you prefer scripting

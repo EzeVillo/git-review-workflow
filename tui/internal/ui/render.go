@@ -1077,17 +1077,31 @@ func renderReviewWhole(b *builder, m domain.PanelModel) {
 }
 
 func renderFinishPending(b *builder, m domain.PanelModel) {
-	b.text(interpolate(domain.FinishPendingLine1, "{destination}", m.FinishDestination))
-	b.text(domain.FinishPendingLine2)
+	if m.FinishWorkspace != "" {
+		b.text(interpolate(domain.FinishWorkspaceReady, "{destination}", m.FinishWorkspace))
+	} else {
+		b.text(interpolate(domain.FinishPendingLine1, "{destination}", m.FinishDestination))
+		b.text(domain.FinishPendingLine2)
+	}
 	b.blank()
 	b.button("cleanReview", "", domain.DoneCleanUpLabel, b.st.primary, true)
 	b.button("undoFinish", "", domain.UndoLabel, b.st.secondary, true)
+	if m.FinishWorkspace != "" {
+		b.button("openStepCheckout", "", domain.StepCheckoutLabel, b.st.secondary, true)
+	}
 }
 
 func renderFinishConflict(b *builder, m domain.PanelModel) {
-	b.text(domain.FinishConflictBanner)
+	if m.FinishWorkspace != "" {
+		b.text(interpolate(domain.FinishWorkspaceConflict, "{destination}", m.FinishWorkspace))
+	} else {
+		b.text(domain.FinishConflictBanner)
+	}
 	b.button("undoFinish", "", domain.UndoConflictLabel, b.st.secondary, true)
 	b.button("resumeFinish", "", domain.ContinueLabel, b.st.secondary, true)
+	if m.FinishWorkspace != "" {
+		b.button("openStepCheckout", "", domain.StepCheckoutLabel, b.st.secondary, true)
+	}
 	b.blank()
 	b.heading(identityLine(m))
 	for _, line := range domain.ComparisonLines(m.Comparison) {

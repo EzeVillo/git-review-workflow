@@ -1,6 +1,6 @@
 import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
-import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY, COMPARE_COPY, STEP_CHECKOUT_LABEL} from "../review/userCopy";
+import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY, COMPARE_COPY, STEP_CHECKOUT_LABEL, FINISH_WORKSPACE_READY, FINISH_WORKSPACE_CONFLICT} from "../review/userCopy";
 
 /**
  * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
@@ -1424,10 +1424,14 @@ export function panelHtml(nonce: string): string {
           destination = pending.onto ? source : "review-fixes/" + source;
         }
         const notice = el("div", "note finish-banner");
-        notice.appendChild(el("p", null,
-          "Your edits are staged and ready to commit to " + destination + ". Commit them before switching branches."));
-        notice.appendChild(el("p", null,
-          "Commit and push them from Source Control. You can still undo this finish."));
+        if (model.finishWorkspace) {
+          notice.appendChild(el("p", null, ${JSON.stringify(FINISH_WORKSPACE_READY)} + model.finishWorkspace + "."));
+        } else {
+          notice.appendChild(el("p", null,
+            "Your edits are staged and ready to commit to " + destination + ". Commit them before switching branches."));
+          notice.appendChild(el("p", null,
+            "Commit and push them from Source Control. You can still undo this finish."));
+        }
         const actions = el("div", "row");
         const clean = button("Keep edits & remove Undo", "cleanReview", "primary");
         clean.disabled = model.busy;
@@ -1438,6 +1442,7 @@ export function panelHtml(nonce: string): string {
         actions.appendChild(clean);
         actions.appendChild(undo);
         notice.appendChild(actions);
+        if (model.finishWorkspace) notice.appendChild(renderFinishCheckoutRow(model));
         return notice;
       }
       case "out-of-range":
@@ -1642,15 +1647,25 @@ export function panelHtml(nonce: string): string {
    * undoFinish / resumeFinish / cleanReview viven en PANEL_MESSAGES y rutean
    * a gitReview.undoFinish / resumeFinish / cleanReview.
    */
-  function renderFinishConflictBanner() {
+  function renderFinishConflictBanner(model) {
     const box = el("div", "note finish-banner");
     box.appendChild(el("p", null,
-      "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."));
+      model.finishWorkspace ? ${JSON.stringify(FINISH_WORKSPACE_CONFLICT)} + model.finishWorkspace + "." :
+        "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."));
     const row = el("div", "row");
     row.appendChild(button("Undo", "undoFinish", null));
     row.appendChild(button("Continue", "resumeFinish", null));
     box.appendChild(row);
+    if (model.finishWorkspace) box.appendChild(renderFinishCheckoutRow(model));
     return box;
+  }
+
+  function renderFinishCheckoutRow(model) {
+    const row = el("div", "row");
+    const open = button(${JSON.stringify(STEP_CHECKOUT_LABEL)}, "openStepCheckout", null);
+    open.disabled = model.busy;
+    row.appendChild(open);
+    return row;
   }
 
   /** Nada de lo dibujado durante la carga puede accionarse; ver stale(). */
@@ -1865,7 +1880,7 @@ export function panelHtml(nonce: string): string {
     const main = el("div", "pane-main");
     const body = el("div", "pane-body");
     body.appendChild(renderBar(model, loading));
-    if (model.situation === "finish-conflict") { body.appendChild(renderFinishConflictBanner()); }
+    if (model.situation === "finish-conflict") { body.appendChild(renderFinishConflictBanner(model)); }
     renderNotes(model, body);
 
     if (loading) {

@@ -55,7 +55,8 @@ public sealed record ReviewState(
     bool NavigationState = false,
     bool SaveState = false,
     bool CommentsPaths = false,
-    string? InlineWhy = null)
+    string? InlineWhy = null,
+    string? FinishWorkspace = null)
 {
     public IReadOnlyList<EntryRecord> EntriesList => Entries ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();

@@ -57,7 +57,7 @@ public class PanelLayoutContractTests
     [Fact]
     public void Finish_conflict_control_sequence_matches_canonical()
     {
-        AssertLayoutAgainstCanonical("finish-conflict", PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishConflict()), mode: "walk");
+        AssertLayoutAgainstCanonical("finish-conflict", PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishConflict() with { FinishWorkspace = "/tmp/edits" }), mode: "walk");
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class PanelLayoutContractTests
     [Fact]
     public void Finish_pending_controls_match_canonical()
     {
-        AssertLayoutAgainstCanonical("finish-pending", PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending()));
+        AssertLayoutAgainstCanonical("finish-pending", PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending() with { FinishWorkspace = "/tmp/edits" }));
     }
 
     [Fact]

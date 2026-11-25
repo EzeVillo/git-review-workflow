@@ -5,6 +5,8 @@ import com.ezevillo.gitreview.domain.parseContinueGuard
 import com.ezevillo.gitreview.domain.CLI_PROBE_RETRIES
 import com.ezevillo.gitreview.domain.CLI_PROBE_RETRY_DELAY_MS
 import com.ezevillo.gitreview.domain.CliVerdict
+import com.ezevillo.gitreview.domain.BranchFinish
+import com.ezevillo.gitreview.domain.BranchRecord
 import com.ezevillo.gitreview.domain.ReviewState
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.isOutdated
@@ -244,12 +246,15 @@ class ReviewStateManager(
             Situation.REVIEW, Situation.FINISH_CONFLICT -> {
                 try {
                     val porcelain = parsePorcelain(status.stdout)
+                    val isolatedClosed = porcelain.finishWorkspace != null && porcelain.finish == null
                     ReviewState(
-                        situation = situation,
+                        situation = if (isolatedClosed) Situation.FINISH_PENDING else situation,
+                        finishWorkspace = porcelain.finishWorkspace,
                         state = porcelain.state,
                         entries = porcelain.entries,
                         files = porcelain.files,
-                        branches = emptyList(),
+                        branches = if (isolatedClosed) listOf(BranchRecord(porcelain.state.branch, saved = false,
+                            current = true, orphan = false, mode = porcelain.state.mode, finish = BranchFinish("pending", false))) else emptyList(),
                         subjects = porcelain.subjects,
                         authors = porcelain.authors,
                         base = porcelain.base,

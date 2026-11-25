@@ -266,6 +266,10 @@ class PanelActionDispatcher(
 
     private fun openStepCheckout() {
         val state = service.currentState()
+        state.finishWorkspace?.let {
+            BrowserUtil.browse(Path.of(it).toUri())
+            return
+        }
         if (state.situation != Situation.REVIEW || state.state?.stepCheckout != true) return
         val cwd = pickSoleGitRoot(project)?.rootPath ?: return
         val token = captureToken(state)

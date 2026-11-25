@@ -703,10 +703,11 @@ private fun fileInventoryBlocks(
     return out
 }
 
-private fun finishConflictBanner(enabled: Boolean): Block.Banner =
+private fun finishConflictBanner(enabled: Boolean, workspace: String?): Block.Banner =
     Block.Banner(
         paragraphs = listOf(
-            "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing.",
+            if (workspace == null) "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."
+            else UserCopy.finishWorkspaceConflict(workspace),
         ),
         row = Block.Row(
             listOf(
@@ -715,6 +716,9 @@ private fun finishConflictBanner(enabled: Boolean): Block.Banner =
             ),
         ),
     )
+
+private fun finishCheckoutRow(enabled: Boolean): Block.Row =
+    Block.Row(listOf(ctrl(ControlId.OPEN_STEP_CHECKOUT, UserCopy.STEP_CHECKOUT_LABEL, Emphasis.SECONDARY, enabled)))
 
 private fun finishPendingBlocks(model: PanelModel): List<Block> {
     val pending = model.pendingFinish
@@ -731,7 +735,7 @@ private fun finishPendingBlocks(model: PanelModel): List<Block> {
     val enabled = !model.busy
     return listOf(
         Block.Banner(
-            paragraphs = listOf(
+            paragraphs = if (model.finishWorkspace != null) listOf(UserCopy.finishWorkspaceReady(model.finishWorkspace)) else listOf(
                 "Your edits are staged and ready to commit to $destination. Commit them before switching branches.",
                 "Commit and push them from Source Control. You can still undo this finish.",
             ),
@@ -742,7 +746,7 @@ private fun finishPendingBlocks(model: PanelModel): List<Block> {
                 ),
             ),
         ),
-    )
+    ) + listOfNotNull(model.finishWorkspace?.let { finishCheckoutRow(enabled) })
 }
 
 private fun cliBlocks(model: PanelModel, missing: Boolean): List<Block> {
@@ -1363,7 +1367,8 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
             val out = ArrayList<Block>()
             out.add(identityBar(model))
             if (model.situation == Situation.FINISH_CONFLICT) {
-                out.add(finishConflictBanner(enabled))
+                out.add(finishConflictBanner(enabled, model.finishWorkspace))
+                if (model.finishWorkspace != null) out.add(finishCheckoutRow(enabled))
             }
             out.addAll(notes(model))
             when (model.mode) {

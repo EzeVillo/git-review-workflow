@@ -534,7 +534,8 @@ object StartWizard {
                     // la vista: el asistente corrio sobre el editor y la tool
                     // window pudo quedar cerrada. Solo en verde y despues del
                     // refresco, o sea sobre el panel ya redibujado.
-                    revealPanel(project, from)
+                    if (result.checkout == null) revealPanel(project, from)
+                    else openReviewCheckout(project, result.checkout)
                     // Successful start can still emit notes on stderr.
                     if (result.note != null) {
                         UiMessages.info(project, result.note)

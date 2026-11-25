@@ -198,6 +198,7 @@ export interface PanelGuide {
  * borra), para que se construya y se pruebe sin un editor.
  */
 export interface PanelModel {
+    finishWorkspace?: string;
     stepCheckout?: true;
     commentTarget?: string;
     comments?: CommentsReport;
@@ -670,6 +671,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         atFirst: false,
         atLast: false,
         navigationLocked: state.situation === "finish-conflict",
+        ...(state.finishWorkspace ? {finishWorkspace: state.finishWorkspace} : {}),
         degraded: false,
         readonly: false,
         keysOnly: false,

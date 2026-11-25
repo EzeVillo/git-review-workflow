@@ -1,4 +1,7 @@
 import * as assert from "node:assert";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import {getTestApi} from "./helpers/extensionApi";
 import {
@@ -133,6 +136,7 @@ function configGet(repo: { dir: string }, key: string): string {
 
 const FINISH_TEST_BRANCHES = [
     "us3-finish-branch",
+    "us3-finish-workspace",
     "us3-finish-onto",
     "us3-finish-no-edits",
     "us3-finish-dismiss",
@@ -280,6 +284,37 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
         assert.deepStrictEqual(model.reviews, []);
         assert.strictEqual(model.noBaseConfigured, false);
         assert.strictEqual(model.configuredBase, undefined);
+    });
+
+    it("finishes in a new checkout and keeps the origin intact", async () => {
+        const branch = "us3-finish-workspace";
+        const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), "grv-finish-"));
+        const previousStateHome = process.env.XDG_STATE_HOME;
+        process.env.XDG_STATE_HOME = outputRoot;
+        try {
+            createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+            startReview(repo, branch);
+            const api = await getTestApi();
+            await api.refresh();
+            writeFile(repo, "src/a.ts", "a\nworkspace edit\n");
+            const index = git(["write-tree"], repo.dir);
+            const {errors} = await withScriptedPick("A new checkout", () =>
+                vscode.commands.executeCommand("gitReview.finishReview")
+            );
+            assert.deepStrictEqual(errors, []);
+            const state = await api.refresh();
+            assert.strictEqual(state.situation, "finish-pending");
+            assert.ok(state.finishWorkspace);
+            assert.strictEqual((await api.getPanelModel()).finishWorkspace, state.finishWorkspace);
+            assert.match(git(["show", ":src/a.ts"], state.finishWorkspace), /workspace edit/);
+            assert.strictEqual(headBranch(repo), `review/${branch}`);
+            assert.strictEqual(git(["write-tree"], repo.dir), index);
+            assert.match(git(["diff"], repo.dir), /workspace edit/);
+        } finally {
+            if (previousStateHome === undefined) delete process.env.XDG_STATE_HOME;
+            else process.env.XDG_STATE_HOME = previousStateHome;
+            fs.rmSync(outputRoot, {recursive: true, force: true});
+        }
     });
 
     it("elegir 'Onto the PR branch itself' deja las ediciones sobre la rama del PR, con onto=1 (T053)", async () => {

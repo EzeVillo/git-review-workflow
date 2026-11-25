@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
+	bats_require_minimum_version 1.5.0
 	ROOT="$BATS_TEST_TMPDIR"
 	export HOME="$ROOT/home"
 	export PATH="$BATS_TEST_DIRNAME/../bin:$PATH"
@@ -41,6 +42,189 @@ setup() {
 	[ "$(cat build.tmp)" = 'existing ignored file' ]
 	[ "$(cat a.txt)" = 'existing local edit' ]
 	[ ! -e "$ROOT/review folder/.git/objects/info/alternates" ]
+}
+
+@test "managed start save continue and abort preserve all previous checkouts" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state with spaces"
+	before=$(git write-tree)
+	prepared=$(git review start --prepare --offline --base main -- topic)
+	token=$(printf '%s\n' "$prepared" | awk -F '\t' '$1 == "start-prepared" {print $2}')
+	[ -n "$token" ]
+	run git review start --no-walk --offline --base main --prepared="$token" -- topic
+	[ "$status" -eq 0 ]
+	review=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	[ -d "$review" ]
+	[ "$(git -C "$review" symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git -C "$review" write-tree)" = "$(git rev-parse "$TIP^{tree}")" ]
+	git -C "$review" review comments add --document local --text 'Notes to retain.'
+	run --separate-stderr git review clean topic
+	[ "$status" -eq 0 ]
+	[[ "$stderr" == *'skipping review/topic (checked out at '* ]]
+	git show-ref --verify --quiet refs/heads/review/topic
+	grep -RFq 'Notes to retain.' .git/review-comments/sessions
+	printf 'correction\n' >>"$review/a.txt"
+	printf 'generated privately\n' >"$review/generated.tmp"
+	printf 'new correction\n' >"$review/new-file"
+
+	run git -C "$review" review save --porcelain
+	[ "$status" -eq 0 ]
+	git show-ref --verify --quiet refs/heads/review-saved/topic
+	! git -C "$review" symbolic-ref --quiet HEAD
+	[ "$(git -C "$review" write-tree)" = "$(git rev-parse "$TIP^{tree}")" ]
+	[ "$(tail -n 1 "$review/a.txt")" = correction ]
+
+	run git review continue --porcelain topic
+	[ "$status" -eq 0 ]
+	resumed=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	[ -d "$resumed" ]
+	[ "$resumed" != "$review" ]
+	[ "$(git -C "$resumed" symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(tail -n 1 "$resumed/a.txt")" = correction ]
+	[ "$(cat "$resumed/new-file")" = 'new correction' ]
+	[ "$(cat "$review/generated.tmp")" = 'generated privately' ]
+	! git show-ref --verify --quiet refs/heads/review-saved/topic
+
+	run git -C "$resumed" review abort
+	[ "$status" -eq 0 ]
+	! git -C "$resumed" symbolic-ref --quiet HEAD
+	! git show-ref --verify --quiet refs/heads/review/topic
+	[ "$(tail -n 1 "$resumed/a.txt")" = correction ]
+	[ "$(cat "$resumed/new-file")" = 'new correction' ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+	[ "$(cat a.txt)" = 'existing local edit' ]
+}
+
+@test "managed comparison preserves a dirty checkout and keeps Local when closed" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state"
+	before=$(git write-tree)
+	run git review compare --no-walk main topic
+	[ "$status" -eq 0 ]
+	review=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	[ -d "$review" ]
+	git -C "$review" review status --porcelain | grep -Fx readonly
+	git -C "$review" review comments add --document local --text 'private comparison notes'
+	printf 'generated privately\n' >"$review/generated.tmp"
+	run git -C "$review" review abort
+	[ "$status" -eq 0 ]
+	! git -C "$review" symbolic-ref --quiet HEAD
+	grep -RFq 'private comparison notes' .git/review-comments/results
+	[ "$(cat "$review/generated.tmp")" = 'generated privately' ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+	[ "$(cat a.txt)" = 'existing local edit' ]
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+}
+
+@test "managed comparison resolves previous checkout references before opening" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state"
+	run git review compare --no-walk HEAD '@{-1}'
+	[ "$status" -eq 0 ]
+	review=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	[ "$(git -C "$review" write-tree)" = "$(git rev-parse "$TIP^{tree}")" ]
+	[ "$(git -C "$review" rev-parse HEAD)" = "$BASE" ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+}
+
+@test "managed start refuses a workspace state directory inside the development checkout" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/source/artifacts"
+	before=$(git write-tree)
+	run --separate-stderr git review start --offline topic main
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'workspace state directory must be outside existing Git repositories'* ]]
+	[ ! -e artifacts ]
+	! git show-ref --verify --quiet refs/heads/review/topic
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(cat a.txt)" = 'existing local edit' ]
+}
+
+@test "managed step navigation preserves ignored case aliases in both existing checkouts" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state"
+	local_name=$(printf '\303\251.tmp')
+	pr_name=$(printf '\303\211.tmp')
+	git worktree add -q -b alias-topic "$ROOT/author" "$FIRST"
+	printf 'PR content\n' >"$ROOT/author/$pr_name"
+	git -C "$ROOT/author" add -f -- "$pr_name"
+	git -C "$ROOT/author" commit -qm 'track uppercase name'
+	printf 'developer private bytes\n' >"$local_name"
+	opened=$(git review start --offline --step alias-topic main)
+	review=$(printf '%s\n' "$opened" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	printf 'reviewer private bytes\n' >"$review/$local_name"
+	index=$(git -C "$review" write-tree)
+	run env LC_ALL=C git -C "$review" review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'[2/2]'* ]]
+	[ "$(git -C "$review" write-tree)" = "$index" ]
+	[ "$(cat "$local_name")" = 'developer private bytes' ]
+	[ "$(cat "$review/$local_name")" = 'reviewer private bytes' ]
+	git -C "$review" review workspace checkout "$ROOT/selected"
+	[ "$(cat "$ROOT/selected/$pr_name")" = 'PR content' ]
+}
+
+@test "managed default finish preserves both the review and development checkouts" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state"
+	opened=$(git review start --offline topic main)
+	review=$(printf '%s\n' "$opened" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	printf 'correction\n' >>"$review/a.txt"
+	git -C "$review" review comments add --document shared --text 'Ready for the author.'
+	index=$(git -C "$review" write-tree)
+	run --separate-stderr git -C "$review" review finish
+	[ "$status" -eq 0 ]
+	[ -d "$output" ]
+	[ "$(git -C "$output" rev-parse HEAD)" = "$TIP" ]
+	[ "$(git -C "$output" show :a.txt | tail -n 1)" = correction ]
+	git -C "$output" show :.review/comments.md | grep -Fq 'Ready for the author.'
+	[ "$(git -C "$review" write-tree)" = "$index" ]
+	[ "$(tail -n 1 "$review/a.txt")" = correction ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+	[ "$(cat a.txt)" = 'existing local edit' ]
+	git -C "$review" review status --porcelain | grep -F "finish-workspace"
+}
+
+@test "managed finish onto the source stages corrections in a new linked checkout" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state"
+	opened=$(git review start --offline topic main)
+	review=$(printf '%s\n' "$opened" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	printf 'correction\n' >>"$review/a.txt"
+	printf 'reviewer cache\n' >"$review/cache.tmp"
+	index=$(git -C "$review" write-tree)
+	run --separate-stderr git -C "$review" review finish --onto-source
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$output" symbolic-ref --short HEAD)" = topic ]
+	[ "$(git -C "$output" rev-parse HEAD)" = "$TIP" ]
+	[ "$(git -C "$output" show :a.txt | tail -n 1)" = correction ]
+	[ "$(git -C "$review" symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git -C "$review" write-tree)" = "$index" ]
+	[ "$(cat "$review/cache.tmp")" = 'reviewer cache' ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+}
+
+@test "managed finish updates the source only after staging in the new checkout" {
+	unset GIT_REVIEW_CHECKOUT
+	export XDG_STATE_HOME="$ROOT/state"
+	opened=$(git review start --offline topic main)
+	review=$(printf '%s\n' "$opened" | awk -F '\t' '$1 == "review-checkout" {print $2}')
+	git update-ref refs/heads/topic "$FIRST" "$TIP"
+	printf 'correction\n' >>"$review/a.txt"
+	run git -C "$review" review finish --onto-source
+	[ "$status" -eq 1 ]
+	[[ "$output" == *'use --update-source to fast-forward it'* ]]
+	[ "$(git rev-parse topic)" = "$FIRST" ]
+
+	run --separate-stderr git -C "$review" review finish --update-source
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse topic)" = "$TIP" ]
+	[ "$(git -C "$output" symbolic-ref --short HEAD)" = topic ]
+	[ "$(git -C "$output" show :a.txt | tail -n 1)" = correction ]
+	[ "$(cat a.txt)" = 'existing local edit' ]
 }
 
 @test "workspace navigation reads commits without touching either checkout" {

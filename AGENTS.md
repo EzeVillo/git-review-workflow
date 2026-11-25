@@ -17,10 +17,11 @@ ejecutar pruebas y corregir código amplía ese flujo cuando hace falta. Para pr
 adquisición, consultar primero `.agents/product-marketing.md`.
 
 La base es una suite de verbos de shell POSIX bajo el dispatcher `git review <verbo>`, al estilo
-de `git bisect`/`git stash`. `git review start` materializa el diff completo del PR como cambios
-*staged y sin commitear* sobre una rama `review/<branch>` cuyo `HEAD` queda en el merge-base.
-Revisás en tu working tree y `git review finish` extrae las ediciones que hayas hecho a una rama
-`review-fixes/<branch>`. No hace falta editar código para aprovechar el recorrido. Ver `CLI.md`
+de `git bisect`/`git stash`. `git review start` materializa el diff del PR como cambios
+*staged y sin commitear* sobre una rama `review/<branch>` en un checkout enlazado nuevo.
+`save` y `abort` conservan esa carpeta. `continue` restaura la review en otra carpeta y
+`git review finish` prepara las correcciones en una salida aislada. No hace falta editar
+código para aprovechar el recorrido. Ver `CLI.md`
 para la superficie completa de comandos.
 
 En la CLI, `start --workspace <dir>` y `compare --workspace <dir>` también abren
@@ -110,12 +111,14 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 |---|---|---|
 | `reviewmode`, `reviewsource`, `reviewtip` | todos | Modo y origen de la review |
 | `reviewworkspacefinish` | finish aislado | Carpeta de salida verificada y marcador de sesión cerrada |
+| `reviewworkspacepending` | finish aislado | Carpeta de salida recuperable para reanudar o deshacer |
 | `reviewrangefrom` | `--from` | Corte de la review que hereda el borrador |
 | `reviewstart`, `reviewcount`, `reviewstep` | `step` | Rango, cantidad y posición del commit materializado en el checkout original |
 | `reviewreadstep`, `reviewstepworkspaces` | `step` | Cursor de lectura y registro de checkouts adicionales. Las sesiones anteriores toman el cursor inicial de `reviewstep` |
 | `reviewwalkstep`, `reviewwalkcount`, `reviewwalkbase` | `walk` | Cursor de lectura (1-based), guard y lower bound |
 | `reviewwalkfromdraft` | `walk` | El orden caminado salió del borrador del revisor |
 | `reviewdraft` | **todos** | Bajo qué nombre vive el borrador de esta review |
+| `reviewworkspacepath` | aislado | Ruta del checkout activo o conservado tras guardar |
 | `reviewcomparebase`, `reviewcomparetarget` | `compare` | OID inferior fijado y etiqueta original del destino, independientes del cursor |
 | `reviewcommentscontext`, `reviewcommentssession`, `reviewcommentsowner` | **todos** | Contexto opaco, sesión exclusiva y gitdir propietario de los comentarios |
 

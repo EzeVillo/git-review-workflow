@@ -7,6 +7,7 @@ import {resumableSourceAt} from "../views/panelModel";
 import {STALE} from "../review/userCopy";
 import {confirmMutation} from "../review/confirm";
 import {PanelRevealer, revealPanel} from "../views/reveal";
+import {openReviewCheckout, reviewCheckoutPath} from "./reviewCheckout";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -89,7 +90,7 @@ export async function continueReview(
                 // Refrescar pase lo que pase: aunque el verbo falle, es lo que
                 // dice dónde quedó el repositorio — la salida humana no se
                 // parsea nunca.
-                await stateManager.refreshPrimary(continued && invocation.exitCode === 0 && !invocation.timedOut && !invocation.errorCode ? invocation.stdout : undefined);
+                await stateManager.refreshPrimary(continued && invocation.exitCode === 0 && !invocation.timedOut && !invocation.errorCode && !reviewCheckoutPath(invocation.stdout) ? invocation.stdout : undefined);
                 return invocation;
             }
         );
@@ -106,7 +107,9 @@ export async function continueReview(
         } else if (result.exitCode === 0 && !result.timedOut && !result.errorCode) {
             // La situación entera cambia —no-review pasa a review—, y esto se
             // puede disparar desde la paleta con el panel cerrado.
-            revealPanel("continueReview", reveal);
+            const checkout = reviewCheckoutPath(result.stdout);
+            if (checkout) await openReviewCheckout(checkout);
+            else revealPanel("continueReview", reveal);
         } else {
             // El working tree sucio es el modo de fallo que no se puede
             // anticipar desde el inventario, y su mensaje ya dice qué hacer

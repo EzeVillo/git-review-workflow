@@ -11,6 +11,9 @@ public static class UserCopy
     public const string StepCheckoutLabel = "Open checkout";
     public const string StepCheckoutFailed = "Could not open the checkout for this commit.";
     public const string FinishDestinationsPrompt = "Choose a destination for your review changes";
+    public const string FinishLocationWorkspace = "A new checkout";
+    public static string FinishWorkspaceReady(string path) => $"The finish output is in {path}.";
+    public static string FinishWorkspaceConflict(string path) => $"Resolve and stage the conflicts in {path}.";
     public const string FinishDestinationsFailed = "Could not read the available finish destinations.";
     public const string FinishLocationCreate = "Create PR branch and apply changes";
     public const string FinishLocationUpdate = "Update PR branch and apply changes";

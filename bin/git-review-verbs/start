@@ -20,7 +20,7 @@ usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--
        $prog --prepare [--local | --offline] [--base <base> | --delta | --from <commit>] -- <branch>
        $prog --release -- <token>
 
-Stage a pull request diff on a review/<branch> branch for inline review.
+Stage a pull request diff on a review/<branch> branch in a new checkout.
 With no <branch>, review the branch you currently have checked out.
 
   <branch>          branch to review; omit it to review the current branch
@@ -41,6 +41,8 @@ With no <branch>, review the branch you currently have checked out.
                     is still fetched and resolved against origin
   --offline         like --local, but also skip fetching and resolve the base
                     from your local branches too
+  --in-place        stage the review in the current checkout
+  --isolated        open a new checkout even when configured to use the current one
   --workspace <dir> open an isolated review in a new directory; supports whole
                     diff and --step
 EOF
@@ -66,60 +68,82 @@ prepared=''
 release=0
 use_draft=0
 workspace=''
-while [ $# -gt 0 ]; do
-	case "$1" in
-	-h | --h)
-		usage
-		exit 0
-		;;
-	-d | --delta) delta=1 ;;
-	--step) step=1 ;;
-	--no-walk) no_walk=1 ;;
-	--keys) keys_only=1 ;;
-	--local) local_mode=1 ;;
-	--prepare) prepare=1 ;;
-	--prepared=*) prepared=${1#--prepared=} ;;
-	--release) release=1 ;;
-	--from-draft) use_draft=1 ;;
-	--workspace)
-		shift
-		[ -n "${1:-}" ] || die '--workspace requires a new directory'
-		[ -z "$workspace" ] || die '--workspace given more than once'
-		workspace=$1
-		;;
-	--offline)
-		local_mode=1
-		offline_mode=1
-		;;
-	--base)
-		shift
-		[ $# -gt 0 ] || die "--base requires a base"
-		[ -n "$1" ] || die "--base requires a base"
-		[ "$base_explicit" -eq 0 ] || die "base given more than once"
-		base="$1"
-		base_explicit=1
-		;;
-	--base=*)
-		[ "$base_explicit" -eq 0 ] || die "base given more than once"
-		base="${1#--base=}"
-		[ -n "$base" ] || die "--base requires a base"
-		base_explicit=1
-		;;
-	--from)
-		shift
-		[ $# -gt 0 ] || die "--from requires a commit"
-		from="$1"
-		[ -n "$from" ] || die "--from requires a commit"
-		;;
-	--from=*)
-		from="${1#--from=}"
-		[ -n "$from" ] || die "--from requires a commit"
-		;;
-	--)
-		# End-of-options: a branch name starting with "-" is read as positional
-		# after --, e.g. git review start -- --weird develop.
-		shift
-		while [ $# -gt 0 ]; do
+checkout_mode=''
+parse_start_args() {
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-h | --h)
+			usage
+			exit 0
+			;;
+		-d | --delta) delta=1 ;;
+		--step) step=1 ;;
+		--no-walk) no_walk=1 ;;
+		--keys) keys_only=1 ;;
+		--local) local_mode=1 ;;
+		--prepare) prepare=1 ;;
+		--prepared=*) prepared=${1#--prepared=} ;;
+		--release) release=1 ;;
+		--from-draft) use_draft=1 ;;
+		--in-place) checkout_mode=current ;;
+		--isolated) checkout_mode=isolated ;;
+		--workspace)
+			shift
+			[ -n "${1:-}" ] || die '--workspace requires a new directory'
+			[ -z "$workspace" ] || die '--workspace given more than once'
+			workspace=$1
+			;;
+		--offline)
+			local_mode=1
+			offline_mode=1
+			;;
+		--base)
+			shift
+			[ $# -gt 0 ] || die "--base requires a base"
+			[ -n "$1" ] || die "--base requires a base"
+			[ "$base_explicit" -eq 0 ] || die "base given more than once"
+			base="$1"
+			base_explicit=1
+			;;
+		--base=*)
+			[ "$base_explicit" -eq 0 ] || die "base given more than once"
+			base="${1#--base=}"
+			[ -n "$base" ] || die "--base requires a base"
+			base_explicit=1
+			;;
+		--from)
+			shift
+			[ $# -gt 0 ] || die "--from requires a commit"
+			from="$1"
+			[ -n "$from" ] || die "--from requires a commit"
+			;;
+		--from=*)
+			from="${1#--from=}"
+			[ -n "$from" ] || die "--from requires a commit"
+			;;
+		--)
+			# End-of-options: a branch name starting with "-" is read as positional
+			# after --, e.g. git review start -- --weird develop.
+			shift
+			while [ $# -gt 0 ]; do
+				if [ -z "$src" ]; then
+					src="$1"
+				elif [ -z "$base" ]; then
+					base="$1"
+					base_explicit=1
+				else
+					die "unexpected argument $1"
+				fi
+				shift
+			done
+			break
+			;;
+		-*)
+			echo "error: unknown option $1" >&2
+			usage >&2
+			exit 1
+			;;
+		*)
 			if [ -z "$src" ]; then
 				src="$1"
 			elif [ -z "$base" ]; then
@@ -128,28 +152,12 @@ while [ $# -gt 0 ]; do
 			else
 				die "unexpected argument $1"
 			fi
-			shift
-		done
-		break
-		;;
-	-*)
-		echo "error: unknown option $1" >&2
-		usage >&2
-		exit 1
-		;;
-	*)
-		if [ -z "$src" ]; then
-			src="$1"
-		elif [ -z "$base" ]; then
-			base="$1"
-			base_explicit=1
-		else
-			die "unexpected argument $1"
-		fi
-		;;
-	esac
-	shift
-done
+			;;
+		esac
+		shift
+	done
+}
+parse_start_args "$@"
 
 if [ "$delta" -eq 1 ] && [ -n "$from" ]; then
 	die "use only one of --delta and --from"
@@ -176,6 +184,9 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+launch=0
+if [ "$prepare$release" = 00 ] && [ -z "$workspace" ] && review_should_launch "$checkout_mode"; then launch=1; fi
+
 if [ "$release" -eq 1 ]; then
 	if [ "$prepare$use_draft$delta$step$no_walk$keys_only$local_mode$offline_mode" != 00000000 ] || [ -n "$base$from$prepared" ]; then
 		die '--release takes just a prepared review token'
@@ -195,7 +206,7 @@ fi
 # still chosen by flags. Guards against review/*, review-saved/* and
 # review-fixes/* so nobody reviews a review branch.
 if [ -z "$src" ]; then
-	cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	cur="${GIT_REVIEW_LAUNCH_SOURCE:-$(git symbolic-ref --quiet --short HEAD || true)}"
 	[ -n "$cur" ] || die "no branch given and HEAD is detached; name a branch to review"
 	case "$cur" in
 	review/* | review-saved/* | review-fixes/*) die "refusing to review a review branch (HEAD is $cur); name a branch to review" ;;
@@ -213,7 +224,7 @@ if [ -z "$base" ]; then
 	base="$(git config reviewworkflow.base || true)"
 fi
 
-if [ "$prepare" -eq 0 ] && [ -z "$workspace" ]; then require_clean_work_tree; fi
+if [ "$prepare$launch" = 00 ] && [ -z "$workspace" ]; then require_clean_work_tree; fi
 case "$src" in
 	review/*|review-saved/*|review-fixes/*) die "refusing to review a review branch ($src)" ;;
 esac
@@ -272,7 +283,7 @@ else
 	trap _rs_cleanup 0
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
-	if [ "$prepare" -eq 1 ]; then
+	if [ "$prepare" -eq 1 ] || [ "$launch" -eq 1 ]; then
 		walk_gitdir_init
 		_rs_nonce=$(mktemp "$_walk_gitdir/start.XXXXXX")
 		_rs_token=$(printf '%s\n%s\n' "$_rs_nonce" "$$" | git hash-object --stdin)
@@ -318,7 +329,7 @@ fi
 # reviewing a different snapshot than what's checked out, and a later
 # finish --onto-source will refuse unless the local branch sits at the reviewed
 # tip. Warn rather than silently review the wrong thing.
-if [ "$local_mode" -eq 0 ]; then
+if [ "$local_mode$launch" = 00 ]; then
 	localtip="$(git rev-parse --verify --quiet "refs/heads/$src" || true)"
 	if [ -n "$localtip" ] && [ "$localtip" != "$tip" ]; then
 		echo "note: reviewing $srclabel ($(git rev-parse --short "$tip")), which differs from your local $src ($(git rev-parse --short "$localtip"))$(advice_suffix '; use --local to review what you have checked out')" >&2
@@ -359,10 +370,31 @@ else
 	[ "$start" != "$tip" ] ||
 		die "no commits to review; $srclabel is already at $baselabel"
 	range="vs $baselabel"
-	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
+	if [ "$launch" -eq 0 ] && [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
 		n="$(git rev-list --count "$prev..$tip")"
 		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since$(advice_suffix ' (use --delta to review only those)')" >&2
 	fi
+fi
+
+# Resolve caller-relative selectors and network refs before entering the new worktree.
+write_start_prepared_range() {
+	_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$_rs_mode_flags")
+	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
+	_rs_ancestry=$(review_ancestry_id) || die 'could not read current review ancestry'
+	_rs_pack=$(start_range_commit "$_rs_identity" "$_rs_base_label" "$base" \
+		"$tip" "$baseref" "$prev" "$pinned_from" "$_rs_draft_identity" "$_rs_ancestry")
+	git update-ref "$_rs_tmp" "$_rs_pack"
+}
+
+if [ "$launch" -eq 1 ]; then
+	GIT_REVIEW_LAUNCH_SEED=$(review_launch_seed "$step" "$start" "$tip") || exit 1
+	export GIT_REVIEW_LAUNCH_SEED
+	if [ -n "${_rs_saved_range:-}" ]; then
+		exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch start "$@"
+	fi
+	write_start_prepared_range
+	"$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch start "--prepared=$_rs_token" "$@"
+	exit
 fi
 
 if [ -n "$workspace" ]; then
@@ -384,12 +416,7 @@ walk_use_draft "$src"
 
 if [ "$prepare" -eq 1 ]; then
 	# The manifest pins both endpoints, even when a selector is a movable ref.
-	_rs_identity=$(start_range_identity "$remote" "$src" "$base" "$from" "$_rs_mode_flags")
-	_rs_draft_identity=$(start_range_identity "$remote" "$src" "$base" '' "$_rs_mode_flags")
-	_rs_ancestry=$(review_ancestry_id) || die 'could not read current review ancestry'
-	_rs_pack=$(start_range_commit "$_rs_identity" "$_rs_base_label" "$base" \
-		"$tip" "$baseref" "$prev" "$pinned_from" "$_rs_draft_identity" "$_rs_ancestry")
-	git update-ref "$_rs_tmp" "$_rs_pack"
+	write_start_prepared_range
 	_ero_branch=$src
 	_ero_tip=$tip
 	_ero_lower=$(resolve_lower_bound "$start" "$baseref" "$tip")

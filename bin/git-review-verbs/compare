@@ -20,7 +20,7 @@ usage: $prog <a> <b> [--step | --no-walk | --keys]
        $prog --prepared=<token> [--step | --no-walk | --keys] -- <a> <b>
        $prog --release -- <token>
 
-Stage the diff between two commit-ish on a review/<b> branch for inline reading.
+Stage the diff between two commit-ish on a review/<b> branch in a new checkout.
 This is a read-only review: there is no branch to write back to, so git review
 finish refuses on it.
 
@@ -32,6 +32,8 @@ finish refuses on it.
              brings the current remote branch without moving tracking branches
   --step     read one commit at a time; advance with git review next
   --no-walk  ignore any walkthrough on <b>; read the whole diff
+  --in-place use the current checkout
+  --isolated open a new checkout even when configured to use the current one
   --workspace <dir> open the comparison in a new, isolated directory
   --keys     walk mode restricted to entries marked > key (requires a
              walkthrough with at least one key in range; not with --step
@@ -57,6 +59,7 @@ compare_prepared=''
 porcelain=0
 compare_mode=1
 workspace=''
+checkout_mode=''
 # Collect the two positional commit-ish; mirror start's parser, including -- as the
 # end-of-options separator so a commit-ish that starts with "-" stays positional.
 add_positional() {
@@ -70,46 +73,51 @@ add_positional() {
 		die "unexpected argument $1"
 	fi
 }
-while [ $# -gt 0 ]; do
-	case "$1" in
-	-h | --h)
-		usage
-		exit 0
-		;;
-	--draft) from_draft=1 ;;
-	--workspace)
-		shift
-		[ -n "${1:-}" ] || die '--workspace requires a new directory'
-		[ -z "$workspace" ] || die '--workspace given more than once'
-		workspace=$1
-		;;
-	--sources|--prepare|--release)
-		[ -z "$comparison_query" ] || die 'choose one comparison operation'
-		comparison_query=${1#--} ;;
-	--prepared=*) compare_prepared=${1#--prepared=} ;;
-	--porcelain) porcelain=1 ;;
-	--step) step=1 ;;
-	--no-walk) no_walk=1 ;;
-	--keys) keys_only=1 ;;
-	--)
-		shift
-		while [ $# -gt 0 ]; do
-			add_positional "$1"
+parse_compare_args() {
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-h | --h)
+			usage
+			exit 0
+			;;
+		--draft) from_draft=1 ;;
+		--in-place) checkout_mode=current ;;
+		--isolated) checkout_mode=isolated ;;
+		--workspace)
 			shift
-		done
-		break
-		;;
-	-*)
-		echo "error: unknown option $1" >&2
-		usage >&2
-		exit 1
-		;;
-	*)
-		add_positional "$1"
-		;;
-	esac
-	shift
-done
+			[ -n "${1:-}" ] || die '--workspace requires a new directory'
+			[ -z "$workspace" ] || die '--workspace given more than once'
+			workspace=$1
+			;;
+		--sources|--prepare|--release)
+			[ -z "$comparison_query" ] || die 'choose one comparison operation'
+			comparison_query=${1#--} ;;
+		--prepared=*) compare_prepared=${1#--prepared=} ;;
+		--porcelain) porcelain=1 ;;
+		--step) step=1 ;;
+		--no-walk) no_walk=1 ;;
+		--keys) keys_only=1 ;;
+		--)
+			shift
+			while [ $# -gt 0 ]; do
+				add_positional "$1"
+				shift
+			done
+			break
+			;;
+		-*)
+			echo "error: unknown option $1" >&2
+			usage >&2
+			exit 1
+			;;
+		*)
+			add_positional "$1"
+			;;
+		esac
+		shift
+	done
+}
+parse_compare_args "$@"
 
 if [ -n "$comparison_query" ]; then
 	if [ "$from_draft$step$no_walk$keys_only" != 0000 ] || [ -n "$compare_prepared" ]; then
@@ -157,6 +165,26 @@ if [ -n "$workspace" ]; then
 	set -- open --read-only
 	if [ "$step" -eq 1 ]; then set -- "$@" --step; fi
 	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" "$@" "$workspace" -- "$acommit" "$bcommit"
+fi
+
+if review_should_launch "$checkout_mode"; then
+	GIT_REVIEW_LAUNCH_SEED=$(review_launch_seed "$step" "$acommit" "$bcommit") || exit 1
+	export GIT_REVIEW_LAUNCH_SEED
+	if [ "$from_draft" -eq 1 ] || [ -n "$compare_prepared" ]; then
+		exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch compare "$@"
+	fi
+	walk_gitdir_init
+	_compare_nonce=$(mktemp "$_walk_gitdir/compare.XXXXXX") || die 'could not allocate a comparison'
+	compare_prepared=$(printf '%s\n%s\n' "$_compare_nonce" "$$" | git hash-object --stdin)
+	rm -f "$_compare_nonce"
+	_compare_pending=$(compare_pending_ref "$compare_prepared")
+	_compare_pack=$(compare_pack_range </dev/null) || die 'could not pin comparison revisions'
+	git update-ref "$_compare_pending" "$_compare_pack"
+	trap 'git update-ref -d "$_compare_pending" "$_compare_pack" || true' 0
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	"$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch compare "--prepared=$compare_prepared" "$@"
+	exit
 fi
 
 require_clean_work_tree

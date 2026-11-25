@@ -19,8 +19,9 @@ usage() {
 	cat <<EOF
 usage: $prog [--porcelain]
 
-Pause the review on the current review/* branch: stash it as review-saved/<branch>
-and return to the branch you started from. Resume it later with git review continue.
+Pause the review on the current review/* branch as review-saved/<branch>.
+An isolated review keeps its checkout files and index. An in-place review
+returns to the starting branch. Resume it later with git review continue.
   --porcelain  return the resulting panel state instead of human output
 EOF
 }
@@ -99,21 +100,24 @@ ret=$_review_config_value
 review_config_read "branch.$cur.reviewbase"
 base=$_review_config_value
 target=""
-if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
-	target="$ret"
-elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/null; then
-	target="$base"
-fi
-[ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
+managed=$(review_config_get "branch.$cur.reviewworkspacepath" || true)
+if [ -z "$managed" ]; then
+	if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
+		target="$ret"
+	elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/null; then
+		target="$base"
+	fi
+	[ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
 
-# Git refuses to switch to a branch checked out elsewhere. Ask before banking
-# edits, transferring comments or moving a draft. Match the complete porcelain
-# ref, without interpreting the worktree path or relying on newer Git atoms.
-_save_worktrees="$(git worktree list --porcelain)" || die "could not check worktrees for the return branch '$target'"
-if printf '%s\n' "$_save_worktrees" | grep -Fqx "branch refs/heads/$target"; then
-	die "cannot save: return branch '$target' is checked out in another worktree; switch that worktree to a different branch and retry"
+	# Git refuses to switch to a branch checked out elsewhere. Ask before banking
+	# edits, transferring comments or moving a draft. Match the complete porcelain
+	# ref, without interpreting the worktree path or relying on newer Git atoms.
+	_save_worktrees="$(git worktree list --porcelain)" || die "could not check worktrees for the return branch '$target'"
+	if printf '%s\n' "$_save_worktrees" | grep -Fqx "branch refs/heads/$target"; then
+		die "cannot save: return branch '$target' is checked out in another worktree; switch that worktree to a different branch and retry"
+	fi
+	review_guard_checkout_paths "refs/heads/$target" || exit 1
 fi
-review_guard_checkout_paths "refs/heads/$target" || exit 1
 
 # Does the archive already hold a draft under the name this review would file its
 # own under? The move at the end of this script is an mv: without this guard it
@@ -257,15 +261,20 @@ copy_meta reviewdraft
 copy_meta reviewreadonly
 copy_meta reviewcomparebase
 copy_meta reviewcomparetarget
-git config "branch.$saved.reviewreturn" "$target"
+copy_meta reviewworkspacepath
+if [ -n "$target" ]; then git config "branch.$saved.reviewreturn" "$target"; fi
 
 # Keep the live draft and edit bank until Git has left the review. The saved
 # branch already owns a snapshot of the current working tree or the step edits.
 # Give the checkout the captured index so it also removes newly added files
 # that were untracked in the live index.
-git read-tree "$tree"
-if ! review_checkout_tree "refs/heads/$target" switch -q --discard-changes --no-overwrite-ignore "$target"; then
-	die "could not return to $target; the review and its saved code snapshot were kept"
+if [ -n "$managed" ]; then
+	if ! review_detach_checkout; then die 'could not detach the review checkout; the saved code snapshot was kept'; fi
+else
+	git read-tree "$tree"
+	if ! review_checkout_tree "refs/heads/$target" switch -q --discard-changes --no-overwrite-ignore "$target"; then
+		die "could not return to $target; the review and its saved code snapshot were kept"
+	fi
 fi
 
 # Put the reviewer's own walkthrough draft where a paused review's reading order
@@ -331,6 +340,10 @@ if [ "$porcelain" -eq 1 ]; then
 		echo "note: review saved; final state could not be read" >&2
 	fi
 else
-	echo "saved review of $src ($note) as $saved; returned to $target"
+	if [ -n "$managed" ]; then
+		echo "saved review of $src ($note) as $saved; retained $managed"
+	else
+		echo "saved review of $src ($note) as $saved; returned to $target"
+	fi
 	echo "resume it with git review continue"
 fi

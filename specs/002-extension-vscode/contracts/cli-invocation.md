@@ -148,9 +148,9 @@ resume la única guardada o falla listando las demás
 **Argumento**: el `name` del registro `branch` sin su prefijo `review-saved/`.
 El verbo espera el nombre *source* (`feature/checkout`), no el de la rama.
 
-**Se consume**: el exit code y el stderr. **No se parsea la salida humana**
-("resumed review of …"), igual que con `next`/`prev`: el estado nuevo lo da el
-`status --porcelain` que corre inmediatamente después.
+**Se consume**: el exit code, el stderr y, si lo emite, el registro
+`review-checkout<TAB><ruta absoluta>`. La extensión refresca el origen y abre
+esa ruta en una ventana nueva. Sin el registro se conserva el refresco anterior.
 
 **Se produce**: un refresco. La invocación cambia `HEAD` —crea `review/<src>`,
 restaura las ediciones en el working tree y borra `review-saved/<src>`—, así que
@@ -265,7 +265,16 @@ Crear/actualizar usa `walkthrough draft --porcelain --compare --prepared=<token>
 
 El asistente lee `config --porcelain --deltas-only -- <rama>` para el selector de rango y usa `start --prepare [--local | --offline] [--delta] -- <rama>` para las ofertas exactas. Si la CLI desconoce `--deltas-only`, consulta `config --porcelain [--local | --offline] -- <rama>` con el origen elegido. La CLI devuelve `start-prepared<TAB>token`. Abrir usa `start --prepared=<token>` y crear o actualizar el borrador usa `walkthrough draft --start-prepared=<token>`, con los flags del rango. El asistente libera el token con `start --release -- <token>`. Al validar un borrador, `config --porcelain --from-draft` consulta el rango guardado y `start --from-draft` lo abre si el registro `start-draft-range` indica que existe.
 
-`finish --destinations --porcelain` reporta `finish-destination<TAB>separate` y, cuando aplica, `source<TAB>equal`, `source<TAB>missing` o `update-source`. La elección de actualización envía `finish --update-source`. La CLI revalida la rama local antes de modificar la revisión y registra su posición anterior para Undo.
+Start y Compare también pueden emitir `review-checkout<TAB><ruta absoluta>`.
+El invocador anuncia que sabe abrir esa carpeta con `GIT_REVIEW_CHECKOUT_RECORD=1`.
+
+`finish --destinations --porcelain` reporta `finish-destination<TAB>workspace`,
+`separate` para sesiones anteriores y, cuando aplica, `source<TAB>equal`,
+`source<TAB>missing` o `update-source`. El primer destino envía
+`finish --workspace`. La actualización envía `finish --update-source`.
+`status --porcelain` indica la carpeta de salida con `finish-workspace` o
+`finish-workspace-conflict`. La extensión usa esa ruta para Open checkout.
+Continue en el banner del conflicto sigue enviando `finish --resume`.
 
 ## Respuesta opcional de guardado
 

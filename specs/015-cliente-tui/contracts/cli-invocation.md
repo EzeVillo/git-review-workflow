@@ -61,6 +61,9 @@ Reglas invariantes:
 - **`stdout`/`stderr` decodificados como UTF-8 explícito** en los tres sistemas operativos (FR-010).
 - **`GIT_REVIEW_ADVICE=0` siempre**, exportado en **un solo lugar** de este archivo (FR-009). Sin
   eso, la TUI reenvía las notas que sus propias teclas ya cubren.
+- `GIT_REVIEW_CHECKOUT_RECORD=1` anuncia que Start, Compare y Continue pueden
+  devolver `review-checkout<TAB><ruta absoluta>`. La TUI abre otra sesión en
+  ese checkout y refresca la anterior al volver.
 - Cada start/end deja una entrada en el **registro de invocaciones** en memoria: comando, cwd,
   duración, exit, `timedOut`, `stderr`. Es lo que dibuja `showCliLog` y lo que hace medible SC-002.
 

@@ -38,7 +38,7 @@ while [ $# -gt 0 ]; do
 	--porcelain) porcelain=1 ;;
 	--)
 		shift
-		[ "$#" -eq 1 ] && [ -z "$arg" ] || die 'expected a single saved review name'
+		if [ "$#" -ne 1 ] || [ -n "$arg" ]; then die 'expected a single saved review name'; fi
 		arg=$1
 		break
 		;;
@@ -95,24 +95,6 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb is already active; finish or abort it before resuming the saved one"
 review_require_branch_slot "$rb"
 
-managed=$(review_config_get "branch.$saved.reviewworkspacepath" || true)
-if [ -n "$managed" ] && [ "${GIT_REVIEW_MANAGED_CHECKOUT:-0}" != 1 ]; then
-	saved_tip=$(review_config_get "branch.$saved.reviewtip") || die 'missing saved review tip'
-	seed_step=0 seed_start=''
-	if [ "$(review_config_get "branch.$saved.reviewmode" || true)" = step ]; then
-		seed_start=$(review_config_get "branch.$saved.reviewstart") || die 'missing saved step range'
-		seed_step=$(review_config_get "branch.$saved.reviewstep") || die 'missing saved step'
-		case "$seed_step" in ''|0|*[!0-9]*) die 'invalid saved step' ;; esac
-	fi
-	GIT_REVIEW_LAUNCH_SEED=$(review_launch_seed "$seed_step" "$seed_start" "$saved_tip") || exit 1
-	export GIT_REVIEW_LAUNCH_SEED
-	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch continue -- "$src"
-fi
-
-# Resuming materialises a working tree, so refuse to clobber local changes
-# (tracked or untracked — same rule as start/compare).
-require_clean_work_tree
-
 # Like Save, batch each custody phase while retaining fresh reads before/after
 # the lock and immediately before publication. No snapshot crosses a boundary.
 _review_close_snapshot=1
@@ -126,6 +108,31 @@ continue_cleanup() {
 comments_lock_branch "$saved" || exit 1
 trap 'continue_cleanup "$?"' 0
 trap 'exit 1' 1 2 15
+
+review_config_read "branch.$saved.reviewworkspacepath"
+if [ -n "$_review_config_value" ] && [ "${GIT_REVIEW_MANAGED_CHECKOUT:-0}" != 1 ]; then
+	review_config_read "branch.$saved.reviewtip"
+	saved_tip=$_review_config_value
+	[ -n "$saved_tip" ] || die 'missing saved review tip'
+	seed_step=0 seed_start=''
+	review_config_read "branch.$saved.reviewmode"
+	if [ "$_review_config_value" = step ]; then
+		review_config_read "branch.$saved.reviewstart"
+		seed_start=$_review_config_value
+		[ -n "$seed_start" ] || die 'missing saved step range'
+		review_config_read "branch.$saved.reviewstep"
+		seed_step=$_review_config_value
+		case "$seed_step" in ''|0|*[!0-9]*) die 'invalid saved step' ;; esac
+	fi
+	GIT_REVIEW_LAUNCH_SEED=$(review_launch_seed "$seed_step" "$seed_start" "$saved_tip") || exit 1
+	export GIT_REVIEW_LAUNCH_SEED
+	# The child validates and locks the same custody before transferring it.
+	comments_unlock
+	exec "$GIT_REVIEW_LIBEXEC/git-review-verbs/workspace" launch continue -- "$src"
+fi
+
+# The destination can now be checked without assessing the caller's dirty tree.
+require_clean_work_tree
 comments_transfer_preflight "$saved" "$rb" || exit 1
 
 review_config_read "branch.$saved.reviewmode" whole

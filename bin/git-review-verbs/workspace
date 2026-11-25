@@ -15,7 +15,8 @@ usage: git review workspace open [--step] [--read-only] <new-directory> -- <base
 Open an independent review workspace. Use --step to read a commit at a time.
 Next and Previous move the reading cursor. Checkout opens the selected commit
 in a new directory. Finish stages edits from these workspaces on the reviewed
-tip in a new directory. Resume a conflicted finish from its output directory
+tip in a new directory. From an active review, Finish collects its code edits
+and leaves the review open. Resume a conflicted finish from its output directory
 after staging your resolution. Previous directories remain available.
 EOF
 }
@@ -166,10 +167,16 @@ read_range() {
 	if git show-ref --verify --quiet refs/review-workspace/readonly; then read_only=1; fi
 }
 
-write_workspace_patch() {
-	tree=$(review_snapshot_worktree)
+write_workspace_diff() {
 	git -c diff.relative=false diff --binary --full-index --no-ext-diff --no-textconv \
-		--src-prefix=a/ --dst-prefix=b/ --ignore-submodules=dirty "$materialized" "$tree" --
+		--src-prefix=a/ --dst-prefix=b/ --ignore-submodules=dirty "$1" "$2" --
+}
+
+write_workspace_patch() {
+	unmerged=$(git ls-files --unmerged) || return 1
+	[ -z "$unmerged" ] || die 'resolve and stage conflicts before exporting workspace edits'
+	tree=$(review_snapshot_worktree) || return 1
+	write_workspace_diff "$materialized" "$tree"
 }
 
 write_workspace_patch_from() (
@@ -187,6 +194,60 @@ write_workspace_patch_from() (
 	[ "$read_only" -eq 0 ] || die "this workspace is a read-only comparison: $selected_path"
 	write_workspace_patch
 )
+
+write_active_review_patches() {
+	cur=$(git symbolic-ref --quiet --short HEAD || true)
+	case "$cur" in review/*) ;; *) die 'run finish inside a review workspace or active review' ;; esac
+	comments_lock_branch "$cur" || exit 1
+	require_not_finish_conflict "$cur"
+	require_not_pending_finish "$cur"
+	[ "$(review_config_get "branch.$cur.reviewreadonly" || true)" != 1 ] || die 'this review is a read-only comparison'
+	[ -n "$(review_config_get "branch.$cur.reviewsource" || true)" ] || die 'missing review metadata'
+	range_tip=$(review_config_get "branch.$cur.reviewtip") || die 'missing review tip'
+	range_base=$range_tip
+	mode=$(review_config_get "branch.$cur.reviewmode" || true)
+	if [ "$mode" != step ]; then
+		for key in reviewstart reviewcount reviewstep reviewreadstep reviewstepworkspaces; do
+			[ -z "$(review_config_get "branch.$cur.$key" || true)" ] || die 'review metadata contains step keys for a different mode'
+		done
+	fi
+	case "$mode" in
+	step)
+		load_step_review_meta "$cur"
+		review_step_workspace_registry || exit 1
+		patch_count=0
+		while IFS= read -r materialized; do
+			patch_count=$((patch_count + 1))
+			if [ "$patch_count" -eq "$step" ]; then
+				write_workspace_patch >"$patch_dir/$patch_count"
+				continue
+			fi
+			path=$(review_step_workspace_path "$patch_count") || exit 1
+			if [ -n "$path" ]; then
+				(
+					review_enter_step_workspace "$path" "$materialized" || exit 1
+					write_workspace_patch
+				) >"$patch_dir/$patch_count"
+			else
+				banked=$(git rev-parse --verify --quiet "refs/review-edits/$src/$patch_count" || true)
+				if [ -n "$banked" ]; then
+					write_workspace_diff "$materialized" "$banked" >"$patch_dir/$patch_count"
+				else
+					: >"$patch_dir/$patch_count"
+				fi
+			fi
+		done <<EOF
+$commits
+EOF
+		;;
+''|whole|walk)
+		patch_count=1
+		materialized=$range_tip
+		write_workspace_patch >"$patch_dir/$patch_count"
+		;;
+	*) die 'invalid review mode' ;;
+	esac
+}
 
 read_steps() {
 	commits=$(git rev-list --reverse --first-parent --no-merges "$range_base..$range_tip")
@@ -352,20 +413,25 @@ finish)
 	[ "$#" -ge 1 ] || die 'finish expects a new directory'
 	output=$1
 	shift
-	read_range
-	[ "$read_only" -eq 0 ] || die 'this workspace is a read-only comparison'
 	source_gitdir=$(git rev-parse --absolute-git-dir)
 	patch_dir=$(mktemp -d "$source_gitdir/workspace-patch.XXXXXX")
-	trap 'rm -f "$patch_dir"/*; rmdir "$patch_dir"' 0
+	trap 'rm -f "$patch_dir"/*; rmdir "$patch_dir"; comments_unlock' 0
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
 	patch_first=1
-	patch_count=1
-	write_workspace_patch >"$patch_dir/$patch_count"
-	for input do
-		patch_count=$((patch_count + 1))
-		write_workspace_patch_from "$input" >"$patch_dir/$patch_count"
-	done
+	if git show-ref --verify --quiet refs/review-workspace/base; then
+		read_range
+		[ "$read_only" -eq 0 ] || die 'this workspace is a read-only comparison'
+		patch_count=1
+		write_workspace_patch >"$patch_dir/$patch_count"
+		for input do
+			patch_count=$((patch_count + 1))
+			write_workspace_patch_from "$input" >"$patch_dir/$patch_count"
+		done
+	else
+		[ "$#" -eq 0 ] || die 'an active review automatically collects its registered checkouts'
+		write_active_review_patches
+	fi
 	create_workspace "$output" "$range_tip" "$range_tip" review-fixes
 	;;
 resume)

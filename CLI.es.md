@@ -109,6 +109,12 @@ la resolución staged y las correcciones pendientes capturadas a otra carpeta
 nueva. Las carpetas abiertas desde `compare` son de solo lectura. Cada
 directorio creado queda en disco hasta que lo borres.
 
+Desde una review activa, ejecutá `git review workspace finish <directorio-nuevo>`
+para dejar tus correcciones de código staged en otra carpeta y conservar la
+review abierta. En modo step, reúne las ediciones de la carpeta original y de
+cada carpeta de paso registrada. Los comentarios Local y Shared quedan en la
+review activa.
+
 La URL del remoto de origen, si está configurada, queda como `origin` en los
 repositorios aislados para que puedas inicializar los submódulos con Git cuando
 haga falta. Los objetos del rango se copian localmente. Estas sesiones no

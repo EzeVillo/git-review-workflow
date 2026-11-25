@@ -21,6 +21,8 @@ This file starts at 0.2.1. Earlier versions are only in the
   editing a commit or delivering corrections. An unrepresentable checkout
   reports an error, and a conflicted delivery retains the remaining
   corrections so it can resume in a new directory.
+- Export code corrections from an active review to a new directory with
+  `git review workspace finish`, keeping the review and its checkouts open.
 - Advance a behind local PR branch to the reviewed tip with
   `git review finish --update-source`, then stage your corrections on it.
   Undo restores the previous local tip along with the review.

@@ -108,6 +108,11 @@ output. Resume carries the staged resolution and the frozen pending corrections
 to a new directory. Comparison workspaces opened by `compare` are read-only.
 Every created directory remains on disk until you remove it.
 
+From an active review, run `git review workspace finish <new-directory>` to
+stage your code corrections in a new checkout and keep the review open. In
+step mode, this collects edits from the original checkout and every registered
+step checkout. Local and Shared review comments stay with the active review.
+
 The source remote URL, if configured, is stored as `origin` in the isolated
 repositories so you can initialize submodules with Git when needed. All
 repository objects needed for the pinned range are copied locally. Workspaces

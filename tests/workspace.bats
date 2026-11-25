@@ -91,6 +91,95 @@ setup() {
 	[ "$(git -C "$review" write-tree)" = "$old_index" ]
 }
 
+@test "workspace finish collects registered step checkouts without changing either index" {
+	git checkout -- a.txt
+	git review start --offline --step topic main
+	printf 'first correction\n' >>a.txt
+	git review next
+	second="$ROOT/second"
+	git review workspace checkout "$second"
+	printf 'second correction\n' >>"$second/build.tmp"
+	index=$(git write-tree)
+	second_index=$(git -C "$second" write-tree)
+	refs=$(git for-each-ref --format='%(objectname) %(refname)')
+	output_dir="$ROOT/fixes"
+
+	run git review workspace finish "$output_dir"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$output_dir" rev-parse HEAD)" = "$TIP" ]
+	[ "$(git -C "$output_dir" show :a.txt)" = "$(printf 'a topic\nfirst correction')" ]
+	[ "$(git -C "$output_dir" show :build.tmp)" = "$(printf 'tracked by the next step\nsecond correction')" ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git config branch.review/topic.reviewreadstep)" = 2 ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(git -C "$second" write-tree)" = "$second_index" ]
+	[ "$(git for-each-ref --format='%(objectname) %(refname)')" = "$refs" ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+	[ "$(tail -n 1 a.txt)" = 'first correction' ]
+	[ "$(tail -n 1 "$second/build.tmp")" = 'second correction' ]
+}
+
+@test "workspace finish exports edits from an ordinary whole review without closing it" {
+	git checkout -- a.txt
+	mv build.tmp "$ROOT/local-build"
+	git review start --offline --no-walk topic main
+	printf 'review correction\n' >>a.txt
+	printf 'private build artifact\n' >local.tmp
+	index=$(git write-tree)
+	output_dir="$ROOT/fixes"
+
+	run git review workspace finish "$output_dir"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$output_dir" rev-parse HEAD)" = "$TIP" ]
+	[ "$(git -C "$output_dir" diff --cached --name-only)" = a.txt ]
+	[ "$(git -C "$output_dir" show :a.txt)" = "$(printf 'a topic\nreview correction')" ]
+	[ ! -e "$output_dir/local.tmp" ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(cat local.tmp)" = 'private build artifact' ]
+	[ "$(tail -n 1 a.txt)" = 'review correction' ]
+}
+
+@test "workspace finish leaves an ordinary walkthrough review at its reading position" {
+	git checkout -- a.txt
+	mv build.tmp "$ROOT/local-build"
+	git switch -q topic
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\nRead the change.\n' >.review/walkthrough.md
+	git add .review/walkthrough.md
+	git commit -qm walkthrough
+	tip=$(git rev-parse HEAD)
+	git switch -q main
+	git review start --offline topic main
+	git review next
+	printf 'review correction\n' >>a.txt
+	status_before=$(git review status --porcelain)
+	[[ "$status_before" == *$'\twalk\t'* ]]
+	output_dir="$ROOT/fixes"
+
+	run git review workspace finish "$output_dir"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$output_dir" rev-parse HEAD)" = "$tip" ]
+	[ "$(git -C "$output_dir" diff --cached --name-only)" = a.txt ]
+	[ "$(git -C "$output_dir" show :a.txt)" = "$(printf 'a topic\nreview correction')" ]
+	[ "$(git review status --porcelain)" = "$status_before" ]
+}
+
+@test "workspace finish refuses an ordinary read-only comparison" {
+	bats_require_minimum_version 1.5.0
+	git checkout -- a.txt
+	mv build.tmp "$ROOT/local-build"
+	git review compare main topic --no-walk
+	index=$(git write-tree)
+
+	run --separate-stderr git review workspace finish "$ROOT/fixes"
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: this review is a read-only comparison' ]
+	[ ! -e "$ROOT/fixes" ]
+	[ "$(git symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git write-tree)" = "$index" ]
+}
+
 @test "workspace refuses a destination that already exists or is inside a checkout" {
 	bats_require_minimum_version 1.5.0
 	mkdir "$ROOT/existing"

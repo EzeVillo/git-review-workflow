@@ -37,6 +37,7 @@ restore_delta_if_incomplete() {
 	_rdi_rb="review/$_rdi_src"
 	[ "$(git config "branch.$_rdi_rb.reviewreadonly" || true)" != 1 ] || return 0
 	# Completed finish: tip was reviewed; keep the marker advanced at start.
+	[ -z "$(git config "branch.$_rdi_rb.reviewworkspacefinish" || true)" ] || return 0
 	[ -z "$(git config "branch.$_rdi_rb.reviewundoouthead" || true)" ] || return 0
 	# No tip metadata: not a real review session config; leave markers alone.
 	[ -n "$(git config "branch.$_rdi_rb.reviewtip" || true)" ] || return 0
@@ -125,7 +126,9 @@ if [ -n "$list" ]; then
 		case "$b" in
 		review/*)
 			_clean_comments_completed=0
-			if [ -n "$(git config "branch.$b.reviewundoouthead" || true)" ]; then _clean_comments_completed=1; fi
+			if [ -n "$(git config "branch.$b.reviewundoouthead" || true)$(git config "branch.$b.reviewworkspacefinish" || true)" ]; then
+				_clean_comments_completed=1
+			fi
 			comments_remove_custody "$b" "$_clean_comments_completed" || exit 1
 			# Before the delete: the keys stay readable after branch -D, but read first.
 			restore_delta_if_incomplete "${b#review/}"

@@ -63,6 +63,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review save [--porcelain]`                                                                                                                          | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                          |
 | `git review continue [--porcelain] [rama]`                                                                                                               | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                      |
 | `git review finish [--onto-source \| --update-source] [--resume \| --abort [--force]]`                                                                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                                                                                        |
+| `git review finish --workspace <directorio> [--resume]` | Cierra una review activa y deja las correcciones staged en un checkout independiente. |
 | `git review preview [--stat]`                                                                                                              | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                                                                                                                                     |
 | `git review abort`                                                                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                                                   |
 | `git review clean [--keep-fixes \| --fixes-only] [rama]`                                                                                   | Borra las ramas `review/*` (y por defecto también `review-fixes/*`) de `<rama>`, o todas; `--keep-fixes` deja `review-fixes/*` intactas, `--fixes-only` se lleva sólo esas.                                                                                                                                                                                                            |
@@ -112,8 +113,18 @@ directorio creado queda en disco hasta que lo borres.
 Desde una review activa, ejecutá `git review workspace finish <directorio-nuevo>`
 para dejar tus correcciones de código staged en otra carpeta y conservar la
 review abierta. En modo step, reúne las ediciones de la carpeta original y de
-cada carpeta de paso registrada. Los comentarios Local y Shared quedan en la
-review activa.
+cada carpeta de paso registrada. Agregá `--with-shared` para incluir una copia
+de Shared en la salida. Las preparaciones quedan en la review activa.
+
+Para cerrar la sesión, ejecutá `git review finish --workspace <directorio-nuevo>`
+desde la review activa. Deja las correcciones y Shared staged en el nuevo
+checkout, conserva Local en privado y marca la sesión original como cerrada.
+El checkout e índice originales quedan intactos. Si aparece un conflicto,
+resolvelo y stagealo en la salida. Desde ahí, ejecutá
+`git review workspace resume <siguiente-directorio>` y después ejecutá
+`git review finish --workspace <siguiente-directorio> --resume` desde la review
+original. Ejecutá `git review finish --abort` desde la review original para
+reabrirla y conservar la carpeta de salida con sus ediciones.
 
 La URL del remoto de origen, si está configurada, queda como `origin` en los
 repositorios aislados para que puedas inicializar los submódulos con Git cuando

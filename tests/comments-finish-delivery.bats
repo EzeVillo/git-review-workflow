@@ -48,6 +48,184 @@ check_finish_delivery() {
 @test "comments step finish delivers Shared with no code correction commit" { check_finish_delivery step prose; }
 @test "comments step finish stages Shared together with code corrections" { check_finish_delivery step code; }
 
+@test "isolated workspace stages Shared and code while Local stays with the active review" {
+	comments_start whole
+	git review comments add --document local --text 'Private observation.'
+	git review comments add --document shared --text 'Shared observation.'
+	comments_refresh_paths
+	cp "$COMMENTS_SHARED" "$COMMENTS_TMP/expected-shared"
+	cp "$COMMENTS_LOCAL" "$COMMENTS_TMP/expected-local"
+	printf 'reviewer correction\n' >>sample.txt
+	before=$(git write-tree)
+	output_dir="$COMMENTS_TMP/output"
+
+	run --separate-stderr git review workspace finish --with-shared "$output_dir"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$output_dir" diff --cached --name-only)" = $'.review/comments.md\nsample.txt' ]
+	git -C "$output_dir" show :.review/comments.md >"$COMMENTS_TMP/staged-shared"
+	cmp "$COMMENTS_TMP/expected-shared" "$COMMENTS_TMP/staged-shared"
+	cmp "$COMMENTS_TMP/expected-shared" "$output_dir/.review/comments.md"
+	grep -Fx 'reviewer correction' "$output_dir/sample.txt"
+	[ ! -e "$output_dir/.git/review-comments" ]
+	[ ! -e .review/comments.md ]
+	[ "$(git symbolic-ref --short HEAD)" = review/feature/comments ]
+	[ "$(git write-tree)" = "$before" ]
+	cmp "$COMMENTS_TMP/expected-local" "$COMMENTS_LOCAL"
+	cmp "$COMMENTS_TMP/expected-shared" "$COMMENTS_SHARED"
+}
+
+@test "isolated workspace preserves the frozen Shared patch after a code conflict" {
+	git switch -q feature/comments
+	printf 'first\nauthor final\nthird\n' >sample.txt
+	git commit -qam 'change the same line again'
+	tip=$(git rev-parse HEAD)
+	git switch -q main
+	comments_start step
+	printf 'first\nreviewer correction\nthird\n' >sample.txt
+	git review comments add --document shared --text 'Shared at export time.'
+	comments_refresh_paths
+	cp "$COMMENTS_SHARED" "$COMMENTS_TMP/expected-shared"
+	git review next
+	checkout="$COMMENTS_TMP/second"
+	git review workspace checkout "$checkout"
+	printf 'independent correction\n' >>"$checkout/other file.txt"
+	conflicted="$COMMENTS_TMP/conflicted"
+
+	run --separate-stderr git review workspace finish --with-shared "$conflicted"
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'resolve and stage the conflict'* ]]
+	[ -n "$(git -C "$conflicted" ls-files --unmerged -- sample.txt)" ]
+	[ ! -e "$conflicted/.review/comments.md" ]
+	printf 'first\nresolved correction\nthird\n' >"$conflicted/sample.txt"
+	git -C "$conflicted" add sample.txt
+	git review comments add --document shared --text 'Added after export.'
+
+	output_dir="$COMMENTS_TMP/output"
+	run --separate-stderr git -C "$conflicted" review workspace resume "$output_dir"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$output_dir" rev-parse HEAD)" = "$tip" ]
+	git -C "$output_dir" show :.review/comments.md >"$COMMENTS_TMP/staged-shared"
+	cmp "$COMMENTS_TMP/expected-shared" "$COMMENTS_TMP/staged-shared"
+	grep -Fx 'independent correction' "$output_dir/other file.txt"
+	grep -Fx 'resolved correction' "$output_dir/sample.txt"
+	grep -Fx 'reviewer correction' sample.txt
+	grep -Fx 'Added after export.' "$COMMENTS_SHARED"
+}
+
+@test "managed isolated finish closes and undo reopens without touching either checkout" {
+	comments_start whole
+	git review comments add --document local --text 'Keep this private.'
+	git review comments add --document shared --text 'Include in the output.'
+	comments_refresh_paths
+	prepared=$COMMENTS_SHARED
+	cp "$prepared" "$COMMENTS_TMP/expected-shared"
+	cp "$COMMENTS_LOCAL" "$COMMENTS_TMP/expected-local"
+	result_pointer="$(git rev-parse --absolute-git-dir)/review-comments/results/$COMMENTS_CONTEXT/current"
+	printf 'reviewer correction\n' >>sample.txt
+	index=$(git write-tree)
+	head=$(git rev-parse HEAD)
+	output_dir="$COMMENTS_TMP/output"
+
+	run --separate-stderr git review finish --workspace "$output_dir"
+	[ "$status" -eq 0 ]
+	output_path=$(git -C "$output_dir" rev-parse --show-toplevel)
+	[ "$output" = "$output_path" ]
+	[ "$(git config branch.review/feature/comments.reviewworkspacefinish)" = "$output_path" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	[ "$(git symbolic-ref --short HEAD)" = review/feature/comments ]
+	git -C "$output_dir" show :.review/comments.md >"$COMMENTS_TMP/staged-shared"
+	cmp "$COMMENTS_TMP/expected-shared" "$COMMENTS_TMP/staged-shared"
+	result=$(cat "$result_pointer")
+	cmp "$COMMENTS_TMP/expected-local" "${result_pointer%/*}/$result/local.md"
+	[ ! -e "$output_dir/.git/review-comments" ]
+	[ ! -e .review/comments.md ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'finish-workspace\t'"$output_path"* ]]
+	run --separate-stderr git review save
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: the review is closed; run git review finish --abort to reopen it' ]
+	run --separate-stderr git review comments add --document shared --text 'Cannot add to a closed review.'
+	[ "$status" -ne 0 ]
+	cmp "$COMMENTS_TMP/expected-shared" "$prepared"
+	printf 'outstanding output edit\n' >>"$output_dir/sample.txt"
+	printf 'independent origin edit\n' >>sample.txt
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ -z "$(git config branch.review/feature/comments.reviewworkspacefinish || true)" ]
+	[ ! -e "$result_pointer" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(git rev-parse HEAD)" = "$head" ]
+	grep -Fx 'outstanding output edit' "$output_dir/sample.txt"
+	grep -Fx 'independent origin edit' sample.txt
+	cmp "$COMMENTS_TMP/expected-shared" "$prepared"
+	git review comments add --document shared --text 'Review reopened.'
+	grep -Fx 'Review reopened.' "$prepared"
+}
+
+@test "managed isolated finish closes only after its conflict output was resumed" {
+	git switch -q feature/comments
+	printf 'first\nauthor final\nthird\n' >sample.txt
+	git commit -qam 'change the same line again'
+	git switch -q main
+	comments_start step
+	printf 'first\nreviewer correction\nthird\n' >sample.txt
+	git review comments add --document shared --text 'Shared after conflict.'
+	comments_refresh_paths
+	cp "$COMMENTS_SHARED" "$COMMENTS_TMP/expected-shared"
+	conflicted="$COMMENTS_TMP/conflicted"
+	run --separate-stderr git review finish --workspace "$conflicted"
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'resolve and stage the conflict'* ]]
+	[ -z "$(git config branch.review/feature/comments.reviewworkspacefinish || true)" ]
+	run --separate-stderr git review finish --workspace "$conflicted" --resume
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: resume the finish workspace before closing the review' ]
+	printf 'first\nresolved correction\nthird\n' >"$conflicted/sample.txt"
+	git -C "$conflicted" add sample.txt
+	output_dir="$COMMENTS_TMP/output"
+	git -C "$conflicted" review workspace resume "$output_dir"
+	run --separate-stderr git review finish --workspace "$output_dir" --resume
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/comments.reviewworkspacefinish)" = "$(git -C "$output_dir" rev-parse --show-toplevel)" ]
+	git -C "$output_dir" show :.review/comments.md >"$COMMENTS_TMP/staged-shared"
+	cmp "$COMMENTS_TMP/expected-shared" "$COMMENTS_TMP/staged-shared"
+	grep -Fx 'resolved correction' "$output_dir/sample.txt"
+	grep -Fx 'reviewer correction' sample.txt
+}
+
+@test "managed isolated finish refuses to adopt a code export from another operation" {
+	comments_start whole
+	git review comments add --document shared --text 'Stay in the review.'
+	output_dir="$COMMENTS_TMP/export"
+	git review workspace finish --with-shared "$output_dir"
+	index=$(git -C "$output_dir" write-tree)
+
+	run --separate-stderr git review finish --workspace "$output_dir" --resume
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: finish workspace belongs to another review' ]
+	[ -z "$(git config branch.review/feature/comments.reviewworkspacefinish || true)" ]
+	[ "$(git -C "$output_dir" write-tree)" = "$index" ]
+}
+
+@test "managed isolated finish preserves an empty Shared document" {
+	comments_start whole
+	git review comments init --document shared
+	comments_refresh_paths
+	: >"$COMMENTS_SHARED"
+	output_dir="$COMMENTS_TMP/output"
+
+	run --separate-stderr git review finish --workspace "$output_dir"
+	[ "$status" -eq 0 ]
+	[ -f "$output_dir/.review/comments.md" ]
+	[ ! -s "$output_dir/.review/comments.md" ]
+	[ "$(git -C "$output_dir" diff --cached --name-only)" = .review/comments.md ]
+	[ -f "$COMMENTS_SHARED" ]
+	[ ! -s "$COMMENTS_SHARED" ]
+}
+
 @test "comments newly chosen empty Shared is delivered as an existing zero byte file" {
 	run --separate-stderr comments_start whole
 	[ "$status" -eq 0 ]

@@ -278,6 +278,12 @@ entry	2	src/quoting.ts
 base	main
 ```
 
+## Registro `finish-workspace` (cero o una línea)
+
+`finish-workspace<TAB><directorio-absoluto>` informa la salida de un cierre
+aislado completado. La línea `state` identifica la review original, que conserva
+su checkout e índice. Undo reabre esa sesión sin cambiar la salida.
+
 ## Registro `readonly` (cero o una línea)
 
 ```

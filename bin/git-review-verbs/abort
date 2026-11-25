@@ -43,6 +43,10 @@ review/*) ;;
 	;;
 esac
 
+if [ -n "$(review_config_get "branch.$cur.reviewworkspacefinish" || true)" ]; then
+	require_not_pending_finish "$cur"
+fi
+
 src="$(review_config_get "branch.$cur.reviewsource" || true)"
 [ -n "$src" ] || {
 	echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2

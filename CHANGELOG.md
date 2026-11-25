@@ -23,6 +23,9 @@ This file starts at 0.2.1. Earlier versions are only in the
   corrections so it can resume in a new directory.
 - Export code corrections from an active review to a new directory with
   `git review workspace finish`, keeping the review and its checkouts open.
+- Close an active review with `git review finish --workspace`, staging code
+  and Shared comments in a new checkout. Undo reopens the review and preserves
+  the output checkout.
 - Advance a behind local PR branch to the reviewed tip with
   `git review finish --update-source`, then stage your corrections on it.
   Undo restores the previous local tip along with the review.

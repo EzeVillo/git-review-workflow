@@ -25,6 +25,7 @@ comments_setup() {
 	export COMMENTS_WORK
 	git init --quiet "$COMMENTS_WORK"
 	cd "$COMMENTS_WORK" || return
+	git symbolic-ref HEAD refs/heads/main || return
 	# Match Git's wire paths (including native Windows spelling), not a logical
 	# shell alias. Fault wrappers must hit the actual destination on every OS.
 	COMMENTS_WORK=$(git rev-parse --show-toplevel) || return

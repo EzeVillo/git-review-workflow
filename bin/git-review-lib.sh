@@ -467,7 +467,8 @@ comments_state() {
 			cm_source=$_review_config_value
 			review_config_read "branch.$cm_branch.reviewtip"
 			cm_tip=$_review_config_value
-			if [ -n "$cm_source" ] && [ -n "$cm_tip" ]; then cm_active=1; fi
+			review_config_read "branch.$cm_branch.reviewworkspacefinish"
+			if [ -n "$cm_source" ] && [ -n "$cm_tip" ] && [ -z "$_review_config_value" ]; then cm_active=1; fi
 			;;
 	esac
 	if [ "$cm_active" -ne 1 ]; then comments_repository_state; return $?; fi
@@ -2928,6 +2929,11 @@ require_not_finish_conflict() {
 require_not_pending_finish() {
 	_rnpf_cur=${1:-}
 	if [ -z "$_rnpf_cur" ]; then _rnpf_cur=$(git symbolic-ref --quiet --short HEAD || true); fi
+	review_config_read "branch.$_rnpf_cur.reviewworkspacefinish"
+	if [ -n "$_review_config_value" ]; then
+		echo "error: the review is closed; run git review finish --abort to reopen it" >&2
+		exit 1
+	fi
 	if [ -n "$(review_config_get "branch.$_rnpf_cur.reviewundohead" || true)" ]; then
 		echo "error: a previous finish on $_rnpf_cur has not been resolved; run git review finish --abort (or git review abort) first" >&2
 		exit 1
@@ -7446,6 +7452,9 @@ review_status_porcelain() {
 			porcelain_row finish conflict "$ponto"
 		fi
 	fi
+	# An isolated finish keeps the checkout intact, including its branch.
+	review_config_read "branch.$cur.reviewworkspacefinish"
+	if [ -n "$_review_config_value" ]; then porcelain_row finish-workspace "$_review_config_value"; fi
 	# compare (git review compare): reviewreadonly=1 means finish will refuse.
 	# Separate record, omitted when not set — additive, same pattern as base/finish.
 	if [ "$is_readonly" = "1" ]; then

@@ -109,6 +109,7 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 | Clave | Modo | Qué lleva |
 |---|---|---|
 | `reviewmode`, `reviewsource`, `reviewtip` | todos | Modo y origen de la review |
+| `reviewworkspacefinish` | finish aislado | Carpeta de salida verificada y marcador de sesión cerrada |
 | `reviewrangefrom` | `--from` | Corte de la review que hereda el borrador |
 | `reviewstart`, `reviewcount`, `reviewstep` | `step` | Rango, cantidad y posición del commit materializado en el checkout original |
 | `reviewreadstep`, `reviewstepworkspaces` | `step` | Cursor de lectura y registro de checkouts adicionales. Las sesiones anteriores toman el cursor inicial de `reviewstep` |

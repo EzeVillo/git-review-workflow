@@ -180,6 +180,25 @@ setup() {
 	[ "$(git write-tree)" = "$index" ]
 }
 
+@test "clean keeps the reviewed tip and isolated output after a workspace finish" {
+	git checkout -- a.txt
+	mv build.tmp "$ROOT/local-build"
+	git review start --offline --no-walk topic main
+	output_dir="$ROOT/fixes"
+	run git review finish --workspace "$output_dir"
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflowlocal.topic.reviewed)" = "$TIP" ]
+	git switch -q topic
+	index=$(git write-tree)
+
+	run git review clean --keep-fixes topic
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflowlocal.topic.reviewed)" = "$TIP" ]
+	[ "$(git write-tree)" = "$index" ]
+	[ "$(git -C "$output_dir" rev-parse HEAD)" = "$TIP" ]
+	! git show-ref --verify --quiet refs/heads/review/topic
+}
+
 @test "workspace refuses a destination that already exists or is inside a checkout" {
 	bats_require_minimum_version 1.5.0
 	mkdir "$ROOT/existing"

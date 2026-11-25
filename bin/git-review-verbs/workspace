@@ -10,13 +10,14 @@ usage: git review workspace open [--step] [--read-only] <new-directory> -- <base
        git review workspace (status | next | prev | diff)
        git review workspace checkout [--porcelain] [<new-directory>]
        git review workspace finish <new-directory> [<other-workspace>...]
+       git review workspace finish --with-shared <new-directory>
        git review workspace resume <new-directory>
 
 Open an independent review workspace. Use --step to read a commit at a time.
 Next and Previous move the reading cursor. Checkout opens the selected commit
 in a new directory. Finish stages edits from these workspaces on the reviewed
-tip in a new directory. From an active review, Finish collects its code edits
-and leaves the review open. Resume a conflicted finish from its output directory
+tip in a new directory. From an active review, use --with-shared to include
+prepared Shared comments. Resume a conflicted finish from its output directory
 after staging your resolution. Previous directories remain available.
 EOF
 }
@@ -71,7 +72,7 @@ apply_workspace_patches() {
 	while [ "$i" -le "$patch_count" ]; do
 		if [ -s "$queue/$i" ]; then
 			write_finish_progress "$i" applying
-			if ! git -c core.hooksPath=/dev/null apply --binary --3way --index "$queue/$i"; then
+			if ! git -c core.hooksPath=/dev/null apply --binary --3way --index --whitespace=nowarn "$queue/$i"; then
 				unmerged=$(git ls-files --unmerged)
 				if [ -n "$unmerged" ]; then
 					write_finish_progress "$((i + 1))" conflict
@@ -101,7 +102,7 @@ create_workspace() (
 	case "$leaf" in ''|.|..|/) die 'choose a new workspace directory' ;; esac
 	parent=$(CDPATH='' cd -P -- "$parent" && pwd -P) || die 'workspace parent directory does not exist'
 	destination=${parent%/}/$leaf
-	source_gitdir=$(git rev-parse --absolute-git-dir) || exit 1
+	fetch_gitdir=$(git rev-parse --absolute-git-dir) || exit 1
 	remote=$(git config --get reviewworkflow.remote || printf origin)
 	remote_url=$(git remote get-url "$remote" 2>/dev/null || git remote get-url origin 2>/dev/null || true)
 	case "$remote_url" in
@@ -132,7 +133,7 @@ create_workspace() (
 	# subprocess serves the local repository's exact pinned objects.
 	git -c core.hooksPath=/dev/null fetch -q --no-tags --update-shallow \
 		--upload-pack='git -c uploadpack.allowAnySHA1InWant=true upload-pack' -- \
-		"$source_gitdir" "$range_base" "$range_tip" "$checkout_base" "$checkout_tip"
+		"$fetch_gitdir" "$range_base" "$range_tip" "$checkout_base" "$checkout_tip"
 	if [ -n "$remote_url" ]; then git config --local remote.origin.url "$remote_url"; fi
 	git symbolic-ref HEAD "refs/heads/$kind"
 	git -c core.hooksPath=/dev/null update-ref HEAD "$checkout_base"
@@ -141,6 +142,13 @@ create_workspace() (
 	git -c core.hooksPath=/dev/null -c submodule.recurse=false read-tree -m -u "$checkout_tip"
 	verify_workspace_tree || die 'the filesystem could not represent the checkout exactly'
 	if [ "$kind" = review-fixes ]; then
+		if [ -n "${finish_owner:-}" ]; then
+			git config --local reviewworkspace.finishowner "$finish_owner"
+			git config --local reviewworkspace.finishsource "$finish_source"
+			git config --local reviewworkspace.finishsession "$finish_session"
+			git config --local reviewworkspace.finishshared "$finish_shared"
+			git config --local reviewworkspace.finishdelivery "$finish_delivery"
+		fi
 		apply_workspace_patches
 	else
 		{
@@ -195,7 +203,7 @@ write_workspace_patch_from() (
 	write_workspace_patch
 )
 
-write_active_review_patches() {
+load_active_workspace_review() {
 	cur=$(git symbolic-ref --quiet --short HEAD || true)
 	case "$cur" in review/*) ;; *) die 'run finish inside a review workspace or active review' ;; esac
 	comments_lock_branch "$cur" || exit 1
@@ -205,6 +213,9 @@ write_active_review_patches() {
 	[ -n "$(review_config_get "branch.$cur.reviewsource" || true)" ] || die 'missing review metadata'
 	range_tip=$(review_config_get "branch.$cur.reviewtip") || die 'missing review tip'
 	range_base=$range_tip
+}
+
+write_active_review_patches() {
 	mode=$(review_config_get "branch.$cur.reviewmode" || true)
 	if [ "$mode" != step ]; then
 		for key in reviewstart reviewcount reviewstep reviewreadstep reviewstepworkspaces; do
@@ -247,6 +258,74 @@ EOF
 		;;
 	*) die 'invalid review mode' ;;
 	esac
+}
+
+write_active_shared_patch() {
+	[ -n "$cc_session" ] && [ -n "$cc_context" ] || return 0
+	prepared=$(comments_revision "$cc_dir/shared.md") || exit 1
+	finish_shared=$prepared
+	[ "$prepared" != absent ] || return 0
+	baseline=$(comments_revision "$cc_dir/source-baseline.md") || exit 1
+	[ "$prepared" != "$baseline" ] || return 0
+	comments_safe_path "$cc_dir/source-conflict" || exit 1
+	[ ! -e "$cc_dir/source-conflict" ] || die 'source and retained Shared changed separately; resolve both versions before delivery'
+	entry=$(git ls-tree "$range_tip" -- .review/comments.md) || exit 1
+	mode=100644
+	case "$entry" in
+	'') baseline_blob=absent ;;
+	'100644 blob '*|'100755 blob '*)
+		mode=${entry%% *}
+		baseline_blob=$(git rev-parse --verify "$range_tip:.review/comments.md") || exit 1
+		;;
+	*) die 'Shared delivery destination is not a regular file' ;;
+	esac
+	[ "$baseline_blob" = "$baseline" ] || die 'Shared baseline differs from the pinned review tip; prepared comments were preserved'
+	blob=$(git hash-object -w --no-filters -- "$cc_dir/shared.md") || exit 1
+	[ "$blob" = "$prepared" ] || die 'Shared preparation changed while exporting'
+	finish_delivery=$blob
+	shared_tree=$(
+		export GIT_INDEX_FILE="$patch_dir/shared-index"
+		git read-tree "$range_tip" || exit 1
+		git update-index --add --cacheinfo "$mode,$blob,.review/comments.md" || exit 1
+		git write-tree
+	) || exit 1
+	# Freeze Shared last so the same queue can resume it after a code conflict.
+	patch_count=$((patch_count + 1))
+	write_workspace_diff "$range_tip" "$shared_tree" >"$patch_dir/$patch_count"
+}
+
+complete_active_workspace_review() {
+	prepared=absent
+	if [ -n "$cc_dir" ]; then prepared=$(comments_revision "$cc_dir/shared.md") || exit 1; fi
+	completed_path=$(
+		review_enter_nested_worktree "$1" || exit 1
+		[ -z "$(git rev-parse --show-prefix)" ] || die 'use the root of the finish workspace'
+		[ "$(git config --local reviewworkspace.finishowner || true)" = "$source_gitdir" ] &&
+			[ "$(git config --local reviewworkspace.finishsource || true)" = "$cur" ] &&
+			[ "$(git config --local reviewworkspace.finishsession || true)" = "$cc_session" ] &&
+			[ "$(git rev-parse --verify --quiet refs/review-workspace/finish-tip)" = "$range_tip" ] ||
+			die 'finish workspace belongs to another review'
+		[ "$(git config --local reviewworkspace.finishshared || true)" = "$prepared" ] ||
+			die 'prepared Shared comments changed since this workspace was created'
+		gitdir=$(git rev-parse --absolute-git-dir) || exit 1
+		read -r _ _ phase <"$gitdir/review-workspace-finish/progress" || exit 1
+		[ "$phase" = complete ] || die 'resume the finish workspace before closing the review'
+		[ "$(git rev-parse HEAD)" = "$range_tip" ] || die 'finish workspace HEAD changed'
+		delivery=$(git config --local reviewworkspace.finishdelivery) || exit 1
+		if [ "$delivery" != absent ] && [ "$(git rev-parse --verify --quiet :.review/comments.md)" != "$delivery" ]; then
+			die 'the staged Shared comments differ from the prepared delivery'
+		fi
+		git rev-parse --show-toplevel
+	) || exit 1
+	[ "$(git symbolic-ref --quiet --short HEAD || true)" = "$cur" ] || die 'review branch changed during finish'
+	if [ -n "$cc_context" ]; then
+		if review_find_session start "${cur#review/}" >/dev/null; then review_retain_objects=1; fi
+		comments_publish "$cc_context" "$cc_dir" || exit 1
+		[ "$(comments_revision "$cc_dir/shared.md")" = "$prepared" ] ||
+			die 'prepared Shared comments changed during finish; the review remains open'
+	fi
+	git config "branch.$cur.reviewworkspacefinish" "$completed_path"
+	printf '%s\n' "$completed_path"
 }
 
 read_steps() {
@@ -410,6 +489,13 @@ checkout)
 	if [ "$porcelain" -eq 1 ]; then porcelain_row step-checkout "$result"; else printf '%s\n' "$result"; fi
 	;;
 finish)
+	with_shared=0
+	close_review=0
+	case "${1:-}" in
+	--with-shared) with_shared=1; shift ;;
+	--close) with_shared=1; close_review=1; shift ;;
+	--close-resolved) with_shared=1; close_review=2; shift ;;
+	esac
 	[ "$#" -ge 1 ] || die 'finish expects a new directory'
 	output=$1
 	shift
@@ -420,6 +506,7 @@ finish)
 	trap 'exit 143' TERM
 	patch_first=1
 	if git show-ref --verify --quiet refs/review-workspace/base; then
+		[ "$with_shared" -eq 0 ] || die '--with-shared requires an active review with comments'
 		read_range
 		[ "$read_only" -eq 0 ] || die 'this workspace is a read-only comparison'
 		patch_count=1
@@ -430,9 +517,21 @@ finish)
 		done
 	else
 		[ "$#" -eq 0 ] || die 'an active review automatically collects its registered checkouts'
+		load_active_workspace_review
+		if [ "$close_review" -eq 2 ]; then complete_active_workspace_review "$output"; exit 0; fi
+		finish_shared=absent finish_delivery=absent
+		if [ "$close_review" -eq 1 ]; then
+			finish_owner=$source_gitdir finish_source=$cur finish_session=$cc_session
+		fi
 		write_active_review_patches
+		if [ "$with_shared" -eq 1 ]; then write_active_shared_patch; fi
 	fi
-	create_workspace "$output" "$range_tip" "$range_tip" review-fixes
+	if [ "$close_review" -eq 1 ]; then
+		completed=$(create_workspace "$output" "$range_tip" "$range_tip" review-fixes) || exit $?
+		complete_active_workspace_review "$completed"
+	else
+		create_workspace "$output" "$range_tip" "$range_tip" review-fixes
+	fi
 	;;
 resume)
 	[ "$#" -eq 1 ] || die 'resume expects a new directory'
@@ -455,6 +554,13 @@ resume)
 	[ -z "$(git ls-files --unmerged)" ] || die 'resolve and stage all conflicts before resuming'
 	git diff-files --quiet --ignore-submodules=dirty -- || die 'stage your resolution before resuming'
 	tree=$(git write-tree)
+	finish_owner=$(git config --local reviewworkspace.finishowner || true)
+	if [ -n "$finish_owner" ]; then
+		finish_source=$(git config --local reviewworkspace.finishsource)
+		finish_session=$(git config --local reviewworkspace.finishsession)
+		finish_shared=$(git config --local reviewworkspace.finishshared)
+		finish_delivery=$(git config --local reviewworkspace.finishdelivery)
+	fi
 	checkpoint=$(git -c user.name='git review' -c user.email=workspace@localhost -c commit.gpgSign=false \
 		commit-tree "$tree" -p "$finish_tip" -m 'workspace finish checkpoint')
 	range_base=$finish_tip

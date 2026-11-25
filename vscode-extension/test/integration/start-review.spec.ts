@@ -9,6 +9,7 @@ import {
     abortReview,
     addSelfOrigin,
     addWalkthrough,
+    cleanupTempDirectory,
     createBranchWithChanges,
     createBranchWithCommits,
     git,
@@ -154,7 +155,7 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
                 git(["worktree", "remove", "--force", checkout], repo.dir);
             }
             rmSync(local, {force: true});
-            rmSync(stateRoot, {recursive: true, force: true});
+            cleanupTempDirectory(stateRoot);
         }
     });
 

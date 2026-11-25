@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import {getTestApi} from "./helpers/extensionApi";
 import {
+    cleanupTempDirectory,
     createBranchWithChanges,
     createBranchWithCommits,
     FixtureRepo,
@@ -313,7 +314,7 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
         } finally {
             if (previousStateHome === undefined) delete process.env.XDG_STATE_HOME;
             else process.env.XDG_STATE_HOME = previousStateHome;
-            fs.rmSync(outputRoot, {recursive: true, force: true});
+            cleanupTempDirectory(outputRoot);
         }
     });
 

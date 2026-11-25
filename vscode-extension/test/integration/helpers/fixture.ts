@@ -312,12 +312,16 @@ export function removeOrigin(repo: FixtureRepo): void {
 }
 
 export function cleanupRepo(repo: FixtureRepo): void {
+    cleanupTempDirectory(repo.dir);
+}
+
+export function cleanupTempDirectory(dir: string): void {
     // En Windows el borrado tira EPERM si git o el propio host de pruebas
     // todavía tienen un handle abierto sobre el repo temporal; no es un fallo
     // del test. Reintentar + tragar el error residual: un fixture huérfano en
     // %TEMP% no debe pintar de rojo una suite que ya pasó.
     try {
-        fs.rmSync(repo.dir, {recursive: true, force: true, maxRetries: 15, retryDelay: 200});
+        fs.rmSync(dir, {recursive: true, force: true, maxRetries: 15, retryDelay: 200});
     } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
         if (code === "EPERM" || code === "EBUSY" || code === "ENOTEMPTY") {

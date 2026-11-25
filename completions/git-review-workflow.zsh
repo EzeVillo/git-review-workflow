@@ -266,7 +266,7 @@ _git-review() {
 		case "$line[1]" in
 		start) _git_review_start ;;
 		compare) _git_review_compare ;;
-		workspace) _arguments '1:workspace command:(open status next prev diff checkout finish)' ;;
+		workspace) _arguments '1:workspace command:(open status next prev diff checkout finish resume)' ;;
 		walkthrough) _git_review_walkthrough ;;
 		comments) _git_review_comments ;;
 		config) _git_review_config ;;

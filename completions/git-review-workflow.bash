@@ -222,8 +222,8 @@ _git_review() {
 	start) _git_review_start ;;
 	compare) _git_review_compare ;;
 	workspace)
-		if [ -z "$(__git_find_on_cmdline 'open status next prev diff checkout finish')" ]; then
-			__gitcomp "open status next prev diff checkout finish"
+		if [ -z "$(__git_find_on_cmdline 'open status next prev diff checkout finish resume')" ]; then
+			__gitcomp "open status next prev diff checkout finish resume"
 		fi
 		;;
 	walkthrough) _git_review_walkthrough ;;

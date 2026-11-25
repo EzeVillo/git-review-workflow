@@ -95,12 +95,17 @@ git review workspace finish ../login-fixes ../login-second
 the cursor leaves the files and index alone. `workspace checkout` stages the
 selected diff in another new directory for editing or testing. For an exact
 local range, use `git review workspace open [--step] <new-directory> -- <base> <target>`.
+If the filesystem cannot represent every path in the selected tree, the command
+reports the error and retains the incomplete directory for inspection.
 
 `workspace finish` starts the output at the pinned target and stages your edits
 relative to the commit originally materialized in each supplied workspace.
 It reads the current workspace first, followed by any additional workspace
 directories in argument order. A conflict stays in the new output directory
-for resolution. Comparison workspaces opened by `compare` are read-only.
+along with the pending corrections. Resolve it, stage the resolution without
+committing, and run `git review workspace resume <new-directory>` from that
+output. Resume carries the staged resolution and the frozen pending corrections
+to a new directory. Comparison workspaces opened by `compare` are read-only.
 Every created directory remains on disk until you remove it.
 
 The source remote URL, if configured, is stored as `origin` in the isolated

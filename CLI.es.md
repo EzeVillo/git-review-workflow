@@ -95,13 +95,19 @@ git review workspace finish ../login-fixes ../login-second
 cursor deja intactos los archivos y el índice. `workspace checkout` deja staged
 el diff seleccionado en otro directorio nuevo para editar o probar. Para un
 rango local exacto, usá `git review workspace open [--step] <directorio-nuevo> -- <base> <destino>`.
+Si el sistema de archivos no puede representar todas las rutas del árbol
+seleccionado, el comando informa el error y conserva la carpeta incompleta
+para que puedas inspeccionarla.
 
 `workspace finish` abre la salida en el destino fijado y stagea tus ediciones
 respecto del commit que se materializó en cada carpeta. Lee primero la carpeta
 actual y después las adicionales en el orden de los argumentos. Si hay un
-conflicto, queda en el directorio nuevo para que puedas resolverlo. Las carpetas
-abiertas desde `compare` son de solo lectura. Cada directorio creado queda en
-disco hasta que lo borres.
+conflicto, queda en el directorio nuevo junto con las correcciones pendientes.
+Resolvelo, dejá la resolución staged sin commitear y corré
+`git review workspace resume <directorio-nuevo>` desde esa salida. Resume lleva
+la resolución staged y las correcciones pendientes capturadas a otra carpeta
+nueva. Las carpetas abiertas desde `compare` son de solo lectura. Cada
+directorio creado queda en disco hasta que lo borres.
 
 La URL del remoto de origen, si está configurada, queda como `origin` en los
 repositorios aislados para que puedas inicializar los submódulos con Git cuando

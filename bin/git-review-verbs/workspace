@@ -10,11 +10,13 @@ usage: git review workspace open [--step] [--read-only] <new-directory> -- <base
        git review workspace (status | next | prev | diff)
        git review workspace checkout <new-directory>
        git review workspace finish <new-directory> [<other-workspace>...]
+       git review workspace resume <new-directory>
 
 Open an independent review workspace. Use --step to read a commit at a time.
 Next and Previous move the reading cursor. Checkout opens the selected commit
 in a new directory. Finish stages edits from these workspaces on the reviewed
-tip in a new directory. Previous directories remain available.
+tip in a new directory. Resume a conflicted finish from its output directory
+after staging your resolution. Previous directories remain available.
 EOF
 }
 
@@ -30,6 +32,59 @@ workspace_failed() {
 	if [ "$1" -ne 0 ]; then
 		printf 'note: workspace files retained at %s\n' "$destination" >&2
 	fi
+}
+
+# Git can populate an index with names that the filesystem maps to one file.
+# Compare the actual pathnames as enumerated by Git with an empty index, so
+# Git cannot substitute the index spelling for a directory entry. Gitlinks
+# are represented by empty directories until the reviewer initializes them.
+verify_workspace_tree() (
+	git diff-files --quiet --ignore-submodules=all -- || exit 1
+	gitdir=$(git rev-parse --absolute-git-dir) || exit 1
+	verify_dir=$(mktemp -d "$gitdir/workspace-verify.XXXXXX") || exit 1
+	trap 'rm -f "$verify_dir/raw" "$verify_dir/index-paths" "$verify_dir/disk-paths"; rmdir "$verify_dir"' 0
+	git -c core.quotePath=true ls-files --stage >"$verify_dir/raw" || exit 1
+	LC_ALL=C awk -F '\t' '$1 !~ /^160000 / {print $2}' "$verify_dir/raw" >"$verify_dir/index-paths" || exit 1
+	LC_ALL=C sort -o "$verify_dir/index-paths" "$verify_dir/index-paths" || exit 1
+	GIT_INDEX_FILE="$verify_dir/empty" git -c core.quotePath=true -c core.ignoreCase=false ls-files --others >"$verify_dir/raw" || exit 1
+	LC_ALL=C sort "$verify_dir/raw" >"$verify_dir/disk-paths" || exit 1
+	cmp -s "$verify_dir/index-paths" "$verify_dir/disk-paths"
+)
+
+write_finish_progress() {
+	printf '%s %s %s\n' "$1" "$patch_count" "$2" >"$queue/progress.next"
+	mv -f "$queue/progress.next" "$queue/progress"
+}
+
+apply_workspace_patches() {
+	queue=$GIT_DIR/review-workspace-finish
+	mkdir "$queue"
+	i=$patch_first
+	while [ "$i" -le "$patch_count" ]; do
+		cp "$patch_dir/$i" "$queue/$i"
+		i=$((i + 1))
+	done
+	git update-ref refs/review-workspace/finish-tip "$checkout_base"
+	i=$patch_first
+	write_finish_progress "$i" ready
+	while [ "$i" -le "$patch_count" ]; do
+		if [ -s "$queue/$i" ]; then
+			write_finish_progress "$i" applying
+			if ! git -c core.hooksPath=/dev/null apply --binary --3way --index "$queue/$i"; then
+				unmerged=$(git ls-files --unmerged)
+				if [ -n "$unmerged" ]; then
+					write_finish_progress "$((i + 1))" conflict
+					die 'resolve and stage the conflict, then run git review workspace resume <new-directory> from this output'
+				fi
+				write_finish_progress "$i" ready
+				die 'patch application failed; git review workspace resume <new-directory> can retry from this output'
+			fi
+		fi
+		i=$((i + 1))
+		write_finish_progress "$i" ready
+	done
+	verify_workspace_tree || die 'the filesystem could not represent the finished index exactly'
+	write_finish_progress "$i" complete
 }
 
 # Populate only a directory reserved by this invocation. A local fetch copies
@@ -83,14 +138,9 @@ create_workspace() (
 	# The index starts empty. Unpack the target, leaving HEAD at the lower
 	# endpoint so the diff is staged.
 	git -c core.hooksPath=/dev/null -c submodule.recurse=false read-tree -m -u "$checkout_tip"
+	verify_workspace_tree || die 'the filesystem could not represent the checkout exactly'
 	if [ "$kind" = review-fixes ]; then
-		i=1
-		while [ "$i" -le "$patch_count" ]; do
-			if [ -s "$patch_dir/$i" ]; then
-				git -c core.hooksPath=/dev/null apply --binary --3way --index "$patch_dir/$i"
-			fi
-			i=$((i + 1))
-		done
+		apply_workspace_patches
 	else
 		{
 			printf 'create refs/review-workspace/base %s\n' "$range_base"
@@ -246,6 +296,7 @@ finish)
 	trap 'rm -f "$patch_dir"/*; rmdir "$patch_dir"' 0
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
+	patch_first=1
 	patch_count=1
 	write_workspace_patch >"$patch_dir/$patch_count"
 	for input do
@@ -253,6 +304,33 @@ finish)
 		write_workspace_patch_from "$input" >"$patch_dir/$patch_count"
 	done
 	create_workspace "$output" "$range_tip" "$range_tip" review-fixes
+	;;
+resume)
+	[ "$#" -eq 1 ] || die 'resume expects a new directory'
+	finish_tip=$(git rev-parse --verify --quiet refs/review-workspace/finish-tip) ||
+		die 'run resume inside an unfinished workspace output'
+	gitdir=$(git rev-parse --absolute-git-dir)
+	patch_dir=$gitdir/review-workspace-finish
+	[ -f "$patch_dir/progress" ] || die 'workspace finish progress is missing'
+	read -r patch_first patch_count phase <"$patch_dir/progress"
+	case "$patch_first:$patch_count" in
+	*[!0-9:]*|:*|*:) die 'invalid workspace finish progress' ;;
+	esac
+	case "$phase" in
+	complete) die 'this workspace finish is already complete' ;;
+	applying) die 'workspace finish was interrupted during patch application; inspect this output and retry finish from the original workspaces' ;;
+	ready|conflict) ;;
+	*) die 'invalid workspace finish progress' ;;
+	esac
+	[ "$(git rev-parse --verify HEAD)" = "$finish_tip" ] || die 'workspace output HEAD changed; keep the resolution staged at the original tip'
+	[ -z "$(git ls-files --unmerged)" ] || die 'resolve and stage all conflicts before resuming'
+	git diff-files --quiet --ignore-submodules=dirty -- || die 'stage your resolution before resuming'
+	tree=$(git write-tree)
+	checkpoint=$(git -c user.name='git review' -c user.email=workspace@localhost -c commit.gpgSign=false \
+		commit-tree "$tree" -p "$finish_tip" -m 'workspace finish checkpoint')
+	range_base=$finish_tip
+	range_tip=$finish_tip
+	create_workspace "$1" "$finish_tip" "$checkpoint" review-fixes
 	;;
 *) die "unknown workspace command: $command" ;;
 esac

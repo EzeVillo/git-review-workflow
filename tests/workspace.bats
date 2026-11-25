@@ -146,7 +146,7 @@ setup() {
 	[ "$(tail -n 1 "$second/build.tmp")" = 'second correction' ]
 }
 
-@test "a conflicted isolated finish preserves the editable workspace and output" {
+@test "a conflicted isolated finish preserves the output and resumes its frozen corrections" {
 	bats_require_minimum_version 1.5.0
 	git worktree add -q -b conflict "$ROOT/pr" "$TIP"
 	printf 'conflicting tip content\n' >"$ROOT/pr/a.txt"
@@ -154,13 +154,63 @@ setup() {
 	git review workspace open --step "$ROOT/review" -- main conflict
 	printf 'reviewer content\n' >"$ROOT/review/a.txt"
 	before=$(git -C "$ROOT/review" write-tree)
-	run --separate-stderr git -C "$ROOT/review" review workspace finish "$ROOT/conflicted"
+	git -C "$ROOT/review" review workspace next
+	git -C "$ROOT/review" review workspace checkout "$ROOT/second"
+	printf 'independent correction\n' >>"$ROOT/second/build.tmp"
+	run --separate-stderr git -C "$ROOT/review" review workspace finish "$ROOT/conflicted" "$ROOT/second"
 	[ "$status" -eq 1 ]
 	[[ "$stderr" == *'workspace files retained at '*'/conflicted'* ]]
 	[ "$(cat "$ROOT/review/a.txt")" = 'reviewer content' ]
 	[ "$(git -C "$ROOT/review" write-tree)" = "$before" ]
 	[ -n "$(git -C "$ROOT/conflicted" ls-files --unmerged -- a.txt)" ]
+	run --separate-stderr git -C "$ROOT/conflicted" review workspace resume "$ROOT/resolved"
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: resolve and stage all conflicts before resuming' ]
+	[ ! -e "$ROOT/resolved" ]
+
+	printf 'resolution\n' >"$ROOT/conflicted/a.txt"
+	git -C "$ROOT/conflicted" add a.txt
+	printf 'later edit outside the delivery\n' >>"$ROOT/second/build.tmp"
+	partial=$(git -C "$ROOT/conflicted" write-tree)
+	run git -C "$ROOT/conflicted" review workspace resume "$ROOT/resolved"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$ROOT/resolved" rev-parse HEAD)" = "$(git rev-parse conflict)" ]
+	[ "$(git -C "$ROOT/resolved" diff --cached --name-only)" = $'a.txt\nbuild.tmp' ]
+	[ "$(cat "$ROOT/resolved/a.txt")" = 'resolution' ]
+	[ "$(tail -n 1 "$ROOT/resolved/build.tmp")" = 'independent correction' ]
+	[ "$(tail -n 1 "$ROOT/second/build.tmp")" = 'later edit outside the delivery' ]
+	[ "$(git -C "$ROOT/conflicted" write-tree)" = "$partial" ]
 	[ "$(cat a.txt)" = 'existing local edit' ]
+}
+
+@test "workspace verifies that every indexed path exists with its exact spelling" {
+	bats_require_minimum_version 1.5.0
+	printf 'filesystem probe\n' >"$ROOT/case-probe"
+	aliases=0
+	if [ -f "$ROOT/CASE-PROBE" ]; then aliases=1; fi
+	upper=$(printf 'uppercase\n' | git hash-object -w --stdin)
+	lower=$(printf 'lowercase\n' | git hash-object -w --stdin)
+	GIT_INDEX_FILE="$ROOT/collision-index" git read-tree "$BASE"
+	for blob in "$lower" "$upper"; do
+		printf '100644 %s\tREADME.txt\n100644 %s\treadme.txt\n' "$upper" "$blob" |
+			GIT_INDEX_FILE="$ROOT/collision-index" git update-index --index-info
+		tree=$(GIT_INDEX_FILE="$ROOT/collision-index" git write-tree)
+		commit=$(git commit-tree "$tree" -p "$BASE" -m 'case variants')
+		target="$ROOT/workspace-$blob"
+		run --separate-stderr git review workspace open "$target" -- "$BASE" "$commit"
+		if [ "$aliases" -eq 1 ]; then
+			[ "$status" -eq 1 ]
+			[[ "$stderr" == *'the filesystem could not represent the checkout exactly'* ]]
+			[ -z "$output" ]
+			run git -C "$target" show-ref --verify --quiet refs/review-workspace/materialized
+			[ "$status" -eq 1 ]
+		else
+			[ "$status" -eq 0 ]
+			[ "$(git -C "$target" hash-object README.txt)" = "$upper" ]
+			[ "$(git -C "$target" hash-object readme.txt)" = "$blob" ]
+		fi
+	done
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
 }
 
 @test "workspace copies a fetched tip that is absent from local tracking refs" {

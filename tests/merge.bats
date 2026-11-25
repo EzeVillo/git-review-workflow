@@ -122,14 +122,19 @@ second_merge() {
 
 @test "--step review finish with a merge in the PR extracts only reviewer edits" {
 	git review start feature/x --step     # starts at c1 (step 1)
-	git review next                    # advances to c3 (step 2)
-	printf 'f1\nf2\nFIX\n' >feature.txt
+	git review next                       # selects c3 (step 2)
+	checkout="$TMP/step-2"
+	git review workspace checkout "$checkout"
+	printf 'FIX\n' >>"$checkout/feature.txt"
+	[ "$(cat feature.txt)" = 'f1' ]
 	run git review finish
 	[ "$status" -eq 0 ]
 	run git diff --cached
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"+FIX"* ]]
 	# f2 is the author's own change in c3; must not appear in the reviewer diff
 	[[ "$output" != *"+f2"* ]]
+	[[ "$output" != *"DEV"* ]]
 }
 
 @test "review finish on a merged branch extracts only the reviewer edits" {

@@ -45,6 +45,26 @@ EOF
 	[ "$(printf '%s\n' "$output" | awk -F '\t' '$1=="comments-capture" {n++} END {print n+0}')" -eq 1 ]
 }
 
+@test "isolated start skips path transfers and batches comment session reads" {
+	export XDG_STATE_HOME="$COMMENTS_TMP/state"
+	printf 'developer edit\n' >>sample.txt
+	trace_git
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" start --isolated --offline --step feature/comments
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	review=$(printf '%s\n' "$output" | awk -F '\t' '$1=="review-checkout" {print $2}')
+	[ -d "$review" ]
+	[ "$(awk '$1=="config" && $2=="--null" {n++} END {print n+0}' "$PERFORMANCE_CALLS")" -eq 2 ]
+	[ "$(awk '$1=="-c" && $2=="diff.relative=false" && $3=="diff" && /--diff-filter=AD/ {n++} END {print n+0}' "$PERFORMANCE_CALLS")" -eq 0 ]
+	[ "$(git -C "$review" write-tree)" = "$(git rev-parse "$COMMENTS_TIP^^{tree}")" ]
+	[ "$(git -C "$review" symbolic-ref --short HEAD)" = review/feature/comments ]
+	[ "$(git rev-parse HEAD)" = "$COMMENTS_BASE" ]
+	[ "$(tail -n 1 sample.txt)" = 'developer edit' ]
+	run --separate-stderr git -C "$review" review comments add --document local --text 'Still ready at launch.'
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+}
+
 @test "cursor navigation snapshots config once and invalidates it before writing" {
 	run --separate-stderr comments_start walk
 	[ "$status" -eq 0 ]

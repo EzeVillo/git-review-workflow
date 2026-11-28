@@ -366,14 +366,18 @@ launch_review_checkout() (
 	printf '%s\n' "$storage" >"$gitdir/review-checkout-origin" || exit 1
 	git -c core.hooksPath=/dev/null -c submodule.recurse=false read-tree -m -u HEAD || exit 1
 	verify_workspace_tree || die 'the filesystem could not represent the opening checkout exactly'
-	while read -r oid ref; do
-		[ -n "$ref" ] || continue
-		git -c core.hooksPath=/dev/null update-ref "$ref" "$oid" || exit 1
-	done <<EOF
+	if [ -n "$launch_refs" ]; then
+		while read -r oid ref; do
+			printf 'update %s %s\n' "$ref" "$oid"
+		done <<EOF | git -c core.hooksPath=/dev/null update-ref --no-deref --stdin || exit 1
 $launch_refs
 EOF
+	fi
+	verified_start_seed=''
+	if [ "$verb" = start ]; then verified_start_seed=$seed; fi
 	unset GIT_REVIEW_EXPECT_STATE
 	GIT_REVIEW_LAUNCH_SOURCE=$launch_source GIT_REVIEW_MANAGED_CHECKOUT=1 \
+		GIT_REVIEW_VERIFIED_START_SEED=$verified_start_seed \
 		"$GIT_REVIEW_LIBEXEC/git-review-verbs/$verb" "$@" || exit $?
 	branch=$(git symbolic-ref --quiet --short HEAD) || exit 1
 	case "$branch" in review/*) ;; *) die 'isolated launch did not start a review' ;; esac

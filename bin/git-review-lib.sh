@@ -1529,6 +1529,9 @@ comments_same_file() {
 # Every review gets a nonce, including a provisional session without documents.
 # Thus a form opened during an earlier identical review cannot write to this one.
 comments_begin_session() (
+	# Read each side of the lock from a fresh snapshot. Reading the keys one
+	# at a time adds processes and can mix values from different config writes.
+	cm_config_snapshot_requested=1
 	comments_state "${2:-}" || exit 1
 	_cb_guard=$cm_guard
 	comments_lock "${cm_context:-$cm_guard}" || exit 1
@@ -6967,7 +6970,18 @@ review_open_branch() {
 	_rob_return_ref=$(git symbolic-ref --quiet HEAD || true)
 	_rob_return_oid=$(git rev-parse --verify --quiet HEAD || true)
 	[ -n "$_rob_return_ref$_rob_return_oid" ] || die 'could not read the current checkout'
-	review_guard_checkout_paths "$3" || exit 1
+	_rob_same_tree=0
+	# A newly verified checkout can already hold this exact commit. No paths
+	# change ownership when we attach the branch to that checkout. Keep the
+	# full guards for existing checkouts and for an index that has changed.
+	if [ "$1" = start ] && [ -z "$_rob_return_ref" ] &&
+		[ "${GIT_REVIEW_VERIFIED_START_SEED:-}" = "$3" ] && [ "$_rob_return_oid" = "$3" ] &&
+		[ "$(git config --bool --get submodule.recurse || true)" != true ] &&
+		git diff --cached --quiet --no-ext-diff --ignore-submodules=none "$3" --; then
+		_rob_same_tree=1
+	else
+		review_guard_checkout_paths "$3" || exit 1
+	fi
 	_rob_ref='' _rob_old=''
 	if [ -n "${4:-}" ]; then
 		_rob_ref=$(review_session_ref "$1" "$2") || die "could not name review range for $2"
@@ -6983,7 +6997,12 @@ review_open_branch() {
 	} | git update-ref --no-deref -m "branch: Created from $3" --stdin ||
 		die "could not create review/$2"
 	_rob_range=${4:-}
-	if review_checkout_tree "$3" switch --no-guess --no-overwrite-ignore -q "review/$2"; then return 0; fi
+	if [ "$_rob_same_tree" -eq 1 ]; then
+		# This only attaches HEAD and still runs the normal post-checkout hook.
+		if git switch --no-guess --no-overwrite-ignore -q "review/$2"; then return 0; fi
+	elif review_checkout_tree "$3" switch --no-guess --no-overwrite-ignore -q "review/$2"; then
+		return 0
+	fi
 	review_cancel_open || true
 	die "could not switch to review/$2"
 }

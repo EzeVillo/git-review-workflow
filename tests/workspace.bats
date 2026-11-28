@@ -119,6 +119,31 @@ setup() {
 	[ "$(git symbolic-ref --short HEAD)" = main ]
 }
 
+@test "managed start retains work from a failing post checkout hook" {
+	export XDG_STATE_HOME="$ROOT/state"
+	cat >.git/hooks/post-checkout <<'EOF'
+#!/bin/sh
+printf 'hook edit\n' >>a.txt
+printf 'checkout hook refused\n' >&2
+exit 1
+EOF
+	chmod +x .git/hooks/post-checkout
+	before=$(git write-tree)
+	run --separate-stderr git review start --isolated --offline --step --base main -- topic
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *'checkout hook refused'*'review/topic was kept'*'workspace files retained at '* ]]
+	[[ "$output" != *'review-checkout'* ]]
+	retained=$(printf '%s\n' "$stderr" | sed -n 's/^note: workspace files retained at //p')
+	[ -d "$retained" ]
+	[ "$(git -C "$retained" symbolic-ref --short HEAD)" = review/topic ]
+	[ "$(git -C "$retained" rev-parse HEAD)" = "$FIRST" ]
+	[ "$(tail -n 1 "$retained/a.txt")" = 'hook edit' ]
+	[ "$(git symbolic-ref --short HEAD)" = main ]
+	[ "$(git write-tree)" = "$before" ]
+	[ "$(cat a.txt)" = 'existing local edit' ]
+	[ "$(cat build.tmp)" = 'existing ignored file' ]
+}
+
 @test "managed comparison resolves previous checkout references before opening" {
 	unset GIT_REVIEW_CHECKOUT
 	export XDG_STATE_HOME="$ROOT/state"
